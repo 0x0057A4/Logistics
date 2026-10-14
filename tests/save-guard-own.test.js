@@ -62,3 +62,15 @@ test('Lock-API-Ablehnung bleibt geschlossen',async()=>{
  const h=harness(),a=h.make({locks:{request:()=>Promise.reject(Error('denied'))}});
  assert.equal(await a.acquire('guided'),false);assert.equal(a.reason,'lock-error');a.dispose();
 });
+test('Globaler Storage-Getter erholt sich nach Freigabe; explizites null bleibt gesperrt',async()=>{
+ const h=harness(),descriptor=Object.getOwnPropertyDescriptor(globalThis,'localStorage');
+ let denied=true;
+ Object.defineProperty(globalThis,'localStorage',{configurable:true,get(){if(denied)throw new DOMException('Denied','SecurityError');return h.storage;}});
+ const a=h.make({storage:undefined}),b=h.make({storage:null});
+ try{
+  assert.equal(await a.acquire('guided'),false);assert.equal(a.reason,'storage-error');
+  denied=false;
+  assert.equal(await a.acquire('guided'),true);assert.equal(a.owns('guided'),true);
+  assert.equal(await b.acquire('sandbox'),false);assert.equal(b.reason,'storage-error');
+ }finally{a.dispose();b.dispose();if(descriptor)Object.defineProperty(globalThis,'localStorage',descriptor);else delete globalThis.localStorage;}
+});

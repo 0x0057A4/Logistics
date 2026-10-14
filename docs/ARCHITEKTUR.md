@@ -16,6 +16,7 @@ Beispiel: „Lieferung starten“ reserviert vorhandene Ware. Erst nach echter L
 | production.js | Zulässige Maschinenprozesse, Job-Snapshot, Rüsten, Fertigung, Bewertung, Wartung |
 | economy.js | Buchungen, Beschaffung, Verträge, späte Zahlungen, Kosten und Kredit |
 | transport.js | Einzellieferung, Standorttransfer, Flotte, Wartung und Rampen |
+| rental.js | Mietverträge, tägliche Kosten, sichere Rückgabe und historische Referenzen |
 | tours.js | Atomare Gesamtladung, mehrere Kundenstopps, Restmengenbindung und Teilrechnungen |
 | service.js | Rücktransport, Prüfung, Erstattung, Reparatur/Verwertung, Rückruf |
 | management.js | Forschung und lokale budgetierte Delegationsregeln |

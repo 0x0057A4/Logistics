@@ -9,6 +9,7 @@ export class SaveGuard {
   constructor(options = {}) {
     this.prefix = options.prefix ?? 'industrie-logistik-v1';
     this.locks = options.locks === undefined ? globalThis.navigator?.locks : options.locks;
+    this.defaultStorage = options.storage === undefined;
     try { this.storage = options.storage === undefined ? globalThis.localStorage : options.storage; } catch { this.storage = null; }
     this.now = options.now ?? Date.now;
     this.setInterval = options.setInterval ?? globalThis.setInterval;
@@ -36,6 +37,9 @@ export class SaveGuard {
     this.release();
     const generation = this.generation;
     if (!this.locks?.request) { this.reason='unsupported'; return false; }
+    if (!this.storage && this.defaultStorage) {
+      try { this.storage = globalThis.localStorage; } catch { /* Permission can be granted before a later retry. */ }
+    }
     if (!this.storage) { this.reason='storage-error'; return false; }
     this.reason='pending';
     return new Promise(resolve => {

@@ -9,9 +9,10 @@ import * as network from './network.js';
 import * as tours from './tours.js';
 import * as special from './special.js';
 import * as multimodal from './multimodal.js';
+import * as rental from './rental.js';
 import { BUILDINGS, ITEMS, RECIPES, VEHICLES, ROLES } from './catalog.js';
 import { reachable, footprint } from './world.js';
-const MODULES=[inventory,workforce,economy,transport,production,management,service,network,tours,special,multimodal];
+const MODULES=[inventory,workforce,economy,transport,production,management,service,network,tours,special,multimodal,rental];
 const ARRAYS=['sites','buildings','workers','batches','reservations','jobs','purchases','orders','vehicles','shipments','ledger','events','research','rules','returns','milestones','transfers','tours','freights'];
 const clone=x=>JSON.parse(JSON.stringify(x));
 const fail=m=>{throw new Error('Spielstand ungültig: '+m);};
@@ -26,7 +27,7 @@ export function validateState(s){
  if(!s.settings||typeof s.settings.incidents!=='boolean'||!s.stats||!['produced','delivered','revenue','costs'].every(k=>finite(s.stats[k],0)))fail('Einstellungen oder Statistik beschädigt.');
  // Reject non-finite values and prototype-shaped keys anywhere, including extensions.
  function walk(v,depth=0){if(depth>60)fail('Verschachtelung zu tief.');if(typeof v==='number'&&!Number.isFinite(v))fail('Ungültiger Zahlenwert.');if(v&&typeof v==='object')for(const [k,x]of Object.entries(v)){if(['__proto__','constructor','prototype'].includes(k))fail('Verbotener Schlüssel.');walk(x,depth+1);}}walk(s);
- const ids=new Set();let maxSeq=0;for(const k of ['sites','buildings','workers','batches','reservations','jobs','purchases','orders','vehicles','shipments','ledger','events','returns','research','rules','transfers','tours','freights'])for(const row of s[k]){if(!row||typeof row!=='object'||typeof row.id!=='string'||!row.id||ids.has(row.id))fail('Fehlende oder doppelte ID in '+k+'.');ids.add(row.id);const m=row.id.match(/-(\d+)$/);if(m)maxSeq=Math.max(maxSeq,+m[1]);}
+ const ids=new Set();let maxSeq=0;for(const k of ['sites','buildings','workers','batches','reservations','jobs','purchases','orders','vehicles','shipments','ledger','events','returns','research','rules','transfers','tours','freights','rentals'])for(const row of s[k]||[]){if(!row||typeof row!=='object'||typeof row.id!=='string'||!row.id||ids.has(row.id))fail('Fehlende oder doppelte ID in '+k+'.');ids.add(row.id);const m=row.id.match(/-(\d+)$/);if(m)maxSeq=Math.max(maxSeq,+m[1]);}
  if(s.seq<=maxSeq)fail('ID-Zähler beschädigt.');
  const sites=new Set(s.sites.map(x=>x.id));if(!sites.has(s.selectedSite)||!sites.size)fail('Standortauswahl ungültig.');
  for(const a of s.sites)if(!Number.isInteger(a.width)||!Number.isInteger(a.height)||a.width<2||a.height<2||a.width>200||a.height>200||!finite(a.energy,0)||!finite(a.x)||!finite(a.y))fail('Standortwerte beschädigt.');
@@ -45,7 +46,7 @@ export function validateState(s){
  for(const o of s.orders)if(!ITEMS[o.item]||!finite(o.qty,Number.EPSILON)||!finite(o.delivered,0,o.qty)||!finite(o.price,0)||!finite(o.paid,0)||!finite(o.due,0))fail('Kundenauftrag beschädigt.');
  const vehicles=new Map(s.vehicles.map(v=>[v.id,v]));const orders=new Map(s.orders.map(o=>[o.id,o]));const shipments=new Map(s.shipments.map(sh=>[sh.id,sh]));
  for(const o of s.orders)if(!['offer','active','fulfilled','cancelled'].includes(o.status)||!finite(o.quality,0,100))fail('Auftragsstatus beschädigt.');
- for(const v of s.vehicles){if(!VEHICLES[v.type]||v.capacity!==VEHICLES[v.type].capacity||!finite(v.condition,0,100)||!['idle','loading','transit','unloading','returning','maintenance','service','transfer','tour'].includes(v.status))fail('Fahrzeug beschädigt.');if(v.shipment&&!(shipments.has(v.shipment)&&shipments.get(v.shipment).vehicleId===v.id)&&!s.returns.some(r=>r.id===v.shipment&&r.vehicleId===v.id)&&!s.transfers.some(r=>r.id===v.shipment&&r.vehicleId===v.id))fail('Fahrzeugzuordnung beschädigt.');}
+ for(const v of s.vehicles){if(!VEHICLES[v.type]||v.capacity!==VEHICLES[v.type].capacity||!finite(v.condition,0,100)||!['idle','loading','transit','unloading','returning','maintenance','service','transfer','tour','rentalReturned'].includes(v.status))fail('Fahrzeug beschädigt.');if(v.shipment&&!(shipments.has(v.shipment)&&shipments.get(v.shipment).vehicleId===v.id)&&!s.returns.some(r=>r.id===v.shipment&&r.vehicleId===v.id)&&!s.transfers.some(r=>r.id===v.shipment&&r.vehicleId===v.id))fail('Fahrzeugzuordnung beschädigt.');}
  for(const p of s.purchases){if(!ITEMS[p.item]||!Number.isInteger(p.qty)||p.qty<1||!finite(p.cost,0)||!finite(p.quality,0,100)||!finite(p.eta,0)||!finite(p.remaining,0)||!['ordered','waiting','receiving','checking','storing','stored'].includes(p.status)||!['standard','express','quality'].includes(p.supplier))fail('Einkauf beschädigt.');if(['receiving','checking','storing'].includes(p.status)&&(!batches.has(p.batchId)||batches.get(p.batchId).item!==p.item))fail('Liefercharge fehlt.');}
  for(const sh of s.shipments){const o=orders.get(sh.orderId),v=vehicles.get(sh.vehicleId);if(!o||!v||!sites.has(sh.site)||!Number.isInteger(sh.qty)||sh.qty<1||sh.qty>o.qty||!finite(sh.remaining,0)||!finite(sh.distance,0)||!Array.isArray(sh.cargo)||typeof sh.paid!=='boolean'||!['loading','transit','unloading','returning','complete','cancelled'].includes(sh.status))fail('Transport beschädigt.');
   if(!['complete','cancelled'].includes(sh.status)&&(v.shipment!==sh.id||v.status!==sh.status))fail('Aktive Fahrzeugzuordnung widersprüchlich.');

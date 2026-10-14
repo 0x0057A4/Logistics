@@ -1,5 +1,9 @@
 # Änderungen
 
+## 0.7 – 14.10.2026
+
+Mietfahrzeuge mit laufenden Tageskosten und sicherer Rückgabe integriert. Mietverträge bleiben gespeichert; doppelte Fahrzeugzuordnung beim Import abgewiesen. Rückladungen und Fahrerprognose aus 0.6 enthalten. Speicherfehler werden abgefangen; expliziter temporärer Betrieb, JSON-Export/Import und Speicher-Retry ergänzen den regulären Tab-Schreibschutz. Browserabnahme bleibt offen.
+
 ## 0.6 – Arbeitsstand 14.10.2026, nicht veröffentlicht
 
 Rückladungen auf Sammeltouren, vier bedienbare Stopps, reine Tourvorschau, mengengetreue Quarantäneentladung und erweiterte Importprüfung. Kühlladung im ungeeigneten Fahrzeug abgewiesen. Rückgabequellen gegen parallele Einzelabholung gesperrt. UI zeigt tatsächliche Ladung, Kosten und Wartegründe.

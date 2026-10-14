@@ -110,3 +110,7 @@ Browserprüfung bleibt blockiert: Managed-Sites-Anweisung erlaubt Browser-QA nur
 ## Version 0.6 – GitHub-Übergabe 14.10.2026
 
 Integrierter Stand erneut mit `node --test tests/*.test.js` geprüft: **137 bestanden, null fehlgeschlagen**. Rohprotokoll TESTERGEBNIS-0.6.txt. Enthält unabhängige Regressionstests für doppelte Abholung durch Import, Quellenbindung, Reihenfolge/Kapazität, Quarantäneblockade, Phasenspeicherung und Kühlfahrzeuge. Finale unabhängige Gesamtfreigabe noch offen. Browserprüfung weiterhin offen. 0.7-/Speicherpatches sind nicht Teil dieses 137-Test-Laufs.
+
+## Version 0.7 – Abschlussprüfung 14.10.2026
+
+161 Tests bestanden, 0 fehlgeschlagen. Unabhängige QS der Miet-Rückladetouren, Tagesgrenzen, Spielstandreferenzen und Speicher-Wiederaufnahme: siehe QS-0.7.md. JSON enthält keine Laufzeitsperre. Browser-/Touch-/Layoutprüfung weiterhin offen.

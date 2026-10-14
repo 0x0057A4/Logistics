@@ -2,7 +2,7 @@
 
 **Projektübergabe:** [Aktueller Kontext und nächster Schritt](docs/FORTSETZUNG.md). [Projektentscheidungen](docs/CHATKONTEXT.md). Vorbereitete Änderungen liegen in `pending/`.
 
-Version 0.6 · unveröffentlichter Entwicklungsstand · 14. Oktober 2026
+Version 0.7 · Entwicklungsfassung · 14. Oktober 2026
 
 Eigenständige, deutschsprachige Unternehmenssimulation für PC-Browser. Vom leeren Werk über Arbeitsleuchtenfertigung bis zu mehreren Standorten, Sammeltouren und temperaturgeführter Fremdfracht. Alle Unternehmen, Personen und Wirtschaftswerte sind fiktiv.
 
@@ -98,3 +98,11 @@ Die Vorschau zeigt Fahrtkosten, Stoppladung sowie Fahr-/Arbeitszeit. Fahrerprogn
 `index.html` liegt direkt im Repository-Hauptordner und enthält die Spieloberfläche. `<base href="./dist/">` lädt Styles, Module und Downloadpaket aus `dist/`, auch unter dem Projektpfad `/Logistics/`. Für Pages: Branch `main`, Ordner `/ (root)`. `.nojekyll` kennzeichnet das unveränderte statische Paket. Pages-Aktivierung ist durch den Datei-Upload allein nicht nachgewiesen.
 
 Nach Änderungen an `dist/index.html` erzeugt `python scripts/package.py` den Root-Einstieg erneut.
+
+## Version 0.7
+
+Transport: Lieferwagen 180 €, Lkw 520 €, Kühlfahrzeug 680 € je angefangenem Spieltag (1.440 Spielminuten). Erste Rate sofort, weitere auch bei Stillstand. Mietfahrzeuge verwenden reguläre Fahrer, Rampen, Touren, Rückladungen und Wartung. Rückgabe nur leer, frei und am Mietstandort; angebrochene Tage werden nicht erstattet. Historische Lieferreferenzen bleiben erhalten.
+
+### Speicher blockiert oder voll
+
+Die Meldung betrifft den Browser-Speicher, nicht eine Sperre in der JSON-Datei. „Speicher erneut prüfen“ versucht normalen Betrieb wiederherzustellen. Alternativ „Temporär spielen“ bewusst bestätigen: keine lokale Sicherung, Fortschritt vor Schließen als JSON exportieren. JSON lässt sich später wieder importieren. Vorhandene lokale Spielstände werden nicht still überschrieben; Mehrfach-Tab-Schutz bleibt aktiv. Browser-Speicherrechte lassen sich durch das Spiel nicht erzwingen.

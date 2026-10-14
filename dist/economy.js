@@ -8,7 +8,7 @@ export function book(s,key,amount,category,note,refs=[]){
  if(typeof key!=='string'||!key||!Number.isFinite(amount)||keys(s).keys.has(key))return false;
  const match=key.match(/^((?:wage:[^:]+)|energy|rent|interest):(\d+)$/),watermark=match?Number(match[2]):null;
  if(match&&(s.accountingWatermarks?.[match[1]]??-1)>=watermark)return false;
- amount=cents(amount);const mandatory=!!match;if(amount<0&&s.money+amount<0&&!mandatory)return false;
+ amount=cents(amount);const mandatory=!!match||/^vehicle-rent:rental-\d+:\d+$/.test(key);if(amount<0&&s.money+amount<0&&!mandatory)return false;
  const index=keys(s);s.money=cents(s.money+amount);
  const ledgerKey=match?`${match[1]}:day:${Math.floor(watermark/1440)}`:key,row=index.byKey.get(ledgerKey);
  if(row){row.amount=cents(row.amount+amount);row.lastAt=s.t;row.entries=(row.entries||1)+1;}

@@ -38,3 +38,6 @@ Modulares statisches ES-Modulspiel, keine verpflichtende einzelne HTML-Datei in 
 Nicht zum Projekt gehörende persönliche Erinnerungen, berufliche Daten und andere Spiele wurden nicht übertragen. Zugangsdaten und Service-Tokens ausgeschlossen.
 
 Ergänzung Nutzer 14.10.2026: `index.html` für GitHub Pages direkt im Hauptordner. Umsetzung: vollständiger HTML-Einstieg im Root mit relativer Asset-Basis `./dist/`, kein externer Redirect.
+
+## Abschlussauftrag 0.7
+Nutzer fordert Abschluss 0.7 und Behebung des als JSON-Schreibschutz bezeichneten Speicherfehlers. GitHub-Upload aller Projektunterlagen weiterhin autorisiert, index.html im Hauptordner. Mietflotte und Speicherzugriffsbehandlung integriert; Originalpatches archiviert. Preview 0.8–1.0 sind Planungsziele laut FORTSETZUNG.md.
