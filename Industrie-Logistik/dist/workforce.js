@@ -1,0 +1,23 @@
+import {ROLES} from './catalog.js';
+export function init(s){s.workers??=[];}
+export function onShift(w,t){const hour=(t%1440)/60;return w.shift==='all'||(w.shift==='night'?(hour>=16||hour<8):hour>=8&&hour<16);}
+export function createAPI(s,api){return {acquire(role,site,task){let w=s.workers.find(w=>w.task===task);if(w&&(!onShift(w,s.t)||w.training||w.relocation||w.breakRemaining>0||w.fatigue>=80||w.role!==role||w.site!==site)){w.task=null;w=null;}if(w)return w;w=s.workers.find(w=>w.role===role&&w.site===site&&!w.task&&!w.training&&!w.relocation&&!(w.breakRemaining>0)&&onShift(w,s.t)&&w.fatigue<80);if(w){w.task=task;w.activity='Unterwegs';}return w||null;},release(task){for(const w of s.workers)if(w.task===task){w.task=null;w.activity='Bereit';}}};}
+export function handle(s,c,api){
+ if(c.type==='hire'){if(!ROLES[c.role]||!s.sites.some(x=>x.id===(c.site||s.selectedSite)))return {ok:false,message:'Beruf oder Standort unbekannt.'};const id=api.id('worker'),r=ROLES[c.role];if(!api.book(`hire:${id}`,-r.hireCost,'personal','Einstellung '+r.name))return {ok:false,message:'Kapital reicht nicht.'};const names=['Mira','Jona','Lina','Emil','Nora','Timo','Ada','Levi'];s.workers.push({id,name:names[s.workers.length%names.length]+' '+id.split('-').at(-1),role:c.role,site:c.site||s.selectedSite,task:null,shift:'day',skill:1,fatigue:0,wage:r.wage,activity:'Bereit'});return {ok:true,id};}
+ if(!['fire','train','setShift','moveWorker'].includes(c.type))return null;const w=s.workers.find(x=>x.id===c.id);if(!w)return {ok:false,message:'Person nicht gefunden.'};
+ if(c.type==='moveWorker'){if(w.task||w.training||w.relocation)return {ok:false,message:'Person benötigt freie Zeit für Standortwechsel.'};if(c.toSite===w.site||!s.sites.some(x=>x.id===c.toSite))return {ok:false,message:'Anderen gültigen Zielstandort wählen.'};w.relocation={toSite:c.toSite,remaining:30,duration:30};w.activity='Standortwechsel';return {ok:true};}
+ if(c.type==='fire'){if(w.task||w.training||w.relocation)return {ok:false,message:'Person arbeitet oder lernt. Zuerst Tätigkeit beenden.'};s.workers.splice(s.workers.indexOf(w),1);return {ok:true};}
+ if(c.type==='setShift'){if(!['day','night','all'].includes(c.shift))return {ok:false,message:'Ungültige Schicht.'};w.shift=c.shift;if(!onShift(w,s.t)){w.task=null;w.activity='Feierabend';}return {ok:true};}
+ if(w.skill>=3)return {ok:false,message:'Höchste Qualifikation erreicht.'};if(w.task||w.training||w.relocation)return {ok:false,message:'Fortbildung benötigt freie Person.'};const id=api.id('training');if(!api.book(id,-900,'personal','Fortbildung',[w.id]))return {ok:false,message:'Kapital reicht nicht.'};w.training={id,remaining:90,duration:90};w.activity='Fortbildung';return {ok:true};
+}
+export function step(s,api){for(const w of s.workers){if(w.relocation){w.task=null;w.activity='Standortwechsel';if(onShift(w,s.t))api.book(`wage:${w.id}:${s.t}`,-w.wage/60,'personal','Arbeitslohn',[w.id]);w.relocation.remaining--;if(w.relocation.remaining<=0){w.site=w.relocation.toSite;w.relocation=null;w.activity='Bereit';api.log('personnel',`${w.name}: Zielstandort erreicht.`,[w.id]);}continue;}if(!onShift(w,s.t)){w.task=null;w.activity='Feierabend';w.fatigue=Math.max(0,w.fatigue-0.5);continue;}api.book(`wage:${w.id}:${s.t}`,-w.wage/60,'personal','Arbeitslohn',[w.id]);if(w.fatigue>=80&&!w.breakRemaining){w.breakRemaining=30;w.task=null;}if(w.breakRemaining>0){w.breakRemaining--;w.fatigue=Math.max(0,w.fatigue-1.2);w.activity='Erholungspause';continue;}if(w.training){w.training.remaining--;w.activity='Fortbildung';if(w.training.remaining<=0){w.skill=Math.min(3,w.skill+0.25);w.training=null;api.log('personnel',`${w.name}: Fortbildung abgeschlossen.`,[w.id]);}continue;}w.fatigue=Math.max(0,Math.min(100,w.fatigue+(w.task?0.18:-0.4)));if(!w.task)w.activity='Bereit';}}
+
+export function validate(s){
+ const fail=text=>{throw new Error('Personaldaten beschädigt: '+text);};
+ const finite=(n,min,max)=>typeof n==='number'&&Number.isFinite(n)&&n>=min&&n<=max;
+ for(const w of s.workers){
+  if(w.breakRemaining!=null&&!finite(w.breakRemaining,0,30))fail('Pausendauer');
+  if(w.training&&(!finite(w.training.remaining,0,90)||w.training.duration!==90||typeof w.training.id!=='string'||w.task||w.relocation))fail('Fortbildung');
+  if(w.relocation&&(!finite(w.relocation.remaining,0,30)||w.relocation.duration!==30||!s.sites.some(x=>x.id===w.relocation.toSite)||w.relocation.toSite===w.site||w.task))fail('Standortwechsel');
+ }
+}
