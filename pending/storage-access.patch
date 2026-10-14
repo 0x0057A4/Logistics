@@ -1,0 +1,300 @@
+From 353efd978c4130b447f371e52b28156ce9081389 Mon Sep 17 00:00:00 2001
+From: Codex <codex@openai.com>
+Date: Wed, 14 Oct 2026 11:11:56 +0200
+Subject: [PATCH 1/2] Handle blocked storage with explicit temporary play and
+ safe retry
+
+---
+ dist/app.js                  | 42 +++++++++++++++++++++++++------
+ dist/index.html              |  4 +--
+ tests/storage-access.test.js | 49 ++++++++++++++++++++++++++++++++++++
+ tests/ui-harness.js          |  5 ++--
+ 4 files changed, 88 insertions(+), 12 deletions(-)
+ create mode 100644 tests/storage-access.test.js
+
+diff --git a/dist/app.js b/dist/app.js
+index c13ecb8..a63cc4e 100644
+--- a/dist/app.js
++++ b/dist/app.js
+@@ -17,13 +17,18 @@ let sim=new Simulation(), speed=1, panel='', selected=null, build=null, rotation
+ let started=false, dirty=false, uiStamp=0, lastTick=performance.now(), accumulator=0;
+ const STORE='industrie-logistik-v1', prefsKey=STORE+'-prefs';
+ const guard=createSaveGuard({prefix:STORE,onLost(){writable=false;speed=0;$('#statusText').textContent=lockMessage();}});
+-let writable=false, switching=false;
++let writable=false, switching=false, temporary=false, storageFailure=false;
++const temporaryMessage='Temporärer Modus · NICHT GESPEICHERT · Vor Schließen JSON exportieren.';
+ const lockMessage=()=>guard.reason==='storage-error'?'Schreibschutz: Lokaler Speicher nicht verfügbar. Vorhandenen Stand als JSON exportieren.':guard.reason==='unsupported'?'Schreibschutz: Browser unterstützt keine sichere Tab-Sperre. JSON-Export bleibt möglich.':'Schreibschutz: Spielstand in anderem Tab geöffnet oder Sperre verloren. Anderen Tab schließen und hier neu laden.';
+-function canWrite(){if(writable&&guard.owns(sim.state.mode))return true;writable=false;speed=0;$('#statusText').textContent=lockMessage();return false;}
++function canWrite(){if(temporary)return true;if(writable&&guard.owns(sim.state.mode))return true;writable=false;speed=0;$('#statusText').textContent=lockMessage();return false;}
+ function resetView(){endBuild();closePanel();selected=null;forecast=null;search='';accumulator=0;scene.home();}
+ async function activate(mode,{candidate=null,reset=false}={}){
+  if(switching)return false;switching=true;
+  try{
++  if(temporary){
++   if(!candidate&&!reset){toast('Temporärer Modus: Gespeicherte Unternehmen erst nach JSON-Export und Neuladen öffnen.',true);return false;}
++   sim=candidate||new Simulation({mode});prefs.mode=sim.state.mode;started=true;dirty=true;resetView();$('#welcome').close();setSpeed(0);render(true);return true;
++  }
+   if(started&&writable&&!save())return false;
+   if(!await guard.acquire(mode)){writable=false;speed=0;toast(lockMessage(),true);render();return false;}
+   writable=true;
+@@ -49,7 +54,28 @@ const scene=new Scene($('#world'),{onSelect(id){if(!id)return;if(sim.state.sites
+ scene.setState(sim.state);
+ function toast(text,error=false){$('#toast').textContent=text;$('#toast').className='visible'+(error?' error':'');clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('#toast').className='',4500);}
+ function send(c,quiet=false){if(!canWrite()){toast(lockMessage(),true);return {ok:false,message:lockMessage()};}try{const r=sim.command(c);if(!r.ok)toast(r.message||'Aktion nicht möglich.',true);else{dirty=true;if(!quiet)toast(r.message||'Änderung übernommen.');}render(true);return r;}catch(e){toast(e.message,true);return {ok:false,message:e.message};}}
+-function save(show=false){if(!canWrite()){if(show)toast(lockMessage(),true);return false;}try{const key=STORE+'-'+sim.state.mode,old=localStorage.getItem(key);if(old){let valid=false;try{Simulation.fromJSON(old);valid=true;}catch{}if(valid)localStorage.setItem(key+'-backup',old);}localStorage.setItem(key,sim.serialize());localStorage.setItem(prefsKey,JSON.stringify({...prefs,mode:sim.state.mode}));dirty=false;$('#statusText').textContent='Gesichert · '+time(sim.state.t)+' · Keine Offlinefortschritte';if(show)toast('Spielstand gesichert.');return true;}catch(e){toast('Speichern fehlgeschlagen. Bitte Spielstand exportieren.',true);return false;}}
++function save(show=false){if(temporary){$('#statusText').textContent=temporaryMessage;if(show)toast('Nicht gespeichert. Bitte JSON exportieren.',true);return false;}if(!canWrite()){if(show)toast(lockMessage(),true);return false;}try{const key=STORE+'-'+sim.state.mode,old=localStorage.getItem(key);if(old){let valid=false;try{Simulation.fromJSON(old);valid=true;}catch{}if(valid)localStorage.setItem(key+'-backup',old);}localStorage.setItem(key,sim.serialize());localStorage.setItem(prefsKey,JSON.stringify({...prefs,mode:sim.state.mode}));dirty=false;storageFailure=false;$('#statusText').textContent='Gesichert · '+time(sim.state.t)+' · Keine Offlinefortschritte';if(show)toast('Spielstand gesichert.');return true;}catch(e){storageFailure=true;$('#statusText').textContent='NICHT GESPEICHERT · Speicher blockiert oder voll. JSON exportieren; Speichern erneut versuchen.';toast('Speichern fehlgeschlagen. Bitte Spielstand exportieren.',true);return false;}}
++function chooseTemporary(){
++ confirm('Ohne lokale Speicherung spielen?','Fortschritt geht beim Schließen verloren. Vor Schließen JSON exportieren. Vorhandene gespeicherte Unternehmen bleiben unverändert.',()=>{
++  guard.release();temporary=true;writable=false;speed=0;dirty=true;
++  if(!started){sim=new Simulation({mode:$('input[name=mode]:checked').value});started=true;}
++  resetView();$('#welcome').close();render(true);
++ });
++}
++async function retryStorage(){
++ if(temporary){toast('Temporären Stand zuerst als JSON exportieren. Danach Seite neu laden und JSON importieren.',true);return false;}
++ if(switching)return false;switching=true;speed=0;
++ try{
++  writable=await guard.acquire(sim.state.mode);
++  if(!writable){toast(lockMessage(),true);return false;}
++  if(started&&dirty){confirm('Ungesicherten Stand speichern?','Aktueller Stand ersetzt den gespeicherten Stand dieses Modus. Bei Änderungen in anderem Tab zuerst JSON exportieren und neu laden.',()=>save(true));return false;}
++  const raw=localStorage.getItem(STORE+'-'+sim.state.mode);
++  if(raw){sim=Simulation.fromJSON(raw);started=true;resetView();$('#welcome').close();}
++  storageFailure=false;$('#statusText').textContent=started?'Spielstand geladen · Betrieb pausiert':'Speicher verfügbar · Unternehmen gründen';
++  return true;
++ }catch(e){storageFailure=true;toast('Speicher weiterhin nicht verfügbar. JSON-Export bleibt möglich.',true);return false;}
++ finally{switching=false;render(true);}
++}
+ function applyPrefs(){document.body.classList.toggle('large',prefs.large);document.body.classList.toggle('reduced',prefs.reduced);document.body.classList.toggle('mission-hidden',!prefs.mission);}
+ function setSpeed(n){speed=n&&canWrite()?n:0;accumulator=0;lastTick=performance.now();$$('[data-speed]').forEach(b=>b.classList.toggle('active',+b.dataset.speed===speed));render();}
+ function openPanel(p){panel=p;search='';$('#search').value='';$('#panel').hidden=false;document.body.classList.add('panel-open');$('#panel').classList.toggle('wide',['inventory','finance','history','staff','network','planning'].includes(p));$$('.rail [data-panel]').forEach(b=>b.classList.toggle('active',b.dataset.panel===p));renderPanel();}
+@@ -75,7 +101,7 @@ function requirements(){const s=sim.state,b=s.buildings.filter(x=>x.site===s.sel
+  {ok:s.vehicles.length>0,title:'Lieferwagen anschaffen',text:'Eigene Flotte bringt deine Produkte zum Kunden.',panel:'fleet',cta:'Fahrzeug kaufen'},
+  {ok:s.stats.delivered>=8,title:'Erste Lieferung zustellen',text:'Im Auftragsfenster Fahrzeug und echte Fertigware zuordnen.',panel:'orders',cta:'Lieferung planen'},
+  {ok:s.orders.some(o=>o.paid>0),title:'Zahlung erhalten',text:'Nach Zustellung entsteht eine Forderung. Zahlung folgt später.',panel:'finance',cta:'Finanzen öffnen'}];}
+-function render(force=false){const s=sim.state;scene.setState(s);$('#cash').textContent=euro(s.money);$('#delivered').textContent=fmt(s.stats.delivered)+' Stück';$('#staffCount').textContent=fmt(s.workers.length);$('#clock').textContent=time(s.t);$('#siteName').textContent=s.sites.find(x=>x.id===s.selectedSite)?.name||'Standort';$('#worldTitle').textContent=s.buildings.length?'Dein Betrieb nimmt Fahrt auf.':'Aus Ideen wird Industrie.';$('#simState').textContent=!writable?'Schreibgeschützte Ansicht':document.hidden?'Hintergrundpause':speed?'Betrieb läuft':'Betrieb pausiert';const req=requirements(),i=req.findIndex(x=>!x.ok),m=req[i]||{title:'Erster Kreislauf geschlossen.',text:'Neue Aufträge, größere Kapazität, dein nächster Schritt.',panel:'overview',cta:'Betrieb weiterentwickeln'};$('#missionNumber').textContent=i<0?'✓':String(i+1).padStart(2,'0');$('#missionTitle').textContent=m.title;$('#missionText').textContent=m.text;const a=$('#missionAction');a.textContent=m.cta+' →';delete a.dataset.panel;delete a.dataset.action;if(m.panel)a.dataset.panel=m.panel;else a.dataset.action=m.action;
++function render(force=false){$('#storageWarning').hidden=!temporary;$('#storageWarning').textContent=temporaryMessage;if(temporary)$('#statusText').textContent=temporaryMessage;else if(!writable)$('#statusText').textContent=lockMessage();const s=sim.state;scene.setState(s);$('#cash').textContent=euro(s.money);$('#delivered').textContent=fmt(s.stats.delivered)+' Stück';$('#staffCount').textContent=fmt(s.workers.length);$('#clock').textContent=time(s.t);$('#siteName').textContent=s.sites.find(x=>x.id===s.selectedSite)?.name||'Standort';$('#worldTitle').textContent=s.buildings.length?'Dein Betrieb nimmt Fahrt auf.':'Aus Ideen wird Industrie.';$('#simState').textContent=!writable&&!temporary?'Schreibgeschützte Ansicht':document.hidden?'Hintergrundpause':speed?'Betrieb läuft':'Betrieb pausiert';const req=requirements(),i=req.findIndex(x=>!x.ok),m=req[i]||{title:'Erster Kreislauf geschlossen.',text:'Neue Aufträge, größere Kapazität, dein nächster Schritt.',panel:'overview',cta:'Betrieb weiterentwickeln'};$('#missionNumber').textContent=i<0?'✓':String(i+1).padStart(2,'0');$('#missionTitle').textContent=m.title;$('#missionText').textContent=m.text;const a=$('#missionAction');a.textContent=m.cta+' →';delete a.dataset.panel;delete a.dataset.action;if(m.panel)a.dataset.panel=m.panel;else a.dataset.action=m.action;
+  if(panel&&(force||performance.now()-uiStamp>900)&&!document.activeElement?.matches('input,select,textarea'))renderPanel();}
+ const titles={overview:'Betriebszentrale',production:'Fertigung',inventory:'Lager & Materialfluss',purchasing:'Beschaffung',staff:'Dein Team',orders:'Markt & Aufträge',fleet:'Fuhrpark & Touren',finance:'Unternehmensrechnung',research:'Forschung & Produkte',rules:'Betriebsregeln',network:'Unternehmensnetz',service:'Kundendienst & Rückläufe',history:'Betriebschronik',help:'Betriebshandbuch',settings:'Spiel & Einstellungen',detail:'Objektakte',planning:'Planungsvorschau',special:'Speziallogistik'};
+ function renderPanel(){if(!panel)return;uiStamp=performance.now();const scroll=$('#panelBody').scrollTop;$('#panelTitle').textContent=titles[panel]||panel;$('#panelEyebrow').textContent=panel==='detail'?'ALLE DATEN. EIN ZUSAMMENHANG.':'INDUSTRIE & LOGISTIK';const renderers={overview:overview,production:production,inventory:inventory,purchasing:purchasing,staff:staff,orders:orders,fleet:fleet,finance:finance,research:research,rules:rules,network:network,service:service,history:history,help:help,settings:settings,detail:detail,planning:planning,special:special};$('#panelBody').innerHTML=(renderers[panel]||overview)();$('#panelBody').scrollTop=scroll;}
+@@ -105,18 +131,18 @@ function help(){return `<div class="notice good">Alle Firmen, Personen, Preise u
+  ['Steuerung und Zugänglichkeit','Leertaste: Pause. B: Bauen. R: Bauobjekt drehen. Escape: Fenster schließen. Ziehen: Kamera bewegen. Mausrad: Zoom. Grundriss liefert ebene Ersatzansicht. Alle Anlagen auch über Fertigungstabelle auswählen. Schrift und Bewegung in Einstellungen.'],
+  ['Darstellung und Umfang','Die aktuelle räumliche Ansicht verwendet lokal gezeichnete Canvas-Isometrie. Sie benötigt kein WebGL. Phasenstatus und konkrete Grenzen sind in der ausgelieferten Dokumentation nachgehalten.']
+  ].map(([h,t])=>`<details><summary>${h}</summary><p>${t}</p></details>`).join('')}`;}
+-function settings(){return `<section class="section"><h3>Spielstand</h3>${!writable?`<div class="notice">${esc(lockMessage())}</div>`:''}<form data-form="loadMode" class="form-grid">${field('Gespeichertes Unternehmen','<select name="mode"><option value="guided">Geführter Einstieg</option><option value="economy">Wirtschaftsbetrieb</option><option value="sandbox">Freies Bauen</option></select>')}<button>Modus laden</button></form><p class="fine">Entwicklungsfassung 0.5. Vollständiger Funktionsstatus und Quellcode im Download.</p><p style="margin:10px 0"><a href="./Industrie-Logistik.zip" download>Spielpaket & Quellcode herunterladen ↗</a></p><p class="fine" style="margin-top:8px">Aktiver Modus: ${sim.state.mode==='guided'?'Geführter Einstieg':sim.state.mode==='sandbox'?'Freies Bauen':'Wirtschaftsbetrieb'}</p><div class="actions">${button('Jetzt speichern','save','','primary')}${button('JSON exportieren','export')}${button('JSON importieren','import')}${button('Letzte Sicherung laden','backup')}</div></section><section class="section"><h3>Darstellung</h3><div class="list-row"><span>Größere Schrift</span><input type="checkbox" data-pref="large" ${prefs.large?'checked':''} aria-label="Größere Schrift"></div><div class="list-row"><span>Bewegung reduzieren</span><input type="checkbox" data-pref="reduced" ${prefs.reduced?'checked':''} aria-label="Bewegung reduzieren"></div><div class="list-row"><span>Einstiegshinweise</span><input type="checkbox" data-pref="mission" ${prefs.mission?'checked':''} aria-label="Einstiegshinweise"></div></section><section class="section"><h3>Unternehmen</h3><div class="actions">${button('Neues Unternehmen','new','','danger')}${button('Handbuch','panel-help')}</div><p class="fine" style="margin-top:10px">Neustart erfolgt erst nach Bestätigung. Vorheriger Stand kann exportiert werden.</p></section><div class="notice">Browserprüfung dieser Veröffentlichung noch offen. Fachliche Simulation wird automatisiert geprüft.</div>`;}
++function settings(){return `<section class="section"><h3>Spielstand</h3>${temporary?`<div class="notice">${temporaryMessage}</div>`:''}<div class="actions">${button('Speicher erneut prüfen','retryStorage')}${!temporary?button('Ohne lokale Speicherung spielen','temporary'):''}</div>${!writable&&!temporary?`<div class="notice">${esc(lockMessage())}</div>`:''}<form data-form="loadMode" class="form-grid">${field('Gespeichertes Unternehmen','<select name="mode"><option value="guided">Geführter Einstieg</option><option value="economy">Wirtschaftsbetrieb</option><option value="sandbox">Freies Bauen</option></select>')}<button>Modus laden</button></form><p class="fine">Entwicklungsfassung 0.5. Vollständiger Funktionsstatus und Quellcode im Download.</p><p style="margin:10px 0"><a href="./Industrie-Logistik.zip" download>Spielpaket & Quellcode herunterladen ↗</a></p><p class="fine" style="margin-top:8px">Aktiver Modus: ${sim.state.mode==='guided'?'Geführter Einstieg':sim.state.mode==='sandbox'?'Freies Bauen':'Wirtschaftsbetrieb'}</p><div class="actions">${button('Jetzt speichern','save','','primary')}${button('JSON exportieren','export')}${button('JSON importieren','import')}${button('Letzte Sicherung laden','backup')}</div></section><section class="section"><h3>Darstellung</h3><div class="list-row"><span>Größere Schrift</span><input type="checkbox" data-pref="large" ${prefs.large?'checked':''} aria-label="Größere Schrift"></div><div class="list-row"><span>Bewegung reduzieren</span><input type="checkbox" data-pref="reduced" ${prefs.reduced?'checked':''} aria-label="Bewegung reduzieren"></div><div class="list-row"><span>Einstiegshinweise</span><input type="checkbox" data-pref="mission" ${prefs.mission?'checked':''} aria-label="Einstiegshinweise"></div></section><section class="section"><h3>Unternehmen</h3><div class="actions">${button('Neues Unternehmen','new','','danger')}${button('Handbuch','panel-help')}</div><p class="fine" style="margin-top:10px">Neustart erfolgt erst nach Bestätigung. Vorheriger Stand kann exportiert werden.</p></section><div class="notice">Browserprüfung dieser Veröffentlichung noch offen. Fachliche Simulation wird automatisiert geprüft.</div>`;}
+ function confirm(title,text,action){$('#confirmTitle').textContent=title;$('#confirmText').textContent=text;confirmAction=action;$('#confirm').showModal();}
+ function starter(){const plans=[['rack',2,2],['assembly',5,3],['testing',9,3],['packing',13,3],['dock',3,11]];for(const [buildingType,x,y]of plans)if(!sim.state.buildings.some(b=>b.type===buildingType)){if(!send({type:'build',buildingType,x,y,rotation:0},true).ok)return;}for(const role of ['production','production','production','warehouse','driver'])if(!send({type:'hire',role},true).ok)return;if(!sim.state.vehicles.length)send({type:'buyVehicle',vehicleType:'van'},true);toast('Startbetrieb eingerichtet. Nächster Schritt: Material bestellen.');openPanel('purchasing');}
+ document.addEventListener('click',e=>{const b=e.target.closest('button,a.brand');if(!b)return;if(b.matches('a.brand')){e.preventDefault();openPanel('overview');return;}if(b.dataset.panel){openPanel(b.dataset.panel);return;}if(b.dataset.speed!==undefined){setSpeed(+b.dataset.speed);return;}if(b.dataset.view){scene.setView(b.dataset.view);$$('[data-view]').forEach(x=>x.classList.toggle('active',x===b));return;}if(b.dataset.camera){({plus:()=>scene.zoom(1),minus:()=>scene.zoom(-1),rotate:()=>scene.rotate(),home:()=>scene.home()})[b.dataset.camera]();return;}if(b.dataset.build){build=b.dataset.build;scene.setBuild(build,rotation,moving);renderBuild();return;}const a=b.dataset.action,id=b.dataset.id;if(!a)return;if(a.startsWith('panel-')){openPanel(a.slice(6));return;}
+- const actions={disposeBatch:()=>confirm('Geschädigte Ware entsorgen?','Entsorgung kostet 2 € je Stück. Ware wird endgültig entfernt.',()=>send({type:'disposeBatch',batchId:id})),approveDocuments:()=>send({type:'approveDocuments',id}),cancelFreight:()=>confirm('Fracht stornieren?','Bereits gezahlte Fracht verfällt. Ware kehrt nur bei freier Lagerkapazität zurück.',()=>send({type:'cancelFreight',id})),recallBatch:()=>confirm('Charge zurückrufen?','Betroffene Charge und ihre nachverfolgbaren Nachfolger werden gesperrt. Bereits gelieferte Ware wird im Rückruf erfasst.',()=>send({type:'recallBatch',batchId:id})),close:closePanel,refresh:renderPanel,build:()=>startBuild(),endBuild,rotateBuild:()=>{rotation=(rotation+90)%360;scene.setBuild(build,rotation,moving);toast('Anlage gedreht: '+rotation+'°');},select:()=>{selected=id;openPanel('detail');scene.focus?.(id);},toggle:()=>send({type:'toggleBuilding',id}),maintain:()=>send({type:'maintain',id}),move:()=>{const o=sim.state.buildings.find(b=>b.id===id);if(o){moving=id;rotation=o.rotation;startBuild(o.type);toast('Neue Position auf Karte wählen.');}},demolish:()=>confirm('Anlage zurückbauen?','Rückbau gibt 35 % Anschaffungskosten zurück. Belegte Anlagen bleiben geschützt.',()=>send({type:'demolish',id})),accept:()=>send({type:'acceptOrder',id}),cancelOrder:()=>confirm('Auftrag stornieren?','Unvollständige Aufträge senken Reputation.',()=>send({type:'cancelOrder',id})),cancelShipment:()=>send({type:'cancelShipment',id}),train:()=>send({type:'train',id}),fire:()=>confirm('Person entlassen?','Aktive Tätigkeit muss vorher abgeschlossen werden.',()=>send({type:'fire',id})),vehicleMaintain:()=>send({type:'maintainVehicle',id}),research:()=>send({type:'startResearch',key:id}),toggleRule:()=>send({type:'toggleRule',id}),deleteRule:()=>send({type:'deleteRule',id}),site:()=>{send({type:'selectSite',id});scene.home();closePanel();},networkView:()=>{scene.setView('network');closePanel();},repairReturn:()=>send({type:'resolveReturn',id,resolution:'repair'}),recycleReturn:()=>send({type:'resolveReturn',id,resolution:'recycle'}),starter, 'buy-kit':()=>{for(const item of ['housing','board','carton'])if(!send({type:'buy',item,qty:12,supplier:'standard'},true).ok)return;toast('Drei getrennte Materiallieferungen bestellt.');},save:()=>save(true),export:()=>{const blob=new Blob([sim.serialize()],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`Industrie-Logistik-Tag-${Math.floor(sim.state.t/1440)+1}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);},import:()=>$('#importFile').click(),backup:()=>confirm('Letzte Sicherung laden?','Aktueller Fortschritt wird durch letzte Sicherung ersetzt.',()=>{try{const text=localStorage.getItem(STORE+'-'+sim.state.mode+'-backup');const restored=Simulation.fromJSON(text);return activate(restored.state.mode,{candidate:restored});}catch(e){toast(e.message,true);}}),new:()=>confirm('Neues Unternehmen?','Vorherigen Spielstand bei Bedarf zuerst exportieren. Moduswahl öffnet sich danach.',()=>{$('#welcome').showModal();setSpeed(0);}),hideMission:()=>{prefs.mission=false;applyPrefs();},start:()=>{const mode=$('input[name=mode]:checked').value;if(localStorage.getItem(STORE+'-'+mode)){confirm('Vorhandenen Spielstand ersetzen?','Dieser Modus besitzt bereits ein Unternehmen. Vorher bei Bedarf laden und exportieren. Letzte Sicherung bleibt erhalten.',()=>activate(mode,{reset:true}));return;}return activate(mode,{reset:true});},confirmCancel:()=>$('#confirm').close(),confirmOk:()=>{$('#confirm').close();const fn=confirmAction;confirmAction=null;return fn?.();}};return actions[a]?.();});
+-document.addEventListener('change',e=>{const t=e.target;if(t.dataset.relocate&&t.value)send({type:'moveWorker',id:t.dataset.relocate,toSite:t.value});if(t.dataset.shift)send({type:'setShift',id:t.dataset.shift,shift:t.value});if(t.dataset.recipe)send({type:'setRecipe',id:t.dataset.recipe,recipe:t.value});if(t.dataset.pref){prefs[t.dataset.pref]=t.checked;applyPrefs();try{localStorage.setItem(prefsKey,JSON.stringify({...prefs,mode:sim.state.mode}));}catch{}}});
++ const actions={temporary:chooseTemporary,retryStorage,disposeBatch:()=>confirm('Geschädigte Ware entsorgen?','Entsorgung kostet 2 € je Stück. Ware wird endgültig entfernt.',()=>send({type:'disposeBatch',batchId:id})),approveDocuments:()=>send({type:'approveDocuments',id}),cancelFreight:()=>confirm('Fracht stornieren?','Bereits gezahlte Fracht verfällt. Ware kehrt nur bei freier Lagerkapazität zurück.',()=>send({type:'cancelFreight',id})),recallBatch:()=>confirm('Charge zurückrufen?','Betroffene Charge und ihre nachverfolgbaren Nachfolger werden gesperrt. Bereits gelieferte Ware wird im Rückruf erfasst.',()=>send({type:'recallBatch',batchId:id})),close:closePanel,refresh:renderPanel,build:()=>startBuild(),endBuild,rotateBuild:()=>{rotation=(rotation+90)%360;scene.setBuild(build,rotation,moving);toast('Anlage gedreht: '+rotation+'°');},select:()=>{selected=id;openPanel('detail');scene.focus?.(id);},toggle:()=>send({type:'toggleBuilding',id}),maintain:()=>send({type:'maintain',id}),move:()=>{const o=sim.state.buildings.find(b=>b.id===id);if(o){moving=id;rotation=o.rotation;startBuild(o.type);toast('Neue Position auf Karte wählen.');}},demolish:()=>confirm('Anlage zurückbauen?','Rückbau gibt 35 % Anschaffungskosten zurück. Belegte Anlagen bleiben geschützt.',()=>send({type:'demolish',id})),accept:()=>send({type:'acceptOrder',id}),cancelOrder:()=>confirm('Auftrag stornieren?','Unvollständige Aufträge senken Reputation.',()=>send({type:'cancelOrder',id})),cancelShipment:()=>send({type:'cancelShipment',id}),train:()=>send({type:'train',id}),fire:()=>confirm('Person entlassen?','Aktive Tätigkeit muss vorher abgeschlossen werden.',()=>send({type:'fire',id})),vehicleMaintain:()=>send({type:'maintainVehicle',id}),research:()=>send({type:'startResearch',key:id}),toggleRule:()=>send({type:'toggleRule',id}),deleteRule:()=>send({type:'deleteRule',id}),site:()=>{send({type:'selectSite',id});scene.home();closePanel();},networkView:()=>{scene.setView('network');closePanel();},repairReturn:()=>send({type:'resolveReturn',id,resolution:'repair'}),recycleReturn:()=>send({type:'resolveReturn',id,resolution:'recycle'}),starter, 'buy-kit':()=>{for(const item of ['housing','board','carton'])if(!send({type:'buy',item,qty:12,supplier:'standard'},true).ok)return;toast('Drei getrennte Materiallieferungen bestellt.');},save:()=>save(true),export:()=>{const blob=new Blob([sim.serialize()],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`Industrie-Logistik-Tag-${Math.floor(sim.state.t/1440)+1}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);},import:()=>$('#importFile').click(),backup:()=>confirm('Letzte Sicherung laden?','Aktueller Fortschritt wird durch letzte Sicherung ersetzt.',()=>{try{const text=localStorage.getItem(STORE+'-'+sim.state.mode+'-backup');const restored=Simulation.fromJSON(text);return activate(restored.state.mode,{candidate:restored});}catch(e){toast(e.message,true);}}),new:()=>confirm('Neues Unternehmen?','Vorherigen Spielstand bei Bedarf zuerst exportieren. Moduswahl öffnet sich danach.',()=>{$('#welcome').showModal();setSpeed(0);}),hideMission:()=>{prefs.mission=false;applyPrefs();},start:()=>{const mode=$('input[name=mode]:checked').value;if(temporary)return confirm('Temporäres Unternehmen ersetzen?','Aktuellen Stand vorher als JSON exportieren.',()=>activate(mode,{reset:true}));let existing;try{existing=localStorage.getItem(STORE+'-'+mode);}catch{toast(lockMessage(),true);return false;}if(existing){confirm('Vorhandenen Spielstand ersetzen?','Dieser Modus besitzt bereits ein Unternehmen. Vorher bei Bedarf laden und exportieren. Letzte Sicherung bleibt erhalten.',()=>activate(mode,{reset:true}));return;}return activate(mode,{reset:true});},confirmCancel:()=>$('#confirm').close(),confirmOk:()=>{$('#confirm').close();const fn=confirmAction;confirmAction=null;return fn?.();}};return actions[a]?.();});
++document.addEventListener('change',e=>{const t=e.target;if(t.dataset.relocate&&t.value)send({type:'moveWorker',id:t.dataset.relocate,toSite:t.value});if(t.dataset.shift)send({type:'setShift',id:t.dataset.shift,shift:t.value});if(t.dataset.recipe)send({type:'setRecipe',id:t.dataset.recipe,recipe:t.value});if(t.dataset.pref){prefs[t.dataset.pref]=t.checked;applyPrefs();try{if(!temporary)localStorage.setItem(prefsKey,JSON.stringify({...prefs,mode:sim.state.mode}));}catch{}}});
+ $('#search').addEventListener('input',e=>{search=e.target.value.toLowerCase();renderPanel();});
+ document.addEventListener('submit',e=>{const f=e.target.closest('[data-form]');if(!f)return;e.preventDefault();const d=Object.fromEntries(new FormData(f));const t=f.dataset.form;for(const k of ['qty','threshold','budget','cooldown','minutes','amount','qty1','qty2','qty3','priority'])if(k in d)d[k]=Number(d[k]);const commands={freight:{type:'bookFreight',...d},tour:{type:'dispatchTour',vehicleId:d.vehicleId,stops:[1,2,3].filter(i=>d['order'+i]).map(i=>({orderId:d['order'+i],qty:d['qty'+i]}))},loan:{type:d.operation,amount:d.amount},buy:{type:'buy',...d},hire:{type:'hire',...d},vehicle:{type:'buyVehicle',...d},dispatch:{type:'dispatch',orderId:f.dataset.id,...d},rule:{type:'addRule',kind:'reorder',...d},site:{type:'buySite',...d},transfer:{type:'transfer',...d},return:{type:'createReturn',...d}};if(t==='loadMode'){return activate(d.mode);}if(t==='forecast'){try{forecast=sim.forecast(d.minutes,d.alternative==='worker'?[{type:'hire',role:'production'}]:[]);renderPanel();toast('Vorschau berechnet. Echter Betrieb unverändert.');}catch(err){toast(err.message,true);}}else{send(commands[t]);renderPanel();}});
+ $('#importFile').addEventListener('change',async e=>{const file=e.target.files[0];e.target.value='';if(!file)return;try{if(file.size>30000000)throw Error('Datei zu groß.');const candidate=Simulation.fromJSON(await file.text());confirm('Spielstand importieren?',`${time(candidate.state.t)} · ${euro(candidate.state.money)} · ${candidate.state.buildings.length} Anlagen. Aktuellen Stand ersetzen?`,()=>activate(candidate.state.mode,{candidate}));}catch(err){toast(err.message,true);}});
+ document.addEventListener('keydown',e=>{if(e.target.matches('input,select,textarea')||$('dialog[open]'))return;if(e.code==='Space'){e.preventDefault();setSpeed(speed?0:1);}if(e.key.toLowerCase()==='b')startBuild();if(e.key.toLowerCase()==='r'&&!$('#buildTray').hidden){rotation=(rotation+90)%360;scene.setBuild(build,rotation,moving);}if(e.key==='Escape'){endBuild();closePanel();}});
+ document.addEventListener('visibilitychange',()=>{accumulator=0;lastTick=performance.now();if(document.hidden&&started)save();render();});
+-window.addEventListener('beforeunload',()=>{if(started&&dirty)save();});
++window.addEventListener('beforeunload',e=>{if(started&&dirty&&(temporary||!save())){e.preventDefault();e.returnValue='';}});
+ window.addEventListener('pagehide',()=>guard.release());
+ window.addEventListener('pageshow',e=>{if(e.persisted){writable=false;speed=0;toast('Ansicht wiederhergestellt. Für sicheres Fortsetzen Seite neu laden.',true);render();}});
+ setInterval(()=>{const now=performance.now(),dt=Math.min(1000,now-lastTick);lastTick=now;if(!started||switching||document.hidden||$('dialog[open]')||!speed||!canWrite()){accumulator=0;return;}accumulator+=dt*speed;const n=Math.floor(accumulator/1000);if(n){accumulator-=n*1000;try{sim.step(n);dirty=true;render();}catch(e){setSpeed(0);toast('Simulation angehalten: '+e.message,true);}}},100);
+diff --git a/dist/index.html b/dist/index.html
+index c091aa9..98b2f60 100644
+--- a/dist/index.html
++++ b/dist/index.html
+@@ -11,9 +11,9 @@
+ <aside id="panel" class="panel" hidden aria-label="Betriebsfenster"><header class="panel-head"><div><span class="eyebrow" id="panelEyebrow">BETRIEBSZENTRALE</span><h2 id="panelTitle">Übersicht</h2></div><button data-action="close" class="close" aria-label="Fenster schließen">×</button></header><div class="panel-tools"><input id="search" type="search" placeholder="In dieser Ansicht suchen …" aria-label="Ansicht durchsuchen"><button data-action="refresh" class="square" title="Aktualisieren">↻</button></div><div id="panelBody" class="panel-body"></div></aside>
+ <section id="buildTray" class="build-tray" hidden><header><div><span class="eyebrow">BETRIEB GESTALTEN</span><strong>Platzieren. Verbinden. Produzieren.</strong></div><div><button data-action="rotateBuild">↻ Drehen <kbd>R</kbd></button><button data-action="endBuild" class="close">×</button></div></header><div id="buildItems" class="build-items"></div><footer><span id="buildHint">Anlage wählen, freie Fläche anklicken.</span><span>Esc · Abbrechen</span></footer></section>
+ <section id="mission" class="mission"><span class="mission-number" id="missionNumber">01</span><div><span class="eyebrow">ERSTER BETRIEB</span><strong id="missionTitle">Eine leere Halle. Tausend Möglichkeiten.</strong><small id="missionText">Richte deine erste Produktionslinie ein.</small></div><button id="missionAction" data-action="build">Betrieb aufbauen <span>→</span></button><button class="mission-collapse" data-action="hideMission" aria-label="Hinweis ausblenden">×</button></section>
+-<div id="toast" role="status" aria-live="polite"></div><footer class="statusbar"><span id="statusText">Keine Offlinefortschritte · Automatische Sicherung aktiv</span><span>INDUSTRIE & LOGISTIK <b>0.5 · ENTWICKLUNG</b></span></footer>
++<div id="storageWarning" role="status" hidden style="position:fixed;top:62px;left:50%;transform:translateX(-50%);z-index:50;background:#703b0b;color:#fff;padding:8px 16px;border-radius:8px;max-width:90%;font-size:12px">Temporärer Modus · NICHT GESPEICHERT · Vor Schließen JSON exportieren.</div><div id="toast" role="status" aria-live="polite"></div><footer class="statusbar"><span id="statusText">Keine Offlinefortschritte · Automatische Sicherung aktiv</span><span>INDUSTRIE & LOGISTIK <b>0.5 · ENTWICKLUNG</b></span></footer>
+ </main>
+-<dialog id="welcome"><div class="welcome-art"><div class="welcome-symbol">il↗</div><span>BAUE, WAS<br>MORGEN BEWEGT.</span><small>Fertigung × Menschen × Materialfluss</small></div><div class="welcome-body"><span class="eyebrow">WILLKOMMEN IN MORGENFELD</span><h2>Große Unternehmen<br>fangen klein an.</h2><p>Deine Halle steht bereit. Baue eine Produktionslinie, stelle dein Team ein und bringe die erste Arbeitsleuchte zum Kunden.</p><div class="mode-options"><label><input type="radio" name="mode" value="guided" checked><span><b>Geführter Einstieg</b><small>Schritt für Schritt zum ersten Auftrag.</small></span></label><label><input type="radio" name="mode" value="economy"><span><b>Wirtschaftsbetrieb</b><small>85.000 € Startkapital. Deine Entscheidungen.</small></span></label><label><input type="radio" name="mode" value="sandbox"><span><b>Freies Bauen</b><small>Großes Budget, eigener Speicherstand.</small></span></label></div><button class="primary start" data-action="start">Unternehmen gründen <span>→</span></button><p class="fine">Fiktive Welt. Echte Zusammenhänge. Fortschritt nur bei aktivem Spiel.</p></div></dialog>
++<dialog id="welcome"><div class="welcome-art"><div class="welcome-symbol">il↗</div><span>BAUE, WAS<br>MORGEN BEWEGT.</span><small>Fertigung × Menschen × Materialfluss</small></div><div class="welcome-body"><span class="eyebrow">WILLKOMMEN IN MORGENFELD</span><h2>Große Unternehmen<br>fangen klein an.</h2><p>Deine Halle steht bereit. Baue eine Produktionslinie, stelle dein Team ein und bringe die erste Arbeitsleuchte zum Kunden.</p><div class="mode-options"><label><input type="radio" name="mode" value="guided" checked><span><b>Geführter Einstieg</b><small>Schritt für Schritt zum ersten Auftrag.</small></span></label><label><input type="radio" name="mode" value="economy"><span><b>Wirtschaftsbetrieb</b><small>85.000 € Startkapital. Deine Entscheidungen.</small></span></label><label><input type="radio" name="mode" value="sandbox"><span><b>Freies Bauen</b><small>Großes Budget, eigener Speicherstand.</small></span></label></div><button class="primary start" data-action="start">Unternehmen gründen <span>→</span></button><div class="actions"><button data-action="retryStorage">Speicher erneut prüfen</button><button data-action="temporary">Ohne lokale Speicherung spielen</button></div><p class="fine">Temporärer Modus: Fortschritt vor Schließen als JSON exportieren.</p><p class="fine">Fiktive Welt. Echte Zusammenhänge. Fortschritt nur bei aktivem Spiel.</p></div></dialog>
+ <dialog id="confirm"><h2 id="confirmTitle">Neues Unternehmen?</h2><p id="confirmText"></p><div class="actions"><button data-action="confirmCancel">Abbrechen</button><button class="primary" data-action="confirmOk">Bestätigen</button></div></dialog>
+ <input type="file" id="importFile" accept=".json,application/json" hidden>
+ <script type="module" src="./app.js"></script>
+diff --git a/tests/storage-access.test.js b/tests/storage-access.test.js
+new file mode 100644
+index 0000000..ee176c4
+--- /dev/null
++++ b/tests/storage-access.test.js
+@@ -0,0 +1,49 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import {Simulation} from '../dist/core.js';
++import {boot,makeLocks} from './ui-harness.js';
++const key='industrie-logistik-v1-guided';
++test('Gesperrter Storage-Getter: Start bleibt sicher; expliziter temporärer Betrieb funktioniert',async()=>{
++ const ui=await boot({storageGetterError:true});
++ assert.equal(ui.run('writable'),false);assert.equal(ui.run('temporary'),false);
++ assert.equal(await ui.click('start'),false);
++ ui.click('temporary');assert.equal(ui.run('temporary'),false);await ui.click('confirmOk');
++ assert.equal(ui.run('temporary'),true);ui.click('starter');
++ assert.ok(ui.run('sim.state.buildings.length')>0);
++ ui.run('setSpeed(4)');assert.equal(ui.run('speed'),4);
++ ui.click('save');ui.run('render(true)');
++ assert.equal(ui.nodes.get('#storageWarning').hidden,false);
++ assert.match(ui.nodes.get('#statusText').textContent,/NICHT GESPEICHERT/);
++ assert.doesNotMatch(ui.nodes.get('#toast').textContent,/gesichert/i);
++ assert.equal(ui.memory.size,0);
++});
++test('Volles Storage: Daten bleiben erhalten; JSON und Retry verfügbar; keine stille Flüchtigkeit',async()=>{
++ const memory=new Map([[key,new Simulation().serialize()]]);
++ let blocked=true;
++ const storage={getItem:k=>memory.get(k)||null,setItem(k,v){if(blocked)throw new DOMException('Full','QuotaExceededError');memory.set(k,v);},removeItem:k=>memory.delete(k)};
++ const ui=await boot({memory,storage});const saved=memory.get(key);
++ assert.equal(ui.run('writable'),false);assert.equal(ui.run('temporary'),false);
++ assert.equal(memory.get(key),saved);ui.click('export');
++ blocked=false;await ui.click('retryStorage');assert.equal(ui.run('writable'),true);
++ ui.click('starter');blocked=true;ui.click('save');
++ assert.equal(ui.run('temporary'),false);assert.equal(ui.run('dirty'),true);
++ assert.equal(memory.get(key),saved);assert.match(ui.nodes.get('#statusText').textContent,/NICHT GESPEICHERT/);
++ blocked=false;await ui.click('retryStorage');await ui.click('confirmOk');
++ assert.equal(ui.run('dirty'),false);assert.match(ui.nodes.get('#statusText').textContent,/Gesichert/);
++ ui.run('guard.dispose()');
++});
++test('Temporärer Import und Neustart schreiben keine bestehenden Modi; normaler Tab bleibt geschützt',async()=>{
++ const memory=new Map(),locks=makeLocks();
++ const first=await boot({memory,locks});await first.click('start');first.click('starter');first.click('save');
++ const saved=memory.get(key),second=await boot({memory,locks});
++ second.click('temporary');await second.click('confirmOk');second.click('starter');
++ assert.equal(memory.get(key),saved);assert.equal(first.run('guard.owns(sim.state.mode)'),true);
++ const candidate=new Simulation({mode:'sandbox'});candidate.command({type:'hire',role:'production'});const raw=candidate.serialize();
++ await second.nodes.get('#importFile').onchange({target:{files:[{size:raw.length,text:async()=>raw}],value:''}});
++ await second.click('confirmOk');assert.equal(second.run('sim.state.mode'),'sandbox');
++ assert.equal(second.run('sim.state.workers.length'),1);assert.equal(memory.has('industrie-logistik-v1-sandbox'),false);
++ assert.equal(await second.submit('loadMode',{mode:'guided'}),false);assert.equal(second.run('sim.state.mode'),'sandbox');
++ second.click('start');await second.click('confirmOk');
++ assert.equal(second.run('sim.state.mode'),'guided');assert.equal(memory.get(key),saved);
++ assert.equal(second.nodes.get('#storageWarning').hidden,false);first.run('guard.dispose()');
++});
+diff --git a/tests/ui-harness.js b/tests/ui-harness.js
+index c2eb55f..8faa3b0 100644
+--- a/tests/ui-harness.js
++++ b/tests/ui-harness.js
+@@ -16,9 +16,10 @@ export async function boot(options={}){
+  const document={body:node(),hidden:false,activeElement:null,querySelector(s){if(s==='dialog[open]')return [...nodes.values()].find(n=>n.open)||null;if(s==='input[name=mode]:checked')return{value:'guided'};assert.ok(nodes.has(s),'Unbekannter DOM-Selektor '+s);return nodes.get(s);},querySelectorAll(){return[];},addEventListener(type,fn){listeners[type]=fn;},createElement:node};
+  class Scene{setState(){}setBuild(){}setView(){}zoom(){}rotate(){}home(){}}
+  const locks=options.locks||makeLocks();
+- const storage={getItem:k=>memory.get(k)||null,setItem:(k,v)=>memory.set(k,v),removeItem:k=>memory.delete(k)};
+- const createSaveGuard=opts=>realGuard({...opts,storage,locks,setInterval:()=>1,clearInterval:()=>{}});
++ const storage=options.storage||{getItem:k=>memory.get(k)||null,setItem:(k,v)=>memory.set(k,v),removeItem:k=>memory.delete(k)};
++ const createSaveGuard=opts=>realGuard({...opts,storage:options.storageGetterError?null:storage,locks,setInterval:()=>1,clearInterval:()=>{}});
+  const context=vm.createContext({...catalog,createSaveGuard,report,Simulation,onShift,Scene,document,window:{addEventListener(){}},localStorage:storage,matchMedia:()=>({matches:false}),performance:{now:()=>1000},setTimeout(){},clearTimeout(){},setInterval(){},Blob,URL,FormData:class{constructor(f){return Object.entries(f.values);}}});
++ if(options.storageGetterError)Object.defineProperty(context,'localStorage',{get(){throw new DOMException('Access denied','SecurityError');}});
+  vm.runInContext(code,context);await vm.runInContext('ready',context);
+  const run=source=>vm.runInContext(source,context);
+  function click(action,id){const b={dataset:{action,id},matches:()=>false};return listeners.click({target:{closest:()=>b}});}
+-- 
+2.51.1
+
+
+From f60657280583604d634cc6fd3d4f8f3cd63f430c Mon Sep 17 00:00:00 2001
+From: Codex <codex@openai.com>
+Date: Wed, 14 Oct 2026 11:13:18 +0200
+Subject: [PATCH 2/2] Recover storage access and keep retry read-only until
+ approval
+
+---
+ dist/app.js                  | 11 ++++++++++-
+ dist/save-guard.js           |  4 ++++
+ tests/save-guard-own.test.js | 12 ++++++++++++
+ tests/storage-access.test.js | 19 +++++++++++++++++++
+ 4 files changed, 45 insertions(+), 1 deletion(-)
+
+diff --git a/dist/app.js b/dist/app.js
+index a63cc4e..2847ff2 100644
+--- a/dist/app.js
++++ b/dist/app.js
+@@ -68,7 +68,16 @@ async function retryStorage(){
+  try{
+   writable=await guard.acquire(sim.state.mode);
+   if(!writable){toast(lockMessage(),true);return false;}
+-  if(started&&dirty){confirm('Ungesicherten Stand speichern?','Aktueller Stand ersetzt den gespeicherten Stand dieses Modus. Bei Änderungen in anderem Tab zuerst JSON exportieren und neu laden.',()=>save(true));return false;}
++  if(started&&dirty){
++   // Until explicit approval, neither autosave nor commands may overwrite a
++   // newer state from another tab. Cancel/Escape retain read-only access.
++   writable=false;guard.release();
++   confirm('Ungesicherten Stand speichern?','Aktueller Stand ersetzt den gespeicherten Stand dieses Modus. Bei Änderungen in anderem Tab zuerst JSON exportieren und neu laden.',async()=>{
++    if(switching)return false;switching=true;
++    try{writable=await guard.acquire(sim.state.mode);return save(true);}
++    finally{switching=false;render(true);}
++   });return false;
++  }
+   const raw=localStorage.getItem(STORE+'-'+sim.state.mode);
+   if(raw){sim=Simulation.fromJSON(raw);started=true;resetView();$('#welcome').close();}
+   storageFailure=false;$('#statusText').textContent=started?'Spielstand geladen · Betrieb pausiert':'Speicher verfügbar · Unternehmen gründen';
+diff --git a/dist/save-guard.js b/dist/save-guard.js
+index 54d00f1..f17c3ee 100644
+--- a/dist/save-guard.js
++++ b/dist/save-guard.js
+@@ -9,6 +9,7 @@ export class SaveGuard {
+   constructor(options = {}) {
+     this.prefix = options.prefix ?? 'industrie-logistik-v1';
+     this.locks = options.locks === undefined ? globalThis.navigator?.locks : options.locks;
++    this.defaultStorage = options.storage === undefined;
+     try { this.storage = options.storage === undefined ? globalThis.localStorage : options.storage; } catch { this.storage = null; }
+     this.now = options.now ?? Date.now;
+     this.setInterval = options.setInterval ?? globalThis.setInterval;
+@@ -36,6 +37,9 @@ export class SaveGuard {
+     this.release();
+     const generation = this.generation;
+     if (!this.locks?.request) { this.reason='unsupported'; return false; }
++    if (!this.storage && this.defaultStorage) {
++      try { this.storage = globalThis.localStorage; } catch { /* Permission can be granted before a later retry. */ }
++    }
+     if (!this.storage) { this.reason='storage-error'; return false; }
+     this.reason='pending';
+     return new Promise(resolve => {
+diff --git a/tests/save-guard-own.test.js b/tests/save-guard-own.test.js
+index b9a8a5c..003cf8c 100644
+--- a/tests/save-guard-own.test.js
++++ b/tests/save-guard-own.test.js
+@@ -62,3 +62,15 @@ test('Lock-API-Ablehnung bleibt geschlossen',async()=>{
+  const h=harness(),a=h.make({locks:{request:()=>Promise.reject(Error('denied'))}});
+  assert.equal(await a.acquire('guided'),false);assert.equal(a.reason,'lock-error');a.dispose();
+ });
++test('Globaler Storage-Getter erholt sich nach Freigabe; explizites null bleibt gesperrt',async()=>{
++ const h=harness(),descriptor=Object.getOwnPropertyDescriptor(globalThis,'localStorage');
++ let denied=true;
++ Object.defineProperty(globalThis,'localStorage',{configurable:true,get(){if(denied)throw new DOMException('Denied','SecurityError');return h.storage;}});
++ const a=h.make({storage:undefined}),b=h.make({storage:null});
++ try{
++  assert.equal(await a.acquire('guided'),false);assert.equal(a.reason,'storage-error');
++  denied=false;
++  assert.equal(await a.acquire('guided'),true);assert.equal(a.owns('guided'),true);
++  assert.equal(await b.acquire('sandbox'),false);assert.equal(b.reason,'storage-error');
++ }finally{a.dispose();b.dispose();if(descriptor)Object.defineProperty(globalThis,'localStorage',descriptor);else delete globalThis.localStorage;}
++});
+diff --git a/tests/storage-access.test.js b/tests/storage-access.test.js
+index ee176c4..0f4a96f 100644
+--- a/tests/storage-access.test.js
++++ b/tests/storage-access.test.js
+@@ -47,3 +47,22 @@ test('Temporärer Import und Neustart schreiben keine bestehenden Modi; normaler
+  assert.equal(second.run('sim.state.mode'),'guided');assert.equal(memory.get(key),saved);
+  assert.equal(second.nodes.get('#storageWarning').hidden,false);first.run('guard.dispose()');
+ });
++test('Retry nach Lockverlust: Abbruch verhindert Autosave und Mutation; konkurrierender Tab bleibt geschützt',async()=>{
++ const memory=new Map(),locks=makeLocks(),a=await boot({memory,locks});
++ await a.click('start');a.click('starter');const unsaved=a.run('sim.serialize()');
++ a.run('guard.release();writable=false');
++ await new Promise(resolve=>setImmediate(resolve));
++ const b=await boot({memory,locks});b.submit('hire',{role:'production'});b.click('save');
++ const latest=memory.get(key);b.run('guard.release();writable=false');
++ await new Promise(resolve=>setImmediate(resolve));
++ await a.click('retryStorage');
++ assert.equal(a.run('writable'),false);assert.equal(a.run('guard.owns(sim.state.mode)'),false);
++ a.click('save');assert.equal(memory.get(key),latest);
++ a.click('confirmCancel');a.click('starter');a.run('save();setSpeed(4)');
++ assert.equal(a.run('sim.serialize()'),unsaved);assert.equal(a.run('speed'),0);assert.equal(memory.get(key),latest);
++ await a.click('retryStorage');
++ await new Promise(resolve=>setImmediate(resolve));
++ await b.click('retryStorage');assert.equal(b.run('writable'),true);
++ await a.click('confirmOk');assert.equal(a.run('writable'),false);assert.equal(memory.get(key),latest);
++ a.run('guard.dispose()');b.run('guard.dispose()');
++});
+-- 
+2.51.1
+

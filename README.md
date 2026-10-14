@@ -1,6 +1,8 @@
 # Industrie & Logistik
 
-Version 0.5 · Entwicklungsfassung · 14. Oktober 2026
+**Projektübergabe:** [Aktueller Kontext und nächster Schritt](docs/FORTSETZUNG.md). [Projektentscheidungen](docs/CHATKONTEXT.md). Vorbereitete Änderungen liegen in `pending/`.
+
+Version 0.6 · unveröffentlichter Entwicklungsstand · 14. Oktober 2026
 
 Eigenständige, deutschsprachige Unternehmenssimulation für PC-Browser. Vom leeren Werk über Arbeitsleuchtenfertigung bis zu mehreren Standorten, Sammeltouren und temperaturgeführter Fremdfracht. Alle Unternehmen, Personen und Wirtschaftswerte sind fiktiv.
 
@@ -82,3 +84,17 @@ Architektur: `docs/ARCHITEKTUR.md`. Aufgabenvertrag: `CONTRACT.md`. Teamzuständ
 Finanzen trennen betrieblichen Geldfluss, Investitionen und Finanzierung. Offene Kundenrechnungen aller Transportwege, gebundenes Material und Verpflichtungen werden aus dem tatsächlichen Zustand ausgewertet. Bewertungsgrenzen stehen direkt in der Ansicht; keine vollständige GuV oder Bilanz.
 
 Einstellungen → „Modus laden“ wechselt zwischen vorhandenen Unternehmen. Import, Sicherung und Neustart entfernen alte Bauauswahl. Schreibschutz verhindert parallele Spielstandänderung desselben Modus durch kooperierende Tabs ab Version 0.5. Bereits geöffnete ältere Fassungen vorher schließen. Ohne Web Locks oder lokalen Speicher bleibt die Ansicht schreibgeschützt; Export bleibt möglich. Details: docs/SPIELSTAND-SPERRE.md.
+
+## Erweiterung 0.6
+
+Transport → Sammeltour: Zwei bis vier unterschiedliche aktive Aufträge kombinieren. Pro Stopp Zustellmenge und optional Rückgabemenge wählen. Rückgaben beziehen sich auf früher zugestellte, noch nicht retournierte Eigenware desselben Auftrags. Die Auswahl bindet Quellen sofort gegen doppelte Abholung. Stornieren vor Abfahrt gibt sie frei.
+
+Das Fahrzeug stellt zu, lädt Retouren auf und fährt gemeinsam zurück. Gewicht, Volumen und Kühlung werden geprüft; volle Quarantäne oder fehlende Rampe/Lagerkraft halten Rückladung im Fahrzeug. Die bestehende Serviceprüfung erstattet genau einmal.
+
+Die Vorschau zeigt Fahrtkosten, Stoppladung sowie Fahr-/Arbeitszeit. Fahrerprognosen sind Annahmen aus aktuellem Personalzustand; zusätzliche Rampen-/Materialengpässe können Termine verschieben. Laufende Phasen bleiben im JSON-Spielstand erhalten.
+
+## GitHub Pages aus Hauptordner
+
+`index.html` liegt direkt im Repository-Hauptordner und enthält die Spieloberfläche. `<base href="./dist/">` lädt Styles, Module und Downloadpaket aus `dist/`, auch unter dem Projektpfad `/Logistics/`. Für Pages: Branch `main`, Ordner `/ (root)`. `.nojekyll` kennzeichnet das unveränderte statische Paket. Pages-Aktivierung ist durch den Datei-Upload allein nicht nachgewiesen.
+
+Nach Änderungen an `dist/index.html` erzeugt `python scripts/package.py` den Root-Einstieg erneut.

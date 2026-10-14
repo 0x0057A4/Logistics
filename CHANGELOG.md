@@ -1,5 +1,11 @@
 # Änderungen
 
+## 0.6 – Arbeitsstand 14.10.2026, nicht veröffentlicht
+
+Rückladungen auf Sammeltouren, vier bedienbare Stopps, reine Tourvorschau, mengengetreue Quarantäneentladung und erweiterte Importprüfung. Kühlladung im ungeeigneten Fahrzeug abgewiesen. Rückgabequellen gegen parallele Einzelabholung gesperrt. UI zeigt tatsächliche Ladung, Kosten und Wartegründe.
+
+Speicherformat 1 bleibt erhalten. Browserprüfung weiterhin offen. Keine vollständige Konzeptabnahme.
+
 ## 0.5 – 14.10.2026
 
 Unternehmensrechnung um getrennte Geldflussbereiche, Forderungen aller Transportwege, gebundenes Kapital und Verpflichtungen erweitert. Reine Auswertung; Speicherformat und Simulationsregeln erhalten.

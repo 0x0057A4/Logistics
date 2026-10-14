@@ -1,3 +1,4 @@
+import * as tours from '../dist/tours.js';
 // Isolierte JavaScript-/Bindungsprüfung. Kein Browser, kein Layouttest.
 import {createSaveGuard as realGuard} from '../dist/save-guard.js';
 import {report} from '../dist/accounting.js';
@@ -18,7 +19,7 @@ export async function boot(options={}){
  const locks=options.locks||makeLocks();
  const storage={getItem:k=>memory.get(k)||null,setItem:(k,v)=>memory.set(k,v),removeItem:k=>memory.delete(k)};
  const createSaveGuard=opts=>realGuard({...opts,storage,locks,setInterval:()=>1,clearInterval:()=>{}});
- const context=vm.createContext({...catalog,createSaveGuard,report,Simulation,onShift,Scene,document,window:{addEventListener(){}},localStorage:storage,matchMedia:()=>({matches:false}),performance:{now:()=>1000},setTimeout(){},clearTimeout(){},setInterval(){},Blob,URL,FormData:class{constructor(f){return Object.entries(f.values);}}});
+ const context=vm.createContext({...catalog,planTour:tours.planTour,createSaveGuard,report,Simulation,onShift,Scene,document,window:{addEventListener(){}},localStorage:storage,matchMedia:()=>({matches:false}),performance:{now:()=>1000},setTimeout(){},clearTimeout(){},setInterval(){},Blob,URL,FormData:class{constructor(f){return Object.entries(f.values);}}});
  vm.runInContext(code,context);await vm.runInContext('ready',context);
  const run=source=>vm.runInContext(source,context);
  function click(action,id){const b={dataset:{action,id},matches:()=>false};return listeners.click({target:{closest:()=>b}});}

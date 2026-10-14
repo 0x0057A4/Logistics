@@ -1,21 +1,26 @@
 import {VEHICLES,ITEMS} from './catalog.js';
 const deliverySources=s=>[...s.shipments,...(s.tours||[]).flatMap(t=>t.stops.map((p,i)=>({...p,id:`${t.id}:stop:${i}`}))),...(s.freights||[])];
+const cents=n=>Math.round(n*100)/100;
 const activeTrip=r=>['collecting','returning','unloading'].includes(r.status);
 export function init(s){s.returns??=[];}
+// Gemeinsamer Herkunftsnachweis für Einzelabholung und Tour-Rückladung.
+export function returnSources(s,orderId,qty){
+ const sources=[];let left=qty;
+ for(const sh of deliverySources(s).filter(sh=>sh.orderId===orderId&&sh.deliveredAt!=null)){
+  const taken=(s.returns||[]).flatMap(r=>r.sources).filter(x=>x.shipment===sh.id).reduce((n,x)=>n+x.qty,0),n=Math.min(left,sh.qty-taken);
+  if(n>0){sources.push({shipment:sh.id,qty:n,parents:[...sh.cargo],unitPrice:sh.invoiceAmount/sh.qty});left-=n;}
+  if(!left)break;
+ }
+ return left?null:sources;
+}
 export function handle(s,c,api){
  if(c.type==='createReturn'){
   const o=s.orders.find(o=>o.id===c.orderId),qty=c.qty,site=c.site||o?.site||s.selectedSite;
   if(!o||!Number.isInteger(qty)||qty<1||qty>o.delivered-s.returns.filter(r=>r.orderId===o.id).reduce((n,r)=>n+r.qty,0))return {ok:false,message:'Retourenmenge überschreitet bereits gelieferte, noch nicht retournierte Ware.'};
   if(o.kind==='logistics')return {ok:false,message:'Fremdeigentum benötigt Rückführung gemäß Logistikvertrag; Warenwerterstattung ausgeschlossen.'};
-  const v=s.vehicles.find(v=>(!c.vehicleId||v.id===c.vehicleId)&&v.site===site&&v.status==='idle'&&v.condition>=15&&(!ITEMS[o.item]?.cold||VEHICLES[v.type]?.cold)&&v.capacity>=qty*(ITEMS[o.item]?.volume||1));
+  const v=s.vehicles.find(v=>(!c.vehicleId||v.id===c.vehicleId)&&v.site===site&&v.status==='idle'&&v.condition>=15&&(!ITEMS[o.item]?.cold||VEHICLES[v.type]?.cold)&&v.capacity>=qty*(ITEMS[o.item]?.volume||1)&&(VEHICLES[v.type].weightCapacity||v.capacity*4)>=qty*(ITEMS[o.item]?.weight||1));
   if(!v)return {ok:false,message:'Freies, ausreichend großes Fahrzeug am Standort fehlt.'};
-  const sources=[];let left=qty;
-  for(const sh of deliverySources(s).filter(sh=>sh.orderId===o.id&&sh.deliveredAt!=null)){
-   const taken=s.returns.flatMap(r=>r.sources).filter(x=>x.shipment===sh.id).reduce((n,x)=>n+x.qty,0),n=Math.min(left,sh.qty-taken);
-   if(n>0){sources.push({shipment:sh.id,qty:n,parents:[...sh.cargo],unitPrice:sh.invoiceAmount/sh.qty});left-=n;}
-   if(!left)break;
-  }
-  if(left)return {ok:false,message:'Zustellnachweis für Retourenmenge fehlt.'};
+  const sources=returnSources(s,o.id,qty);if(!sources)return {ok:false,message:'Zustellnachweis für Retourenmenge fehlt.'};
   const id=api.id('return'),cost=60*VEHICLES[v.type].runningCost;
   if(!api.book('return-trip:'+id,-cost,'Retouren','Rückholung beim Kunden',[id,o.id]))return {ok:false,message:'Kapital für Rücktransport fehlt.'};
   s.returns.push({id,orderId:o.id,item:o.item,qty,site,vehicleId:v.id,status:'collecting',remaining:Math.ceil(30/VEHICLES[v.type].speed),sources,cargo:[],refunded:false,refund:Math.round(sources.reduce((n,x)=>n+x.qty*x.unitPrice,0)*100)/100,createdAt:s.t,blocked:null});
@@ -36,7 +41,7 @@ export function handle(s,c,api){
 }
 export function step(s,api){
  for(const r of s.returns){
-  if(['repaired','recycled','decision'].includes(r.status))continue;
+  if(['repaired','recycled','decision','scheduled','onTour'].includes(r.status))continue;
   const v=s.vehicles.find(v=>v.id===r.vehicleId);r.blocked=null;
   if(activeTrip(r)){
    const driver=api.workforce.acquire('driver',r.site,r.id+':driver');
@@ -83,15 +88,25 @@ export function step(s,api){
  }
 }
 export function validate(s){
- const occupied=new Set();
+ const occupied=new Set(),cargoIds=new Set();
+ for(const t of s.tours||[])if(!["complete","cancelled","loading"].includes(t.status))for(const stop of t.stops)if(stop.status==='pending')for(const id of stop.cargo)cargoIds.add(id);
+ for(const sh of s.shipments||[])if(["transit","unloading"].includes(sh.status))for(const id of sh.cargo)cargoIds.add(id);
  for(const r of s.returns){
-  if(!s.orders.some(o=>o.id===r.orderId)||!Number.isInteger(r.qty)||r.qty<1||!Number.isFinite(r.remaining)||r.remaining<0||!Number.isFinite(r.refund)||r.refund<0||!Array.isArray(r.sources)||!Array.isArray(r.cargo)||!['collecting','returning','unloading','inspection','decision','repair','recycling','repaired','recycled'].includes(r.status))throw new Error('Retourendaten beschädigt.');
+  if(!s.orders.some(o=>o.id===r.orderId)||!Number.isInteger(r.qty)||r.qty<1||!Number.isFinite(r.remaining)||r.remaining<0||!Number.isFinite(r.refund)||r.refund<0||!Array.isArray(r.sources)||!Array.isArray(r.cargo)||!['scheduled','onTour','collecting','returning','unloading','inspection','decision','repair','recycling','repaired','recycled'].includes(r.status))throw new Error('Retourendaten beschädigt.');
   if(r.sources.reduce((n,x)=>n+x.qty,0)!==r.qty||r.sources.some(x=>!Number.isInteger(x.qty)||x.qty<1||!deliverySources(s).some(sh=>sh.id===x.shipment&&sh.orderId===r.orderId&&sh.deliveredAt!=null)))throw new Error('Retourenherkunft beschädigt.');
+  const order=s.orders.find(o=>o.id===r.orderId);
+  if(r.item!==order.item||order.kind==='logistics'||typeof r.refunded!=='boolean'||!s.sites.some(site=>site.id===r.site))throw new Error('Retourenauftrag beschädigt.');
+  for(const source of r.sources){const sh=deliverySources(s).find(sh=>sh.id===source.shipment);if(!Number.isFinite(source.unitPrice)||source.unitPrice<0||Math.abs(source.unitPrice-sh.invoiceAmount/sh.qty)>1e-7||!Array.isArray(source.parents)||JSON.stringify(source.parents)!==JSON.stringify(sh.cargo))throw new Error('Retourenbewertung beschädigt.');}
+  if(Math.abs(cents(r.sources.reduce((n,x)=>n+x.qty*x.unitPrice,0))-r.refund)>0.001)throw new Error('Retourenwert beschädigt.');
+  if(['scheduled','collecting'].includes(r.status)&&r.cargo.length)throw new Error('Retoure vor Abholung bereits beladen.');
+  if(r.tourId&&!s.tours?.some(t=>t.id===r.tourId&&t.vehicleId===r.vehicleId&&t.site===r.site&&t.stops.some(stop=>stop.returnId===r.id&&stop.orderId===r.orderId)))throw new Error('Retourentour fehlt.');
   if(r.refunded&&!s.ledger.some(l=>l.key==='return-refund:'+r.id&&Math.abs(l.amount+r.refund)<0.001))throw new Error('Retourenerstattung beschädigt.');
   if(r.status==='repair'&&!s.buildings.some(b=>b.id===r.workshop&&b.serviceJob===r.id))throw new Error('Retourenwerkstatt fehlt.');
+  if(['scheduled','onTour'].includes(r.status)){const t=(s.tours||[]).find(t=>t.id===r.tourId),v=s.vehicles.find(v=>v.id===r.vehicleId);if(!t||['complete','cancelled'].includes(t.status)||t.vehicleId!==r.vehicleId||t.site!==r.site||!t.stops.some(stop=>stop.returnId===r.id&&stop.orderId===r.orderId)||v?.status!=='tour'||v.tour!==t.id)throw new Error('Tour-Rückladung falsch zugeordnet.');}
   if(activeTrip(r)){const v=s.vehicles.find(v=>v.id===r.vehicleId);if(!v||v.status!=='service'||v.shipment!==r.id||occupied.has(v.id))throw new Error('Retourenfahrzeug falsch zugeordnet.');occupied.add(v.id);}
-  if(!['collecting','repaired','recycled'].includes(r.status)){
-   const cargo=r.cargo.map(id=>s.batches.find(b=>b.id===id));if(new Set(r.cargo).size!==r.cargo.length||cargo.some(b=>!b||b.item!==r.item||b.location!==(['returning','unloading'].includes(r.status)?'vehicle':'quarantine'))||cargo.reduce((n,b)=>n+b.qty,0)!==r.qty)throw new Error('Retourenbestand beschädigt.');
+  if(!['scheduled','collecting','repaired','recycled'].includes(r.status)){
+   for(const id of r.cargo){if(cargoIds.has(id))throw new Error('Retourenladung mehrfach zugeordnet.');cargoIds.add(id);}
+   const cargo=r.cargo.map(id=>s.batches.find(b=>b.id===id));if(new Set(r.cargo).size!==r.cargo.length||cargo.some(b=>!b||b.item!==r.item||b.owner!=='company'||b.site!==r.site||b.location!==(['onTour','returning','unloading'].includes(r.status)?'vehicle':'quarantine'))||cargo.reduce((n,b)=>n+b.qty,0)!==r.qty)throw new Error('Retourenbestand beschädigt.');
   }
  }
  for(const sh of deliverySources(s))if(s.returns.flatMap(r=>r.sources).filter(x=>x.shipment===sh.id).reduce((n,x)=>n+x.qty,0)>sh.qty)throw new Error('Zustellung mehrfach retourniert.');

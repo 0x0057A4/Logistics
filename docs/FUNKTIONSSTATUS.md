@@ -1,4 +1,4 @@
-# Funktionsstatus 0.5
+# Funktionsstatus 0.6
 
 Stand: 14.10.2026. „Implementiert“ bedeutet vorhandene fachliche Funktion und Bedienung, nicht vollständige Abnahme sämtlicher Ausprägungen des ursprünglichen Konzepts. Kapitel sind bewusst nicht pauschal als fertig markiert.
 
@@ -13,7 +13,7 @@ Stand: 14.10.2026. „Implementiert“ bedeutet vorhandene fachliche Funktion un
 | K06 Rückläufe | Tatsächliche Abholung, Quarantäne, Serviceprüfung, einmalige Erstattung, Reparatur/Verwertung, Chargenrückruf | Kein allgemeines Ticketsystem für Adressen/Terminänderungen. Kalte Retouren werden verwertet, nicht repariert |
 | K07 Regeln | Nachbestellung, Versand, Wartung, Priorität, Budget, Sperrfrist, Gründe | Keine frei formulierte Regelsprache, Personalhilfe-/Expressregeln oder umfassende Störungs- und Wetterereignisse |
 | K08 Standorte | Bis acht Hallen, eigene Anlagen/Personal/Lager, echte Transfers, Netzkarte, kein interner Umsatz | Feste fiktive Standorte, keine frei formbare Straßenkarte oder Standortflächenvergrößerung |
-| K09 Disposition | Gewicht/Volumen, Rampenkonkurrenz, Fahrerpausen, 2–4 echte Tourstopps, Transfers, Fahrzeugwartung | Keine Rückladung auf derselben Tour, Mietfahrzeuge, Reichweiten-/Tankmodell, individuelle Rampentermine oder Straßenverkehrssimulation |
+| K09 Disposition | Gewicht/Volumen, Rampenkonkurrenz, Fahrerpausen, 2–4 echte Tourstopps, Retouren-Rückladung, Quarantäneentladung, Transfers, Fahrzeugwartung | Rückladungen nur früher gelieferter Ware desselben aktiven Auftrags; keine Mietfahrzeuge, Reichweiten-/Tankmodell, individuelle Rampentermine oder Straßenverkehrssimulation |
 | K10 Wirtschaft | Eigenprodukte, Auftragsfertigung, Fremdlogistik, Teilmengen, verspätete Zahlung, Kredit/Kontokorrent, Lieferbeiträge, getrennte Geldflussbereiche und Forderungsübersicht | Auftragsfertigung nutzt standardisierte Produkte. Keine vollständige GuV/Abschreibung, Leasing, Versicherungen, variablen Verkaufspreise, Dauerverträge oder differenzierte Nachfrageelastizität |
 | K11 Spezial | Kühlplätze, Temperaturdauer, irreversibler Schaden, passender Kühltransport, Dokumentprüfung | Eine Kaltwarenklasse; keine umfangreichen Gefahrgutklassen/Zertifikate und keine realen Zollregeln |
 | K12 Verkehrsträger | Bahn/See/Luft als externe Angebote, Fahrplan, Kapazität, eigener Terminal, Dokumente, Anschlussversäumnis/Kosten | Je Buchung ein externer Hauptlauf; keine frei zusammengesetzte mehrgliedrige multimodale Route und keine eigenen Schiffe/Flugzeuge |
@@ -22,7 +22,7 @@ Stand: 14.10.2026. „Implementiert“ bedeutet vorhandene fachliche Funktion un
 
 ## Offene Abnahme
 
-Der Spielstand umfasst Funktionskerne aus allen vier Phasen. Die vollständige Konzernfassung des ursprünglichen Auftrags ist mit Version 0.5 noch nicht erreicht. Insbesondere Darstellung und räumliche Materialbewegung, fortgeschrittene Disposition, vertiefte Unternehmensrechnung sowie End-to-End-Browserprüfung müssen weitergeführt werden. Ein bestandener automatisierter Testlauf ersetzt diese Arbeiten nicht.
+Der Spielstand umfasst Funktionskerne aus allen vier Phasen. Die vollständige Konzernfassung des ursprünglichen Auftrags ist mit Version 0.6 noch nicht erreicht. Insbesondere Darstellung und räumliche Materialbewegung, fortgeschrittene Disposition, vertiefte Unternehmensrechnung sowie End-to-End-Browserprüfung müssen weitergeführt werden. Ein bestandener automatisierter Testlauf ersetzt diese Arbeiten nicht.
 
 ## Praktische Grenzen
 

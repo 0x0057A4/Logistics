@@ -106,3 +106,7 @@ Neue Nachweise: fünf fachliche Rechnungsprüfungen; neun Schreibschutzprüfunge
 Speicherformat unverändert. Neue Auswertung verändert keine Spielwerte. Web Locks und Storage werden in Node kontrolliert ersetzt; keine Behauptung einer Prüfung echter Browser-Sperren. UI-Harness prüft Befehle und Rendering-Aufrufe, keine Pixel oder Touch-Ereignisse.
 
 Browserprüfung bleibt blockiert: Managed-Sites-Anweisung erlaubt Browser-QA nur mit control-browser-Skill. Dieser Skill ist in der Arbeitsumgebung nicht verfügbar; deshalb kein Ersatzbrowser und kein Preview-Server gestartet. Vollständige Konzeptabnahme weiterhin offen; siehe FUNKTIONSSTATUS.md.
+
+## Version 0.6 – GitHub-Übergabe 14.10.2026
+
+Integrierter Stand erneut mit `node --test tests/*.test.js` geprüft: **137 bestanden, null fehlgeschlagen**. Rohprotokoll TESTERGEBNIS-0.6.txt. Enthält unabhängige Regressionstests für doppelte Abholung durch Import, Quellenbindung, Reihenfolge/Kapazität, Quarantäneblockade, Phasenspeicherung und Kühlfahrzeuge. Finale unabhängige Gesamtfreigabe noch offen. Browserprüfung weiterhin offen. 0.7-/Speicherpatches sind nicht Teil dieses 137-Test-Laufs.

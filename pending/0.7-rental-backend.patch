@@ -1,0 +1,208 @@
+From 24ad6ccddbbad6598258a1914896e587786585a4 Mon Sep 17 00:00:00 2001
+From: Codex <codex@openai.com>
+Date: Wed, 14 Oct 2026 11:11:29 +0200
+Subject: [PATCH] Add rented fleet capacity with daily charges and safe returns
+
+---
+ dist/core.js             |  7 +++--
+ dist/economy.js          |  2 +-
+ dist/rental.js           | 57 +++++++++++++++++++++++++++++++++++++
+ dist/transport.js        |  2 +-
+ tests/rental-own.test.js | 61 ++++++++++++++++++++++++++++++++++++++++
+ 5 files changed, 124 insertions(+), 5 deletions(-)
+ create mode 100644 dist/rental.js
+ create mode 100644 tests/rental-own.test.js
+
+diff --git a/dist/core.js b/dist/core.js
+index 8a5d435..3ac6d28 100644
+--- a/dist/core.js
++++ b/dist/core.js
+@@ -9,9 +9,10 @@ import * as network from './network.js';
+ import * as tours from './tours.js';
+ import * as special from './special.js';
+ import * as multimodal from './multimodal.js';
++import * as rental from './rental.js';
+ import { BUILDINGS, ITEMS, RECIPES, VEHICLES, ROLES } from './catalog.js';
+ import { reachable, footprint } from './world.js';
+-const MODULES=[inventory,workforce,economy,transport,production,management,service,network,tours,special,multimodal];
++const MODULES=[inventory,workforce,economy,transport,production,management,service,network,tours,special,multimodal,rental];
+ const ARRAYS=['sites','buildings','workers','batches','reservations','jobs','purchases','orders','vehicles','shipments','ledger','events','research','rules','returns','milestones','transfers','tours','freights'];
+ const clone=x=>JSON.parse(JSON.stringify(x));
+ const fail=m=>{throw new Error('Spielstand ungültig: '+m);};
+@@ -26,7 +27,7 @@ export function validateState(s){
+  if(!s.settings||typeof s.settings.incidents!=='boolean'||!s.stats||!['produced','delivered','revenue','costs'].every(k=>finite(s.stats[k],0)))fail('Einstellungen oder Statistik beschädigt.');
+  // Reject non-finite values and prototype-shaped keys anywhere, including extensions.
+  function walk(v,depth=0){if(depth>60)fail('Verschachtelung zu tief.');if(typeof v==='number'&&!Number.isFinite(v))fail('Ungültiger Zahlenwert.');if(v&&typeof v==='object')for(const [k,x]of Object.entries(v)){if(['__proto__','constructor','prototype'].includes(k))fail('Verbotener Schlüssel.');walk(x,depth+1);}}walk(s);
+- const ids=new Set();let maxSeq=0;for(const k of ['sites','buildings','workers','batches','reservations','jobs','purchases','orders','vehicles','shipments','ledger','events','returns','research','rules','transfers','tours','freights'])for(const row of s[k]){if(!row||typeof row!=='object'||typeof row.id!=='string'||!row.id||ids.has(row.id))fail('Fehlende oder doppelte ID in '+k+'.');ids.add(row.id);const m=row.id.match(/-(\d+)$/);if(m)maxSeq=Math.max(maxSeq,+m[1]);}
++ const ids=new Set();let maxSeq=0;for(const k of ['sites','buildings','workers','batches','reservations','jobs','purchases','orders','vehicles','shipments','ledger','events','returns','research','rules','transfers','tours','freights','rentals'])for(const row of s[k]||[]){if(!row||typeof row!=='object'||typeof row.id!=='string'||!row.id||ids.has(row.id))fail('Fehlende oder doppelte ID in '+k+'.');ids.add(row.id);const m=row.id.match(/-(\d+)$/);if(m)maxSeq=Math.max(maxSeq,+m[1]);}
+  if(s.seq<=maxSeq)fail('ID-Zähler beschädigt.');
+  const sites=new Set(s.sites.map(x=>x.id));if(!sites.has(s.selectedSite)||!sites.size)fail('Standortauswahl ungültig.');
+  for(const a of s.sites)if(!Number.isInteger(a.width)||!Number.isInteger(a.height)||a.width<2||a.height<2||a.width>200||a.height>200||!finite(a.energy,0)||!finite(a.x)||!finite(a.y))fail('Standortwerte beschädigt.');
+@@ -45,7 +46,7 @@ export function validateState(s){
+  for(const o of s.orders)if(!ITEMS[o.item]||!finite(o.qty,Number.EPSILON)||!finite(o.delivered,0,o.qty)||!finite(o.price,0)||!finite(o.paid,0)||!finite(o.due,0))fail('Kundenauftrag beschädigt.');
+  const vehicles=new Map(s.vehicles.map(v=>[v.id,v]));const orders=new Map(s.orders.map(o=>[o.id,o]));const shipments=new Map(s.shipments.map(sh=>[sh.id,sh]));
+  for(const o of s.orders)if(!['offer','active','fulfilled','cancelled'].includes(o.status)||!finite(o.quality,0,100))fail('Auftragsstatus beschädigt.');
+- for(const v of s.vehicles){if(!VEHICLES[v.type]||v.capacity!==VEHICLES[v.type].capacity||!finite(v.condition,0,100)||!['idle','loading','transit','unloading','returning','maintenance','service','transfer','tour'].includes(v.status))fail('Fahrzeug beschädigt.');if(v.shipment&&!(shipments.has(v.shipment)&&shipments.get(v.shipment).vehicleId===v.id)&&!s.returns.some(r=>r.id===v.shipment&&r.vehicleId===v.id)&&!s.transfers.some(r=>r.id===v.shipment&&r.vehicleId===v.id))fail('Fahrzeugzuordnung beschädigt.');}
++ for(const v of s.vehicles){if(!VEHICLES[v.type]||v.capacity!==VEHICLES[v.type].capacity||!finite(v.condition,0,100)||!['idle','loading','transit','unloading','returning','maintenance','service','transfer','tour','rentalReturned'].includes(v.status))fail('Fahrzeug beschädigt.');if(v.shipment&&!(shipments.has(v.shipment)&&shipments.get(v.shipment).vehicleId===v.id)&&!s.returns.some(r=>r.id===v.shipment&&r.vehicleId===v.id)&&!s.transfers.some(r=>r.id===v.shipment&&r.vehicleId===v.id))fail('Fahrzeugzuordnung beschädigt.');}
+  for(const p of s.purchases){if(!ITEMS[p.item]||!Number.isInteger(p.qty)||p.qty<1||!finite(p.cost,0)||!finite(p.quality,0,100)||!finite(p.eta,0)||!finite(p.remaining,0)||!['ordered','waiting','receiving','checking','storing','stored'].includes(p.status)||!['standard','express','quality'].includes(p.supplier))fail('Einkauf beschädigt.');if(['receiving','checking','storing'].includes(p.status)&&(!batches.has(p.batchId)||batches.get(p.batchId).item!==p.item))fail('Liefercharge fehlt.');}
+  for(const sh of s.shipments){const o=orders.get(sh.orderId),v=vehicles.get(sh.vehicleId);if(!o||!v||!sites.has(sh.site)||!Number.isInteger(sh.qty)||sh.qty<1||sh.qty>o.qty||!finite(sh.remaining,0)||!finite(sh.distance,0)||!Array.isArray(sh.cargo)||typeof sh.paid!=='boolean'||!['loading','transit','unloading','returning','complete','cancelled'].includes(sh.status))fail('Transport beschädigt.');
+   if(!['complete','cancelled'].includes(sh.status)&&(v.shipment!==sh.id||v.status!==sh.status))fail('Aktive Fahrzeugzuordnung widersprüchlich.');
+diff --git a/dist/economy.js b/dist/economy.js
+index 3934aaf..c1b161a 100644
+--- a/dist/economy.js
++++ b/dist/economy.js
+@@ -8,7 +8,7 @@ export function book(s,key,amount,category,note,refs=[]){
+  if(typeof key!=='string'||!key||!Number.isFinite(amount)||keys(s).keys.has(key))return false;
+  const match=key.match(/^((?:wage:[^:]+)|energy|rent|interest):(\d+)$/),watermark=match?Number(match[2]):null;
+  if(match&&(s.accountingWatermarks?.[match[1]]??-1)>=watermark)return false;
+- amount=cents(amount);const mandatory=!!match;if(amount<0&&s.money+amount<0&&!mandatory)return false;
++ amount=cents(amount);const mandatory=!!match||/^vehicle-rent:rental-\d+:\d+$/.test(key);if(amount<0&&s.money+amount<0&&!mandatory)return false;
+  const index=keys(s);s.money=cents(s.money+amount);
+  const ledgerKey=match?`${match[1]}:day:${Math.floor(watermark/1440)}`:key,row=index.byKey.get(ledgerKey);
+  if(row){row.amount=cents(row.amount+amount);row.lastAt=s.t;row.entries=(row.entries||1)+1;}
+diff --git a/dist/rental.js b/dist/rental.js
+new file mode 100644
+index 0000000..bbb490c
+--- /dev/null
++++ b/dist/rental.js
+@@ -0,0 +1,57 @@
++import {VEHICLES} from './catalog.js';
++
++// Fiktive Spielpreise: je angefangene 1.440 Spielminuten, voraus bezahlt.
++export const RENTAL_RATES=Object.freeze({van:180,truck:520,refrigerated:680});
++const DAY=1440;
++export function init(s){s.rentals??=[];}
++const fail=message=>({ok:false,message});
++function hasCargo(s,v){
++ const trips=[...(s.shipments||[]),...(s.transfers||[]),...(s.returns||[]),...(s.tours||[])].filter(t=>t.vehicleId===v.id);
++ const ids=new Set(trips.flatMap(t=>[...(t.cargo||[]),...(t.stops||[]).flatMap(stop=>stop.cargo||[])]));
++ return (s.batches||[]).some(b=>b.qty>0&&b.location==='vehicle'&&(ids.has(b.id)||b.vehicleId===v.id));
++}
++export function handle(s,c,api){
++ if(c.type==='rentVehicle'){
++  const spec=VEHICLES[c.vehicleType],rate=RENTAL_RATES[c.vehicleType],site=c.site||s.selectedSite;
++  if(!spec||!rate||!s.sites.some(x=>x.id===site))return fail('Fahrzeug oder Mietstandort ungültig.');
++  if(s.money<rate)return fail('Kapital für ersten Miettag fehlt.');
++  const id=api.id('rental'),vehicleId=api.id('vehicle');
++  if(!api.book(`vehicle-rent:${id}:0`,-rate,'Miete',`${spec.name}: erster Miettag`,[id,vehicleId]))return fail('Mietbuchung fehlgeschlagen.');
++  (s.rentals??=[]).push({id,vehicleId,homeSite:site,vehicleType:c.vehicleType,rate,startedAt:s.t,paidDays:1,nextDue:s.t+DAY,status:'active',returnedAt:null});
++  s.vehicles.push({id:vehicleId,name:spec.name+' (Miete)',type:c.vehicleType,site,capacity:spec.capacity,condition:100,status:'idle',shipment:null,rentalId:id});
++  api.log('rental',`${spec.name} gemietet: ${rate} € je angefangenem Spieltag.`,[id,vehicleId]);return {ok:true,id,vehicleId};
++ }
++ if(c.type==='returnRental'){
++  const r=(s.rentals||[]).find(r=>r.id===c.id),v=s.vehicles.find(v=>v.id===r?.vehicleId);
++  if(!r||r.status!=='active'||!v)return fail('Aktiver Mietvertrag fehlt.');
++  if(v.status!=='idle'||v.site!==r.homeSite||v.shipment||v.tour||hasCargo(s,v))return fail('Rückgabe nur leer, frei und am Mietstandort möglich.');
++  r.status='returned';r.returnedAt=s.t;v.status='rentalReturned';
++  api.log('rental',`${v.name} zurückgegeben. Berechnete Miettage: ${r.paidDays}.`,[r.id,v.id]);return {ok:true};
++ }
++ return null;
++}
++export function step(s,api){
++ for(const r of s.rentals||[]){
++  if(r.status!=='active')continue;
++  while(s.t>=r.nextDue){
++   if(!api.book(`vehicle-rent:${r.id}:${r.paidDays}`,-r.rate,'Miete',`${VEHICLES[r.vehicleType].name}: Miettag ${r.paidDays+1}`,[r.id,r.vehicleId]))break;
++   r.paidDays++;r.nextDue+=DAY;
++  }
++ }
++}
++export function validate(s){
++ const bad=m=>{throw new Error('Spielstand ungültig: '+m);};
++ if(s.rentals!==undefined&&(!Array.isArray(s.rentals)||s.rentals.length>100000))bad('Mietverträge beschädigt.');
++ const contracts=new Map(),vehicles=new Set();
++ for(const r of s.rentals||[]){
++  const v=s.vehicles.find(v=>v.id===r.vehicleId);
++  if(!/^rental-\d+$/.test(r.id)||contracts.has(r.id)||vehicles.has(r.vehicleId)||!v||v.rentalId!==r.id||v.type!==r.vehicleType||r.rate!==RENTAL_RATES[r.vehicleType]||!s.sites.some(a=>a.id===r.homeSite)||!Number.isSafeInteger(r.startedAt)||r.startedAt<480||r.startedAt>s.t||!Number.isSafeInteger(r.paidDays)||r.paidDays<1||r.nextDue!==r.startedAt+r.paidDays*DAY||!['active','returned'].includes(r.status))bad('Mietvertrag oder Fahrzeugzuordnung beschädigt.');
++  if(r.status==='active'&&(r.returnedAt!==null||v.status==='rentalReturned'||r.nextDue<=s.t))bad('Aktive Mietdauer beschädigt.');
++  if(r.status==='returned'&&(!Number.isSafeInteger(r.returnedAt)||r.returnedAt<r.startedAt||r.returnedAt>s.t||r.returnedAt>=r.nextDue||v.status!=='rentalReturned'||v.site!==r.homeSite||v.shipment||v.tour||hasCargo(s,v)))bad('Mietrückgabe beschädigt.');
++  const entries=s.ledger.filter(l=>l.key.startsWith(`vehicle-rent:${r.id}:`));
++  const paymentKeys=new Set(entries.map(l=>l.key));
++  if(entries.length!==r.paidDays||entries.some(l=>l.amount!==-r.rate||l.category!=='Miete')||!Array.from({length:r.paidDays},(_,i)=>`vehicle-rent:${r.id}:${i}`).every(key=>paymentKeys.has(key)))bad('Mietzahlungen beschädigt.');
++  contracts.set(r.id,r);vehicles.add(r.vehicleId);
++ }
++ for(const v of s.vehicles)if((v.rentalId&&!contracts.has(v.rentalId))||(v.status==='rentalReturned'&&!v.rentalId))bad('Mietfahrzeug ohne Vertrag.');
++}
+diff --git a/dist/transport.js b/dist/transport.js
+index 3b485cc..c0d7ac4 100644
+--- a/dist/transport.js
++++ b/dist/transport.js
+@@ -74,7 +74,7 @@ export function step(s,api){
+ }
+ export function validate(s){
+  const bad=m=>{throw new Error('Spielstand ungültig: '+m);};
+- for(const v of s.vehicles){if(!VEHICLES[v.type]||!Number.isFinite(v.capacity)||v.capacity!==VEHICLES[v.type].capacity||!Number.isFinite(v.condition)||v.condition<0||v.condition>100||!['idle','loading','transit','unloading','returning','maintenance','service','transfer','tour'].includes(v.status))bad('Fahrzeug beschädigt.');if(v.status==='maintenance'&&(!v.maintenance||!s.buildings.some(b=>b.id===v.maintenance.workshop&&b.maintenanceTask===v.maintenance.id)))bad('Fahrzeugwartung beschädigt.');if(v.status==='service'&&!s.returns.some(r=>r.id===v.shipment))bad('Rücktransport beschädigt.');if(!['idle','maintenance','service','transfer','tour'].includes(v.status)&&!s.shipments.some(sh=>sh.id===v.shipment&&sh.vehicleId===v.id&&sh.status===v.status))bad('Fahrzeugzuweisung beschädigt.');}
++ for(const v of s.vehicles){if(!VEHICLES[v.type]||!Number.isFinite(v.capacity)||v.capacity!==VEHICLES[v.type].capacity||!Number.isFinite(v.condition)||v.condition<0||v.condition>100||!['idle','loading','transit','unloading','returning','maintenance','service','transfer','tour','rentalReturned'].includes(v.status))bad('Fahrzeug beschädigt.');if(v.status==='maintenance'&&(!v.maintenance||!s.buildings.some(b=>b.id===v.maintenance.workshop&&b.maintenanceTask===v.maintenance.id)))bad('Fahrzeugwartung beschädigt.');if(v.status==='service'&&!s.returns.some(r=>r.id===v.shipment))bad('Rücktransport beschädigt.');if(!['idle','maintenance','service','transfer','tour','rentalReturned'].includes(v.status)&&!s.shipments.some(sh=>sh.id===v.shipment&&sh.vehicleId===v.id&&sh.status===v.status))bad('Fahrzeugzuweisung beschädigt.');}
+  validateTransfers(s,bad);
+  const occupied=new Set();
+  for(const sh of s.shipments){
+diff --git a/tests/rental-own.test.js b/tests/rental-own.test.js
+new file mode 100644
+index 0000000..7de2556
+--- /dev/null
++++ b/tests/rental-own.test.js
+@@ -0,0 +1,61 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import {Simulation,validateState} from '../dist/core.js';
++import * as rental from '../dist/rental.js';
++import {report} from '../dist/accounting.js';
++const rent=(sim,vehicleType='van')=>sim.command({type:'rentVehicle',vehicleType});
++
++test('Mietfahrzeuge kosten ersten Tag einmal und sind normale Fahrzeugkapazität',()=>{
++ const sim=new Simulation(),s=sim.state,before=s.money,r=rent(sim);assert.equal(r.ok,true);
++ assert.equal(s.money,before-rental.RENTAL_RATES.van);assert.equal(s.vehicles[0].capacity,20);assert.equal(s.vehicles[0].status,'idle');
++ rental.step(s,sim.api);rental.step(s,sim.api);assert.equal(s.ledger.filter(l=>l.category==='Miete').length,1);
++ assert.equal(report(s).cashflow.operating,-180);validateState(s);
++});
++
++test('Ungültige Miete und fehlendes Geld erzeugen weder Vertrag noch Fahrzeug',()=>{
++ const sim=new Simulation(),s=sim.state;s.money=0;const before=sim.serialize();
++ assert.equal(rent(sim).ok,false);assert.equal(rent(sim,'bad').ok,false);assert.equal(sim.command({type:'rentVehicle',vehicleType:'van',site:'missing'}).ok,false);assert.equal(sim.serialize(),before);
++});
++
++test('Mietverlängerung erfolgt nach 1.440 Spielminuten; auch ohne Liquidität',()=>{
++ const sim=new Simulation(),s=sim.state;rent(sim);s.money=0;sim.step(1439);
++ assert.equal(s.rentals[0].paidDays,1);const before=s.money;sim.step();assert.equal(s.rentals[0].paidDays,2);
++ assert.equal(s.ledger.filter(l=>l.key.startsWith('vehicle-rent:')).reduce((n,l)=>n+l.amount,0),-360);
++ assert.ok(s.money<=before-180);assert.equal(rent(sim).ok,false);assert.ok(report(s).liabilities.overdraft>=180);validateState(s);
++});
++
++test('Rückgabe beendet Gebühren, bleibt historisch erhalten und sperrt neue Aufträge',()=>{
++ const sim=new Simulation(),s=sim.state,r=rent(sim),o=s.orders[0];sim.command({type:'acceptOrder',id:o.id});
++ assert.equal(sim.command({type:'returnRental',id:r.id}).ok,true);assert.equal(sim.command({type:'returnRental',id:r.id}).ok,false);
++ assert.equal(s.vehicles[0].status,'rentalReturned');assert.equal(sim.command({type:'dispatch',vehicleId:r.vehicleId,orderId:o.id,qty:1}).ok,false);
++ sim.step(2880);assert.equal(s.rentals[0].paidDays,1);validateState(s);assert.equal(Simulation.fromJSON(sim.serialize()).serialize(),sim.serialize());
++});
++
++test('Rückgabe verlangt idle, Heimatstandort und vollständig entladenes Fahrzeug',()=>{
++ const sim=new Simulation(),s=sim.state,r=rent(sim),v=s.vehicles[0];v.status='loading';assert.equal(sim.command({type:'returnRental',id:r.id}).ok,false);v.status='idle';v.site='other';assert.equal(sim.command({type:'returnRental',id:r.id}).ok,false);v.site=s.selectedSite;
++ v.shipment='trip';assert.equal(sim.command({type:'returnRental',id:r.id}).ok,false);v.shipment=null;
++ const b=sim.api.inventory.add({item:'lamp',qty:1,site:s.selectedSite,location:'vehicle'});s.shipments.push({id:'history',vehicleId:v.id,cargo:[b.id]});
++ assert.equal(sim.command({type:'returnRental',id:r.id}).ok,false);sim.api.inventory.move(b.id,'stock');assert.equal(sim.command({type:'returnRental',id:r.id}).ok,true);
++});
++
++test('Laufende Mietlieferung speichert deterministisch und Rückgabe erhält Lieferhistorie',()=>{
++ const sim=new Simulation({mode:'sandbox'}),s=sim.state;
++ for(const c of [{type:'build',buildingType:'dock',x:2,y:10},{type:'hire',role:'driver'},{type:'hire',role:'warehouse'}])assert.equal(sim.command(c).ok,true);
++ const r=rent(sim),o=s.orders[0];assert.equal(sim.command({type:'acceptOrder',id:o.id}).ok,true);sim.api.inventory.add({item:'lamp',qty:2,quality:95,site:s.selectedSite});
++ assert.equal(sim.command({type:'dispatch',vehicleId:r.vehicleId,orderId:o.id,qty:2}).ok,true);sim.step(10);assert.equal(sim.command({type:'returnRental',id:r.id}).ok,false);
++ const loaded=Simulation.fromJSON(sim.serialize());sim.step(100);loaded.step(100);assert.equal(loaded.serialize(),sim.serialize());assert.equal(s.shipments[0].status,'complete');
++ assert.equal(sim.command({type:'returnRental',id:r.id}).ok,true);validateState(s);assert.equal(Simulation.fromJSON(sim.serialize()).serialize(),sim.serialize());
++});
++
++test('Laden alter Stände braucht keine Miete; neue Stände behalten Abrechnungsgrenze',()=>{
++ const legacy=new Simulation();delete legacy.state.rentals;const old=legacy.serialize();assert.equal(Simulation.fromJSON(old).serialize(),old);
++ const sim=new Simulation();rent(sim,'refrigerated');sim.step(1430);const clone=Simulation.fromJSON(sim.serialize());sim.step(20);clone.step(20);assert.equal(clone.serialize(),sim.serialize());
++});
++
++test('Import verweigert beschädigte Mietdauer, Preise, Buchungen und Rückgaben',()=>{
++ const sim=new Simulation(),r=rent(sim);const source=sim.serialize();
++ for(const mutate of [s=>s.rentals[0].rate=1,s=>s.rentals[0].nextDue++,s=>s.rentals[0].paidDays++,s=>s.rentals[0].vehicleId='missing',s=>s.vehicles[0].status='rentalReturned',s=>s.ledger.splice(0,1),s=>s.rentals.push({...s.rentals[0]}),s=>s.rentals[0].id='vehicle-999999']){
++  const s=JSON.parse(source);mutate(s);assert.throws(()=>Simulation.fromJSON(JSON.stringify(s)));
++ }
++ assert.equal(sim.command({type:'returnRental',id:r.id}).ok,true);const returned=JSON.parse(sim.serialize());returned.vehicles[0].status='idle';assert.throws(()=>Simulation.fromJSON(JSON.stringify(returned)));
++});
+-- 
+2.51.1
+

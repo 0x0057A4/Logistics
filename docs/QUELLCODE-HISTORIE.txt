@@ -1,0 +1,15 @@
+f606572 2026-10-14T11:13:18+02:00 Recover storage access and keep retry read-only until approval
+7209c5e 2026-10-14T11:12:47+02:00 Prognose für Fahrerpausen und Schichten; doppelte Tourabholung verhindern
+8976c2e 2026-10-14T11:12:47+02:00 Prognose für Fahrerpausen und Schichten; doppelte Tourabholung verhindern
+9da8d65 2026-10-14T11:12:29+02:00 Show driver pause and shift forecasts in tour planning
+115ba4b 2026-10-14T11:11:29+02:00 Add rented fleet capacity with daily charges and safe returns
+b06d8d3 2026-10-14T11:12:29+02:00 Show driver pause and shift forecasts in tour planning
+353efd9 2026-10-14T11:11:56+02:00 Handle blocked storage with explicit temporary play and safe retry
+41dc735 2026-10-14T11:11:22+02:00 test: reject repeated pickup import and verify stop capacity order
+24ad6cc 2026-10-14T11:11:29+02:00 Add rented fleet capacity with daily charges and safe returns
+bab7988 2026-10-14T10:26:20+02:00 Update Site source
+383791d 2026-10-14T03:17:08Z Update Site source
+f59ff60 2026-10-14T03:13:48Z Schütze lokale Spielstände mit exklusiven Web Locks
+b88b9be 2026-10-14T03:13:20Z Unternehmensrechnung als reine Geldfluss- und Bestandsauswertung
+62ad572 2026-10-14T03:12:47Z test: unabhängige UI-Regressionsfälle für Modusimport und Neustart
+c6b3f48 2026-10-13T16:01:03-05:00 Update Site source
