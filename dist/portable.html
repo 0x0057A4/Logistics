@@ -313,6 +313,11 @@ tr.selected td{background:#eef6e4}
 .yard-table td{vertical-align:top}
 .dock-row strong .chip{margin-left:6px;font-weight:500}
 @media(max-width:1500px){body.panel-open .kpi-opt{display:none}}
+/* Personal W1c (A10): Bezug der Tätigkeit als kompakter Textlink. */
+button.ref-link{border:0;background:none;padding:0 0 0 4px;color:#3f6d34;text-decoration:underline;font:inherit;font-weight:600}
+button.ref-link:hover{background:none;color:var(--ink)}
+.kv b{text-align:right}
+.yard-table small.crew{white-space:nowrap}
 </style></head>
 <body>
 <header class="topbar">
@@ -872,8 +877,176 @@ if(['transit','unloading','collecting'].includes(t.status)&&t.stopIndex>=t.stops
 
 return Object.freeze(Object.defineProperties({}, {"init":{enumerable:true,get:()=>init},"committedQty":{enumerable:true,get:()=>committedQty},"planTour":{enumerable:true,get:()=>planTour},"handle":{enumerable:true,get:()=>handle},"step":{enumerable:true,get:()=>step},"validate":{enumerable:true,get:()=>validate}}));
 })();
-// save-guard.js
+// transport.js
 __modules[6]=(()=>{
+const {committedQty}=__modules[5];
+const {VEHICLES,ITEMS}=__modules[1];
+
+
+function init(s){s.transfers??=[];}
+const fits=(v,item,qty)=>(!ITEMS[item].cold||VEHICLES[v.type].cold)&&qty*(ITEMS[item].volume||1)<=v.capacity&&qty*(ITEMS[item].weight||1)<=(VEHICLES[v.type].weightCapacity||VEHICLES[v.type].maxWeight||v.capacity*4);
+/** Höchste Stückzahl eines Artikels, die `fits` für dieses Fahrzeug zulässt (Volumen, Gewicht, Kühlung). Nur lesend. */
+function maxLoad(v,item){
+ const it=ITEMS[item],spec=VEHICLES[v?.type];if(!it||!spec||!Number.isFinite(v.capacity))return 0;if(it.cold&&!spec.cold)return 0;
+ const weightCap=spec.weightCapacity||spec.maxWeight||v.capacity*4;let n=Math.max(0,Math.floor(Math.min(v.capacity/(it.volume||1),weightCap/(it.weight||1))+1e-9));
+ while(n>0&&!fits(v,item,n))n--;while(fits(v,item,n+1))n++;return n;
+}
+/** Wartungskosten: Werkstatt 8 € je fehlendem Zustandspunkt; externer Servicepartner ×1,5, 120 Spielminuten, ohne eigenes Ersatzteil. */
+const EXTERNAL_SERVICE={minutes:120,factor:1.5};
+const maintenanceCost=(v,external=false)=>Math.ceil((100-v.condition)*8*(external?EXTERNAL_SERVICE.factor:1));
+const WEAR_WARN=35;
+function handle(s,c,api){
+ if(c.type==='transfer')return startTransfer(s,c,api);
+ if(c.type==='buyVehicle'){
+  const spec=VEHICLES[c.vehicleType],site=c.site||s.selectedSite;if(!spec||!s.sites.some(x=>x.id===site))return {ok:false,message:'Fahrzeug oder Standort ungültig.'};
+  const id=api.id('vehicle');if(!api.book(`vehicle:${id}`,-spec.cost,'Fuhrpark',spec.name,[id]))return {ok:false,message:'Kapital für Fahrzeug fehlt.'};
+  s.vehicles.push({id,name:spec.name,type:c.vehicleType,site,capacity:spec.capacity,condition:100,status:'idle',shipment:null});api.log('transport',`${spec.name} angeschafft.`,[id]);return {ok:true,id};
+ }
+ if(c.type==='dispatch'){
+  const o=s.orders.find(x=>x.id===c.orderId),v=s.vehicles.find(x=>x.id===c.vehicleId),site=c.site||s.selectedSite;
+  if(!o||o.status!=='active'||!v||v.status!=='idle'||v.site!==site)return {ok:false,message:'Aktiven Auftrag und freies Fahrzeug am Standort wählen.'};
+  if(v.condition<15)return {ok:false,message:'Fahrzeug benötigt Wartung.'};
+  const committed=committedQty(s,o.id);
+  if(!Number.isInteger(c.qty)||c.qty<1||c.qty>o.qty-o.delivered-committed||!fits(v,o.item,c.qty))return {ok:false,message:'Menge überschreitet Restauftrag oder Fahrzeugkapazität.'};
+  const id=api.id('shipment');if(!api.inventory.reserve(o.item,c.qty,site,id,o.kind==='logistics'?o.id:'company'))return {ok:false,message:'Verfügbarer Fertigwarenbestand fehlt.'};
+  const reservations=s.reservations.filter(r=>r.job===id);if(reservations.some(r=>(s.batches.find(b=>b.id===r.batchId)?.quality||0)<o.quality)){api.inventory.release(id);return {ok:false,message:'Reservierte Ware erfüllt Qualitätsanforderung nicht.'};}
+  s.shipments.push({id,orderId:o.id,vehicleId:v.id,site,qty:c.qty,status:'loading',remaining:2+Math.ceil(c.qty/5),cargo:[],driver:null,worker:null,paid:false,createdAt:s.t,distance:30});v.status='loading';v.shipment=id;api.log('transport',`Teillieferung ${c.qty} Stück für ${o.customer} eingeplant.`,[id,o.id,v.id]);return {ok:true,id};
+ }
+ if(c.type==='cancelShipment'){
+  const sh=s.shipments.find(x=>x.id===c.id);if(!sh||sh.status!=='loading')return {ok:false,message:'Nur noch nicht abgefahrene Lieferung kann storniert werden.'};
+  api.inventory.release(sh.id);api.workforce.release(`${sh.id}:warehouse`);api.workforce.release(`${sh.id}:driver`);sh.status='cancelled';const v=s.vehicles.find(x=>x.id===sh.vehicleId);v.status='idle';v.shipment=null;for(const b of s.buildings)if(b.task===sh.id)b.task=null;return {ok:true};
+ }
+ if(c.type==='maintainVehicle'){
+  const v=s.vehicles.find(x=>x.id===c.id);if(!v||v.status!=='idle')return {ok:false,message:'Nur freies Fahrzeug kann gewartet werden.'};
+  if(v.condition>=100)return {ok:false,message:'Fahrzeug bereits gewartet.'};
+  const workshop=s.buildings.find(b=>b.site===v.site&&b.type==='workshop'&&b.enabled&&b.condition>0&&!b.maintenanceTask&&!b.serviceJob);
+  if(!workshop)return {ok:false,message:'Freie Wartungswerkstatt fehlt.'};
+  const id=api.id('maintenance');if(!api.inventory.reserve('spare',1,v.site,id))return {ok:false,message:'Ein Ersatzteil benötigt.'};
+  const cost=maintenanceCost(v);if(!api.book(`vehicle-maintenance:${id}`,-cost,'Wartung',v.name,[v.id])){api.inventory.release(id);return {ok:false,message:'Kapital für Wartung fehlt.'};}
+  api.inventory.consume(id);v.status='maintenance';v.maintenance={id,workshop:workshop.id,remaining:20};workshop.maintenanceTask=id;return {ok:true};
+ }
+ if(c.type==='serviceVehicleExternal'){
+  // Mobiler Servicepartner am Standort: keine eigene Werkstatt, kein eigenes Ersatzteil, kein eigenes Personal; teurer.
+  const v=s.vehicles.find(x=>x.id===c.id);if(!v||v.status!=='idle'||!s.sites.some(a=>a.id===v.site))return {ok:false,message:'Nur freies Fahrzeug am Standort kann extern gewartet werden.'};
+  if(v.condition>=100)return {ok:false,message:'Fahrzeug bereits gewartet.'};
+  const id=api.id('maintenance'),cost=maintenanceCost(v,true);
+  if(!api.book(`vehicle-service-external:${id}`,-cost,'Wartung',`${v.name} · externe Wartung`,[v.id]))return {ok:false,message:'Kapital für externe Wartung fehlt.'};
+  v.status='maintenance';v.maintenance={id,external:true,remaining:EXTERNAL_SERVICE.minutes,duration:EXTERNAL_SERVICE.minutes,cost};
+  api.log('maintenance',`${v.name}: externe Wartung beauftragt, ${EXTERNAL_SERVICE.minutes} Min. außer Betrieb.`,[v.id]);return {ok:true,id,cost};
+ }
+ return null;
+}
+function step(s,api){
+ stepTransfers(s,api);
+ for(const v of s.vehicles.filter(v=>v.status==='maintenance')){
+  const m=v.maintenance;
+  if(m.external){m.blocked=null;if(--m.remaining<=0){v.condition=100;v.status='idle';v.maintenance=null;api.log('maintenance',`${v.name} extern gewartet.`,[v.id]);}continue;}
+  const workshop=s.buildings.find(b=>b.id===m.workshop);
+  if(!workshop||!workshop.enabled||workshop.condition<=0){m.blocked='Werkstatt nicht verfügbar';continue;}
+  const w=api.workforce.acquire('technician',v.site,m.id);if(!w){m.blocked='Technikpersonal oder Schicht fehlt';continue;}
+  m.blocked=null;m.worker=w.id;if(--m.remaining<=0){v.condition=100;v.status='idle';workshop.maintenanceTask=null;api.workforce.release(m.id);v.maintenance=null;api.log('maintenance',`${v.name} gewartet.`,[v.id]);}
+ }
+
+ for(const sh of s.shipments){
+  if(['complete','cancelled'].includes(sh.status))continue;
+  const v=s.vehicles.find(x=>x.id===sh.vehicleId),o=s.orders.find(x=>x.id===sh.orderId);if(!v||!o)continue;
+  if(sh.status==='loading'){
+   let dock=s.buildings.find(b=>b.task===sh.id&&b.type==='dock'&&b.enabled&&b.condition>0);
+   if(!dock)dock=s.buildings.find(b=>b.site===sh.site&&b.type==='dock'&&b.enabled&&b.condition>0&&!b.task);
+   if(!dock){sh.blocked='Warteschlange: freie Laderampe fehlt';continue;}dock.task=sh.id;sh.dock=dock.id;
+  }
+  const driver=api.workforce.acquire('driver',sh.site,`${sh.id}:driver`);if(!driver){sh.blocked='Fahrpersonal oder Schicht fehlt';continue;}sh.driver=driver.id;
+  if(sh.status==='loading'){
+   const worker=api.workforce.acquire('warehouse',sh.site,`${sh.id}:warehouse`);if(!worker){sh.blocked='Lagerpersonal für Beladung fehlt';continue;}sh.worker=worker.id;sh.blocked=null;
+   if(--sh.remaining>0)continue;
+   const cost=Math.round(sh.distance*2*VEHICLES[v.type].runningCost*100)/100;
+   if(s.money<cost){sh.remaining=1;sh.blocked='Betriebskosten können nicht bezahlt werden';continue;}
+   const cargo=api.inventory.transfer(sh.id,'vehicle',sh.site);if(!cargo){sh.remaining=1;sh.blocked='Ladung nicht verfügbar';continue;}
+   sh.cargo=cargo.map(b=>b.id);sh.materialCost=o.kind==='logistics'?0:Math.round(cargo.reduce((n,b)=>n+b.qty*b.unitCost,0)*100)/100;sh.transportCost=cost;sh.tripCost=cost;const dock=s.buildings.find(b=>b.task===sh.id);if(dock)dock.task=null;api.book(`trip:${sh.id}`,-cost,'Transport',`Tour ${sh.id}`,[sh.id,v.id,o.id]);api.workforce.release(`${sh.id}:warehouse`);sh.worker=null;sh.status='transit';v.status='transit';sh.remaining=Math.ceil(sh.distance/VEHICLES[v.type].speed);sh.departedAt=s.t;
+  }else{
+   sh.blocked=null;if(--sh.remaining>0)continue;
+   if(sh.status==='transit'){sh.status='unloading';v.status='unloading';sh.remaining=2+Math.ceil(sh.qty/10);}
+   else if(sh.status==='unloading'){
+    if(sh.cargo.some(id=>{const b=s.batches.find(b=>b.id===id);return !b||b.blocked||b.quality<o.quality;})){sh.blocked='Rückruf: gesperrte Ware darf nicht zugestellt werden';sh.remaining=1;continue;}
+    // Every unit is removed from its physical vehicle batch exactly once.
+    for(const bid of sh.cargo){const b=s.batches.find(x=>x.id===bid);if(b)api.inventory.remove(b.id,b.qty);}
+    o.delivered+=sh.qty;s.stats.delivered+=sh.qty;sh.deliveredAt=s.t;sh.invoiceAmount=Math.round(sh.qty*o.price*(s.t>o.due?0.9:1)*100)/100;sh.paymentAt=s.t+60;
+    if(o.delivered>=o.qty){o.status='fulfilled';s.reputation=Math.min(100,s.reputation+3);}sh.status='returning';v.status='returning';sh.remaining=Math.ceil(sh.distance/VEHICLES[v.type].speed);api.log('delivery',`${o.customer}: ${sh.qty} Stück zugestellt. Zahlung in 60 Minuten.`,[sh.id,o.id]);
+   }else if(sh.status==='returning'){sh.status='complete';sh.completedAt=s.t;v.status='idle';v.shipment=null;v.condition=Math.max(0,v.condition-2);api.workforce.release(`${sh.id}:driver`);sh.driver=null;}
+  }
+ }
+}
+function validate(s){
+ const bad=m=>{throw new Error('Spielstand ungültig: '+m);};
+ for(const v of s.vehicles){if(!VEHICLES[v.type]||!Number.isFinite(v.capacity)||v.capacity!==VEHICLES[v.type].capacity||!Number.isFinite(v.condition)||v.condition<0||v.condition>100||!['idle','loading','transit','unloading','returning','maintenance','service','transfer','tour','rentalReturned'].includes(v.status))bad('Fahrzeug beschädigt.');if(v.status==='maintenance'&&(!v.maintenance||(v.maintenance.external?!(Number.isFinite(v.maintenance.remaining)&&v.maintenance.remaining>=0&&v.maintenance.remaining<=EXTERNAL_SERVICE.minutes):!s.buildings.some(b=>b.id===v.maintenance.workshop&&b.maintenanceTask===v.maintenance.id))))bad('Fahrzeugwartung beschädigt.');if(v.status==='service'&&!s.returns.some(r=>r.id===v.shipment))bad('Rücktransport beschädigt.');if(!['idle','maintenance','service','transfer','tour','rentalReturned'].includes(v.status)&&!s.shipments.some(sh=>sh.id===v.shipment&&sh.vehicleId===v.id&&sh.status===v.status))bad('Fahrzeugzuweisung beschädigt.');}
+ validateTransfers(s,bad);
+ const occupied=new Set();
+ for(const sh of s.shipments){
+  if(!s.orders.some(o=>o.id===sh.orderId)||!s.vehicles.some(v=>v.id===sh.vehicleId)||!Number.isInteger(sh.qty)||sh.qty<1||!Number.isFinite(sh.remaining)||sh.remaining<0||!Array.isArray(sh.cargo)||!['loading','transit','unloading','returning','complete','cancelled'].includes(sh.status))bad('Tour beschädigt.');
+  if(!['complete','cancelled'].includes(sh.status)){if(occupied.has(sh.vehicleId))bad('Fahrzeug doppelt belegt.');occupied.add(sh.vehicleId);}
+  if(['transit','unloading'].includes(sh.status)){
+   if(new Set(sh.cargo).size!==sh.cargo.length)bad('Ladung doppelt zugeordnet.');
+   const cargo=sh.cargo.map(id=>s.batches.find(b=>b.id===id));if(cargo.some(b=>!b||b.location!=='vehicle')||cargo.reduce((n,b)=>n+b.qty,0)!==sh.qty)bad('Fahrzeugladung beschädigt.');
+  }
+  if(sh.status==='loading'&&s.reservations.filter(r=>r.job===sh.id).reduce((n,r)=>n+r.qty,0)!==sh.qty)bad('Ladereservierung beschädigt.');
+  if(sh.paymentAt!=null&&(!Number.isFinite(sh.paymentAt)||!Number.isFinite(sh.invoiceAmount)||sh.invoiceAmount<0||!['returning','complete'].includes(sh.status)))bad('Forderung beschädigt.');
+ }
+}
+function startTransfer(s,c,api){
+ const site=c.site||s.selectedSite,v=s.vehicles.find(v=>v.id===c.vehicleId),from=s.sites.find(a=>a.id===site),to=s.sites.find(a=>a.id===c.toSite);
+ if(!v||v.status!=='idle'||v.site!==site||!from||!to||from.id===to.id||!ITEMS[c.item]||!Number.isInteger(c.qty)||c.qty<1||!fits(v,c.item,c.qty)||v.condition<15)return {ok:false,message:'Transfer prüfen: Standorte, freie Fahrzeugkapazität, Wartung und Menge.'};
+ const id=api.id('transfer');if(!api.inventory.reserve(c.item,c.qty,site,id))return {ok:false,message:'Verfügbarer eigener Bestand fehlt.'};
+ const distance=Math.max(15,Math.round(Math.hypot(to.x-from.x,to.y-from.y)));
+ (s.transfers??=[]).push({id,item:c.item,qty:c.qty,owner:'company',site,fromSite:site,toSite:to.id,vehicleId:v.id,status:'loading',remaining:2+Math.ceil(c.qty/5),duration:2+Math.ceil(c.qty/5),cargo:[],distance,driver:null,worker:null});v.status='transfer';v.shipment=id;return {ok:true,id};
+}
+function stepTransfers(s,api){
+ for(const tr of s.transfers||[]){
+  if(['complete','cancelled'].includes(tr.status))continue;
+  const v=s.vehicles.find(v=>v.id===tr.vehicleId);if(!v)continue;
+  const driver=api.workforce.acquire('driver',tr.site,`${tr.id}:driver`);if(!driver){tr.blocked='Fahrpersonal oder Schicht fehlt';continue;}tr.driver=driver.id;
+  if(['loading','unloading'].includes(tr.status)){
+   const site=tr.status==='loading'?tr.site:tr.toSite;
+   let dock=s.buildings.find(b=>b.type==='dock'&&b.site===site&&b.enabled&&b.condition>0&&b.task===tr.id);
+   dock??=s.buildings.find(b=>b.type==='dock'&&b.site===site&&b.enabled&&b.condition>0&&!b.task);
+   if(!dock){tr.blocked='Freie Rampe am '+(tr.status==='loading'?'Start':'Ziel')+' fehlt';continue;}dock.task=tr.id;tr.dock=dock.id;
+   const worker=api.workforce.acquire('warehouse',site,`${tr.id}:warehouse`);if(!worker){tr.blocked='Lagerpersonal am '+(tr.status==='loading'?'Start':'Ziel')+' fehlt';continue;}tr.worker=worker.id;tr.blocked=null;
+   if(--tr.remaining>0)continue;
+   if(tr.status==='loading'){
+    const cost=Math.round(tr.distance*2*VEHICLES[v.type].runningCost*100)/100;
+    if(s.money<cost){tr.blocked='Transferkosten nicht gedeckt';tr.remaining=1;continue;}
+    const cargo=api.inventory.transfer(tr.id,'vehicle',tr.site);if(!cargo){tr.blocked='Reservierte Transferladung fehlt';tr.remaining=1;continue;}
+    tr.cargo=cargo.map(b=>b.id);tr.transportCost=cost;api.book(`transfer-trip:${tr.id}`,-cost,'Transport','Standorttransfer',[tr.id,v.id]);tr.status='transit';tr.remaining=Math.ceil(tr.distance/VEHICLES[v.type].speed);tr.duration=tr.remaining;
+   }else{
+    if(!api.inventory.relocate(tr.cargo,'stock',tr.toSite)){tr.blocked='Zielkapazität fehlt; Ware bleibt im Fahrzeug';tr.remaining=1;continue;}
+    tr.deliveredAt=s.t;tr.status='returning';tr.remaining=Math.ceil(tr.distance/VEHICLES[v.type].speed);tr.duration=tr.remaining;api.log('transfer',`${tr.qty} × ${ITEMS[tr.item].name} am Zielstandort eingelagert.`,[tr.id,tr.toSite]);
+   }
+   dock.task=null;api.workforce.release(`${tr.id}:warehouse`);tr.worker=null;
+  }else{
+   tr.blocked=null;if(--tr.remaining>0)continue;
+   if(tr.status==='transit'){tr.status='unloading';tr.remaining=2+Math.ceil(tr.qty/5);tr.duration=tr.remaining;}
+   else if(tr.status==='returning'){tr.status='complete';tr.completedAt=s.t;v.status='idle';v.shipment=null;v.condition=Math.max(0,v.condition-2);api.workforce.release(`${tr.id}:driver`);tr.driver=null;}
+  }
+ }
+}
+function validateTransfers(s,bad){
+ const assigned=new Set();
+ for(const tr of s.transfers||[]){
+  if(!ITEMS[tr.item]||!Number.isInteger(tr.qty)||tr.qty<1||!s.sites.some(a=>a.id===tr.site)||!s.sites.some(a=>a.id===tr.toSite)||tr.site===tr.toSite||!s.vehicles.some(v=>v.id===tr.vehicleId)||!Number.isFinite(tr.remaining)||tr.remaining<0||!Array.isArray(tr.cargo)||!['loading','transit','unloading','returning','complete','cancelled'].includes(tr.status))bad('Standorttransfer beschädigt.');
+  if(!['complete','cancelled'].includes(tr.status)){
+   const v=s.vehicles.find(v=>v.id===tr.vehicleId);if(v.status!=='transfer'||v.shipment!==tr.id||assigned.has(v.id))bad('Transferfahrzeug beschädigt.');assigned.add(v.id);
+  }
+  if(tr.status==='loading'&&s.reservations.filter(r=>r.job===tr.id).reduce((n,r)=>n+r.qty,0)!==tr.qty)bad('Transferreservierung beschädigt.');
+  if(['transit','unloading'].includes(tr.status)){
+   const cargo=tr.cargo.map(id=>s.batches.find(b=>b.id===id));if(new Set(tr.cargo).size!==tr.cargo.length||cargo.some(b=>!b||b.location!=='vehicle'||b.item!==tr.item||b.owner!==tr.owner)||cargo.reduce((n,b)=>n+b.qty,0)!==tr.qty)bad('Transferladung beschädigt.');
+  }
+ }
+ for(const v of s.vehicles)if(v.status==='transfer'&&!assigned.has(v.id))bad('Fahrzeug ohne Standorttransfer.');
+}
+
+return Object.freeze(Object.defineProperties({}, {"init":{enumerable:true,get:()=>init},"maxLoad":{enumerable:true,get:()=>maxLoad},"EXTERNAL_SERVICE":{enumerable:true,get:()=>EXTERNAL_SERVICE},"maintenanceCost":{enumerable:true,get:()=>maintenanceCost},"WEAR_WARN":{enumerable:true,get:()=>WEAR_WARN},"handle":{enumerable:true,get:()=>handle},"step":{enumerable:true,get:()=>step},"validate":{enumerable:true,get:()=>validate}}));
+})();
+// save-guard.js
+__modules[7]=(()=>{
 
 /** Schreibrecht für genau einen lokalen Spielmodus.
  * Web Locks liefern die atomare Sperre. Der Storage-Lease allein wäre wegen
@@ -987,7 +1160,7 @@ const createSaveGuard = options => new SaveGuard(options);
 return Object.freeze(Object.defineProperties({}, {"SaveGuard":{enumerable:true,get:()=>SaveGuard},"createSaveGuard":{enumerable:true,get:()=>createSaveGuard}}));
 })();
 // storage.js
-__modules[7]=(()=>{
+__modules[8]=(()=>{
 
 /** Spielstandspeicher (A12, Welle 1b, QS-W0-03/11).
  *
@@ -1181,7 +1354,7 @@ const createSaveStore=options=>new SaveStore(options);
 return Object.freeze(Object.defineProperties({}, {"SAVE_SUFFIXES":{enumerable:true,get:()=>SAVE_SUFFIXES},"SAVE_MODES":{enumerable:true,get:()=>SAVE_MODES},"SaveStore":{enumerable:true,get:()=>SaveStore},"createSaveStore":{enumerable:true,get:()=>createSaveStore}}));
 })();
 // accounting.js
-__modules[8]=(()=>{
+__modules[9]=(()=>{
 
 // Reine Auswertung des gespeicherten Zustands: keine Buchungen, keine Migration.
 // Alle Beträge in Euro. Auswertung über gesamte gespeicherte Laufzeit;
@@ -1251,7 +1424,7 @@ function report(s) {
 return Object.freeze(Object.defineProperties({}, {"report":{enumerable:true,get:()=>report}}));
 })();
 // inventory.js
-__modules[9]=(()=>{
+__modules[10]=(()=>{
 const { BUILDINGS, ITEMS }=__modules[1];
 
 
@@ -1532,7 +1705,7 @@ function validate(s) {
 return Object.freeze(Object.defineProperties({}, {"batchIndex":{enumerable:true,get:()=>batchIndex},"findBatch":{enumerable:true,get:()=>findBatch},"activeBatches":{enumerable:true,get:()=>activeBatches},"siteItemBatches":{enumerable:true,get:()=>siteItemBatches},"init":{enumerable:true,get:()=>init},"handle":{enumerable:true,get:()=>handle},"step":{enumerable:true,get:()=>step},"createAPI":{enumerable:true,get:()=>createAPI},"validate":{enumerable:true,get:()=>validate}}));
 })();
 // production.js
-__modules[10]=(()=>{
+__modules[11]=(()=>{
 const {BUILDINGS,RECIPES}=__modules[1];
 
 function init(s){s.jobs??=[];}
@@ -1572,7 +1745,7 @@ function step(s,api){
 return Object.freeze(Object.defineProperties({}, {"init":{enumerable:true,get:()=>init},"handle":{enumerable:true,get:()=>handle},"step":{enumerable:true,get:()=>step}}));
 })();
 // economy.js
-__modules[11]=(()=>{
+__modules[12]=(()=>{
 const {committedQty}=__modules[5];
 const {ITEMS,BUILDINGS}=__modules[1];
 
@@ -1689,153 +1862,6 @@ function validate(s){
 
 return Object.freeze(Object.defineProperties({}, {"book":{enumerable:true,get:()=>book},"hasManufacturing":{enumerable:true,get:()=>hasManufacturing},"init":{enumerable:true,get:()=>init},"handle":{enumerable:true,get:()=>handle},"step":{enumerable:true,get:()=>step},"validate":{enumerable:true,get:()=>validate}}));
 })();
-// transport.js
-__modules[12]=(()=>{
-const {committedQty}=__modules[5];
-const {VEHICLES,ITEMS}=__modules[1];
-
-
-function init(s){s.transfers??=[];}
-const fits=(v,item,qty)=>(!ITEMS[item].cold||VEHICLES[v.type].cold)&&qty*(ITEMS[item].volume||1)<=v.capacity&&qty*(ITEMS[item].weight||1)<=(VEHICLES[v.type].weightCapacity||VEHICLES[v.type].maxWeight||v.capacity*4);
-function handle(s,c,api){
- if(c.type==='transfer')return startTransfer(s,c,api);
- if(c.type==='buyVehicle'){
-  const spec=VEHICLES[c.vehicleType],site=c.site||s.selectedSite;if(!spec||!s.sites.some(x=>x.id===site))return {ok:false,message:'Fahrzeug oder Standort ungültig.'};
-  const id=api.id('vehicle');if(!api.book(`vehicle:${id}`,-spec.cost,'Fuhrpark',spec.name,[id]))return {ok:false,message:'Kapital für Fahrzeug fehlt.'};
-  s.vehicles.push({id,name:spec.name,type:c.vehicleType,site,capacity:spec.capacity,condition:100,status:'idle',shipment:null});api.log('transport',`${spec.name} angeschafft.`,[id]);return {ok:true,id};
- }
- if(c.type==='dispatch'){
-  const o=s.orders.find(x=>x.id===c.orderId),v=s.vehicles.find(x=>x.id===c.vehicleId),site=c.site||s.selectedSite;
-  if(!o||o.status!=='active'||!v||v.status!=='idle'||v.site!==site)return {ok:false,message:'Aktiven Auftrag und freies Fahrzeug am Standort wählen.'};
-  if(v.condition<15)return {ok:false,message:'Fahrzeug benötigt Wartung.'};
-  const committed=committedQty(s,o.id);
-  if(!Number.isInteger(c.qty)||c.qty<1||c.qty>o.qty-o.delivered-committed||!fits(v,o.item,c.qty))return {ok:false,message:'Menge überschreitet Restauftrag oder Fahrzeugkapazität.'};
-  const id=api.id('shipment');if(!api.inventory.reserve(o.item,c.qty,site,id,o.kind==='logistics'?o.id:'company'))return {ok:false,message:'Verfügbarer Fertigwarenbestand fehlt.'};
-  const reservations=s.reservations.filter(r=>r.job===id);if(reservations.some(r=>(s.batches.find(b=>b.id===r.batchId)?.quality||0)<o.quality)){api.inventory.release(id);return {ok:false,message:'Reservierte Ware erfüllt Qualitätsanforderung nicht.'};}
-  s.shipments.push({id,orderId:o.id,vehicleId:v.id,site,qty:c.qty,status:'loading',remaining:2+Math.ceil(c.qty/5),cargo:[],driver:null,worker:null,paid:false,createdAt:s.t,distance:30});v.status='loading';v.shipment=id;api.log('transport',`Teillieferung ${c.qty} Stück für ${o.customer} eingeplant.`,[id,o.id,v.id]);return {ok:true,id};
- }
- if(c.type==='cancelShipment'){
-  const sh=s.shipments.find(x=>x.id===c.id);if(!sh||sh.status!=='loading')return {ok:false,message:'Nur noch nicht abgefahrene Lieferung kann storniert werden.'};
-  api.inventory.release(sh.id);api.workforce.release(`${sh.id}:warehouse`);api.workforce.release(`${sh.id}:driver`);sh.status='cancelled';const v=s.vehicles.find(x=>x.id===sh.vehicleId);v.status='idle';v.shipment=null;for(const b of s.buildings)if(b.task===sh.id)b.task=null;return {ok:true};
- }
- if(c.type==='maintainVehicle'){
-  const v=s.vehicles.find(x=>x.id===c.id);if(!v||v.status!=='idle')return {ok:false,message:'Nur freies Fahrzeug kann gewartet werden.'};
-  if(v.condition>=100)return {ok:false,message:'Fahrzeug bereits gewartet.'};
-  const workshop=s.buildings.find(b=>b.site===v.site&&b.type==='workshop'&&b.enabled&&b.condition>0&&!b.maintenanceTask&&!b.serviceJob);
-  if(!workshop)return {ok:false,message:'Freie Wartungswerkstatt fehlt.'};
-  const id=api.id('maintenance');if(!api.inventory.reserve('spare',1,v.site,id))return {ok:false,message:'Ein Ersatzteil benötigt.'};
-  const cost=Math.ceil((100-v.condition)*8);if(!api.book(`vehicle-maintenance:${id}`,-cost,'Wartung',v.name,[v.id])){api.inventory.release(id);return {ok:false,message:'Kapital für Wartung fehlt.'};}
-  api.inventory.consume(id);v.status='maintenance';v.maintenance={id,workshop:workshop.id,remaining:20};workshop.maintenanceTask=id;return {ok:true};
- }
- return null;
-}
-function step(s,api){
- stepTransfers(s,api);
- for(const v of s.vehicles.filter(v=>v.status==='maintenance')){
-  const m=v.maintenance,workshop=s.buildings.find(b=>b.id===m.workshop);
-  if(!workshop||!workshop.enabled||workshop.condition<=0){m.blocked='Werkstatt nicht verfügbar';continue;}
-  const w=api.workforce.acquire('technician',v.site,m.id);if(!w){m.blocked='Technikpersonal oder Schicht fehlt';continue;}
-  m.blocked=null;m.worker=w.id;if(--m.remaining<=0){v.condition=100;v.status='idle';workshop.maintenanceTask=null;api.workforce.release(m.id);v.maintenance=null;api.log('maintenance',`${v.name} gewartet.`,[v.id]);}
- }
-
- for(const sh of s.shipments){
-  if(['complete','cancelled'].includes(sh.status))continue;
-  const v=s.vehicles.find(x=>x.id===sh.vehicleId),o=s.orders.find(x=>x.id===sh.orderId);if(!v||!o)continue;
-  if(sh.status==='loading'){
-   let dock=s.buildings.find(b=>b.task===sh.id&&b.type==='dock'&&b.enabled&&b.condition>0);
-   if(!dock)dock=s.buildings.find(b=>b.site===sh.site&&b.type==='dock'&&b.enabled&&b.condition>0&&!b.task);
-   if(!dock){sh.blocked='Warteschlange: freie Laderampe fehlt';continue;}dock.task=sh.id;sh.dock=dock.id;
-  }
-  const driver=api.workforce.acquire('driver',sh.site,`${sh.id}:driver`);if(!driver){sh.blocked='Fahrpersonal oder Schicht fehlt';continue;}sh.driver=driver.id;
-  if(sh.status==='loading'){
-   const worker=api.workforce.acquire('warehouse',sh.site,`${sh.id}:warehouse`);if(!worker){sh.blocked='Lagerpersonal für Beladung fehlt';continue;}sh.worker=worker.id;sh.blocked=null;
-   if(--sh.remaining>0)continue;
-   const cost=Math.round(sh.distance*2*VEHICLES[v.type].runningCost*100)/100;
-   if(s.money<cost){sh.remaining=1;sh.blocked='Betriebskosten können nicht bezahlt werden';continue;}
-   const cargo=api.inventory.transfer(sh.id,'vehicle',sh.site);if(!cargo){sh.remaining=1;sh.blocked='Ladung nicht verfügbar';continue;}
-   sh.cargo=cargo.map(b=>b.id);sh.materialCost=o.kind==='logistics'?0:Math.round(cargo.reduce((n,b)=>n+b.qty*b.unitCost,0)*100)/100;sh.transportCost=cost;sh.tripCost=cost;const dock=s.buildings.find(b=>b.task===sh.id);if(dock)dock.task=null;api.book(`trip:${sh.id}`,-cost,'Transport',`Tour ${sh.id}`,[sh.id,v.id,o.id]);api.workforce.release(`${sh.id}:warehouse`);sh.worker=null;sh.status='transit';v.status='transit';sh.remaining=Math.ceil(sh.distance/VEHICLES[v.type].speed);sh.departedAt=s.t;
-  }else{
-   sh.blocked=null;if(--sh.remaining>0)continue;
-   if(sh.status==='transit'){sh.status='unloading';v.status='unloading';sh.remaining=2+Math.ceil(sh.qty/10);}
-   else if(sh.status==='unloading'){
-    if(sh.cargo.some(id=>{const b=s.batches.find(b=>b.id===id);return !b||b.blocked||b.quality<o.quality;})){sh.blocked='Rückruf: gesperrte Ware darf nicht zugestellt werden';sh.remaining=1;continue;}
-    // Every unit is removed from its physical vehicle batch exactly once.
-    for(const bid of sh.cargo){const b=s.batches.find(x=>x.id===bid);if(b)api.inventory.remove(b.id,b.qty);}
-    o.delivered+=sh.qty;s.stats.delivered+=sh.qty;sh.deliveredAt=s.t;sh.invoiceAmount=Math.round(sh.qty*o.price*(s.t>o.due?0.9:1)*100)/100;sh.paymentAt=s.t+60;
-    if(o.delivered>=o.qty){o.status='fulfilled';s.reputation=Math.min(100,s.reputation+3);}sh.status='returning';v.status='returning';sh.remaining=Math.ceil(sh.distance/VEHICLES[v.type].speed);api.log('delivery',`${o.customer}: ${sh.qty} Stück zugestellt. Zahlung in 60 Minuten.`,[sh.id,o.id]);
-   }else if(sh.status==='returning'){sh.status='complete';sh.completedAt=s.t;v.status='idle';v.shipment=null;v.condition=Math.max(0,v.condition-2);api.workforce.release(`${sh.id}:driver`);sh.driver=null;}
-  }
- }
-}
-function validate(s){
- const bad=m=>{throw new Error('Spielstand ungültig: '+m);};
- for(const v of s.vehicles){if(!VEHICLES[v.type]||!Number.isFinite(v.capacity)||v.capacity!==VEHICLES[v.type].capacity||!Number.isFinite(v.condition)||v.condition<0||v.condition>100||!['idle','loading','transit','unloading','returning','maintenance','service','transfer','tour','rentalReturned'].includes(v.status))bad('Fahrzeug beschädigt.');if(v.status==='maintenance'&&(!v.maintenance||!s.buildings.some(b=>b.id===v.maintenance.workshop&&b.maintenanceTask===v.maintenance.id)))bad('Fahrzeugwartung beschädigt.');if(v.status==='service'&&!s.returns.some(r=>r.id===v.shipment))bad('Rücktransport beschädigt.');if(!['idle','maintenance','service','transfer','tour','rentalReturned'].includes(v.status)&&!s.shipments.some(sh=>sh.id===v.shipment&&sh.vehicleId===v.id&&sh.status===v.status))bad('Fahrzeugzuweisung beschädigt.');}
- validateTransfers(s,bad);
- const occupied=new Set();
- for(const sh of s.shipments){
-  if(!s.orders.some(o=>o.id===sh.orderId)||!s.vehicles.some(v=>v.id===sh.vehicleId)||!Number.isInteger(sh.qty)||sh.qty<1||!Number.isFinite(sh.remaining)||sh.remaining<0||!Array.isArray(sh.cargo)||!['loading','transit','unloading','returning','complete','cancelled'].includes(sh.status))bad('Tour beschädigt.');
-  if(!['complete','cancelled'].includes(sh.status)){if(occupied.has(sh.vehicleId))bad('Fahrzeug doppelt belegt.');occupied.add(sh.vehicleId);}
-  if(['transit','unloading'].includes(sh.status)){
-   if(new Set(sh.cargo).size!==sh.cargo.length)bad('Ladung doppelt zugeordnet.');
-   const cargo=sh.cargo.map(id=>s.batches.find(b=>b.id===id));if(cargo.some(b=>!b||b.location!=='vehicle')||cargo.reduce((n,b)=>n+b.qty,0)!==sh.qty)bad('Fahrzeugladung beschädigt.');
-  }
-  if(sh.status==='loading'&&s.reservations.filter(r=>r.job===sh.id).reduce((n,r)=>n+r.qty,0)!==sh.qty)bad('Ladereservierung beschädigt.');
-  if(sh.paymentAt!=null&&(!Number.isFinite(sh.paymentAt)||!Number.isFinite(sh.invoiceAmount)||sh.invoiceAmount<0||!['returning','complete'].includes(sh.status)))bad('Forderung beschädigt.');
- }
-}
-function startTransfer(s,c,api){
- const site=c.site||s.selectedSite,v=s.vehicles.find(v=>v.id===c.vehicleId),from=s.sites.find(a=>a.id===site),to=s.sites.find(a=>a.id===c.toSite);
- if(!v||v.status!=='idle'||v.site!==site||!from||!to||from.id===to.id||!ITEMS[c.item]||!Number.isInteger(c.qty)||c.qty<1||!fits(v,c.item,c.qty)||v.condition<15)return {ok:false,message:'Transfer prüfen: Standorte, freie Fahrzeugkapazität, Wartung und Menge.'};
- const id=api.id('transfer');if(!api.inventory.reserve(c.item,c.qty,site,id))return {ok:false,message:'Verfügbarer eigener Bestand fehlt.'};
- const distance=Math.max(15,Math.round(Math.hypot(to.x-from.x,to.y-from.y)));
- (s.transfers??=[]).push({id,item:c.item,qty:c.qty,owner:'company',site,fromSite:site,toSite:to.id,vehicleId:v.id,status:'loading',remaining:2+Math.ceil(c.qty/5),duration:2+Math.ceil(c.qty/5),cargo:[],distance,driver:null,worker:null});v.status='transfer';v.shipment=id;return {ok:true,id};
-}
-function stepTransfers(s,api){
- for(const tr of s.transfers||[]){
-  if(['complete','cancelled'].includes(tr.status))continue;
-  const v=s.vehicles.find(v=>v.id===tr.vehicleId);if(!v)continue;
-  const driver=api.workforce.acquire('driver',tr.site,`${tr.id}:driver`);if(!driver){tr.blocked='Fahrpersonal oder Schicht fehlt';continue;}tr.driver=driver.id;
-  if(['loading','unloading'].includes(tr.status)){
-   const site=tr.status==='loading'?tr.site:tr.toSite;
-   let dock=s.buildings.find(b=>b.type==='dock'&&b.site===site&&b.enabled&&b.condition>0&&b.task===tr.id);
-   dock??=s.buildings.find(b=>b.type==='dock'&&b.site===site&&b.enabled&&b.condition>0&&!b.task);
-   if(!dock){tr.blocked='Freie Rampe am '+(tr.status==='loading'?'Start':'Ziel')+' fehlt';continue;}dock.task=tr.id;tr.dock=dock.id;
-   const worker=api.workforce.acquire('warehouse',site,`${tr.id}:warehouse`);if(!worker){tr.blocked='Lagerpersonal am '+(tr.status==='loading'?'Start':'Ziel')+' fehlt';continue;}tr.worker=worker.id;tr.blocked=null;
-   if(--tr.remaining>0)continue;
-   if(tr.status==='loading'){
-    const cost=Math.round(tr.distance*2*VEHICLES[v.type].runningCost*100)/100;
-    if(s.money<cost){tr.blocked='Transferkosten nicht gedeckt';tr.remaining=1;continue;}
-    const cargo=api.inventory.transfer(tr.id,'vehicle',tr.site);if(!cargo){tr.blocked='Reservierte Transferladung fehlt';tr.remaining=1;continue;}
-    tr.cargo=cargo.map(b=>b.id);tr.transportCost=cost;api.book(`transfer-trip:${tr.id}`,-cost,'Transport','Standorttransfer',[tr.id,v.id]);tr.status='transit';tr.remaining=Math.ceil(tr.distance/VEHICLES[v.type].speed);tr.duration=tr.remaining;
-   }else{
-    if(!api.inventory.relocate(tr.cargo,'stock',tr.toSite)){tr.blocked='Zielkapazität fehlt; Ware bleibt im Fahrzeug';tr.remaining=1;continue;}
-    tr.deliveredAt=s.t;tr.status='returning';tr.remaining=Math.ceil(tr.distance/VEHICLES[v.type].speed);tr.duration=tr.remaining;api.log('transfer',`${tr.qty} × ${ITEMS[tr.item].name} am Zielstandort eingelagert.`,[tr.id,tr.toSite]);
-   }
-   dock.task=null;api.workforce.release(`${tr.id}:warehouse`);tr.worker=null;
-  }else{
-   tr.blocked=null;if(--tr.remaining>0)continue;
-   if(tr.status==='transit'){tr.status='unloading';tr.remaining=2+Math.ceil(tr.qty/5);tr.duration=tr.remaining;}
-   else if(tr.status==='returning'){tr.status='complete';tr.completedAt=s.t;v.status='idle';v.shipment=null;v.condition=Math.max(0,v.condition-2);api.workforce.release(`${tr.id}:driver`);tr.driver=null;}
-  }
- }
-}
-function validateTransfers(s,bad){
- const assigned=new Set();
- for(const tr of s.transfers||[]){
-  if(!ITEMS[tr.item]||!Number.isInteger(tr.qty)||tr.qty<1||!s.sites.some(a=>a.id===tr.site)||!s.sites.some(a=>a.id===tr.toSite)||tr.site===tr.toSite||!s.vehicles.some(v=>v.id===tr.vehicleId)||!Number.isFinite(tr.remaining)||tr.remaining<0||!Array.isArray(tr.cargo)||!['loading','transit','unloading','returning','complete','cancelled'].includes(tr.status))bad('Standorttransfer beschädigt.');
-  if(!['complete','cancelled'].includes(tr.status)){
-   const v=s.vehicles.find(v=>v.id===tr.vehicleId);if(v.status!=='transfer'||v.shipment!==tr.id||assigned.has(v.id))bad('Transferfahrzeug beschädigt.');assigned.add(v.id);
-  }
-  if(tr.status==='loading'&&s.reservations.filter(r=>r.job===tr.id).reduce((n,r)=>n+r.qty,0)!==tr.qty)bad('Transferreservierung beschädigt.');
-  if(['transit','unloading'].includes(tr.status)){
-   const cargo=tr.cargo.map(id=>s.batches.find(b=>b.id===id));if(new Set(tr.cargo).size!==tr.cargo.length||cargo.some(b=>!b||b.location!=='vehicle'||b.item!==tr.item||b.owner!==tr.owner)||cargo.reduce((n,b)=>n+b.qty,0)!==tr.qty)bad('Transferladung beschädigt.');
-  }
- }
- for(const v of s.vehicles)if(v.status==='transfer'&&!assigned.has(v.id))bad('Fahrzeug ohne Standorttransfer.');
-}
-
-return Object.freeze(Object.defineProperties({}, {"init":{enumerable:true,get:()=>init},"handle":{enumerable:true,get:()=>handle},"step":{enumerable:true,get:()=>step},"validate":{enumerable:true,get:()=>validate}}));
-})();
 // management.js
 __modules[13]=(()=>{
 const {RESEARCH,ITEMS,VEHICLES,BUILDINGS}=__modules[1];
@@ -1923,7 +1949,7 @@ return Object.freeze(Object.defineProperties({}, {"init":{enumerable:true,get:()
 // special.js
 __modules[15]=(()=>{
 const {ITEMS,BUILDINGS,VEHICLES}=__modules[1];
-const {activeBatches,findBatch}=__modules[9];
+const {activeBatches,findBatch}=__modules[10];
 
 
 function init(){}
@@ -2383,11 +2409,12 @@ const SHIPPERS=['Kranichfeld Versandhaus','Lindenstein Online-Handel','Talbrück
 const LANES=['Nordviertel','Altstadt Süd','Am Kanal','Hügelfeld','Westring','Bachgrund','Ostpark','Lerchenhöhe','Fischerdorf','Industriegebiet Nord'];
 // Depot-Stufe (A02 W1b): Ankünfte 08:30–12:00, damit Tagschicht (08–16 Uhr) sortieren und zustellen kann.
 const ARRIVAL_MINUTES=[510,540,570,600,630,660,690,720];
-/** Spielwerte Depot-Stufe (A02 W1b, docs/BALANCING-0.9-W1.md). start = Startangebot, offer = Folgeangebote.
+/** Spielwerte Depot-Stufe (A02 W1b, Preis/Volumen W1c: 7–8,50 €/Paket (A01), Volumen füllt 1 Lagerkraft + 1 Lieferwagen;
+ *  docs/BALANCING-0.9-W1.md Abschnitt 9). start = Startangebot, offer = Folgeangebote.
  *  parcels: Spanne in Zehnern je Ankunft; price (offer): [Basis €, Schritt €, Schritte]; sla: start in Minuten, offer in Stunden; days: Laufzeit in Tagen. */
 const TERMS={
- start:{minutes:[540,570],parcels:[10,13],price:15,sla:360,days:7},
- offer:{parcels:[5,10],price:[13.5,0.25,10],sla:[5,8],days:[5,10]}
+ start:{minutes:[540,570],parcels:[20,25],price:8,sla:360,days:7},
+ offer:{parcels:[6,11],price:[7,0.25,6],sla:[5,8],days:[5,10]}
 };
 const STATUSES=['offer','active','ended'];
 
@@ -2395,7 +2422,7 @@ const pick=(api,list)=>list[Math.floor(api.random()*list.length)];
 const int=(api,min,max)=>min+Math.floor(api.random()*(max-min+1));
 const cents=n=>Math.round(n*100)/100;
 
-/** Deterministisches Angebot aus api.random. small=true: Startangebot (1 Ankunft/Tag, 100–130 Pakete). */
+/** Deterministisches Angebot aus api.random. small=true: Startangebot (1 Ankunft/Tag, 200–250 Pakete). */
 function makeOffer(s,api,small=false){
  const shipper=pick(api,SHIPPERS),laneCount=small?int(api,1,2):int(api,1,3),names=[...LANES],lanes=[];
  for(let i=0;i<laneCount;i++){const name=names.splice(Math.floor(api.random()*names.length),1)[0];lanes.push({id:`lane-${i+1}`,name,distance:int(api,15,45)});}
@@ -2505,7 +2532,7 @@ return Object.freeze(Object.defineProperties({}, {"SCHEDULE_LEAD":{enumerable:tr
 // sorting.js
 __modules[20]=(()=>{
 const {BUILDINGS}=__modules[1];
-const {siteItemBatches}=__modules[9];
+const {siteItemBatches}=__modules[10];
 const {onShift, workRate}=__modules[4];
 // Entladung → Sortierung (A05, W1-S3, docs/SCHNITTSTELLEN-0.9-W1.md).
 // Pakete (item 'parcel') in location 'inbound' wandern je Auftrag (owner bleibt) nach 'stock' und sind erst dann
@@ -2713,11 +2740,11 @@ return Object.freeze(Object.defineProperties({}, {"footprint":{enumerable:true,g
 })();
 // core.js
 __modules[22]=(()=>{
-const inventory=__modules[9];
+const inventory=__modules[10];
 const workforce=__modules[4];
-const production=__modules[10];
-const economy=__modules[11];
-const transport=__modules[12];
+const production=__modules[11];
+const economy=__modules[12];
+const transport=__modules[6];
 const management=__modules[13];
 const service=__modules[3];
 const network=__modules[14];
@@ -3942,18 +3969,226 @@ function createScene(canvas, callbacks = {}) {
 
 return Object.freeze(Object.defineProperties({}, {"chooseRenderer":{enumerable:true,get:()=>chooseRenderer},"hasWebGL":{enumerable:true,get:()=>hasWebGL},"NO_WEBGL_NOTICE":{enumerable:true,get:()=>NO_WEBGL_NOTICE},"createScene":{enumerable:true,get:()=>createScene}}));
 })();
-// app.js
+// perf-overlay.js
 __modules[27]=(()=>{
+
+// Messanzeige für 60-FPS-Prüfung auf dem eigenen Gerät (A12, W1c). Aktiv nur mit URL-Parameter ?perf=1.
+// Ohne Parameter liefert startPerfOverlay() null: kein Observer, kein requestAnimationFrame, kein DOM, kein Frame-Code.
+// Keine Netzwerkzugriffe, kein Spielzustand: misst nur, bucht weder Ware noch Geld.
+
+const FRAME_BUDGET_MS = 16.7;
+// rAF-Abstände bei 60 Hz streuen um 16,6–16,8 ms (VSync-Rauschen). Bewertung toleriert 0,5 ms; Rohwert > 16,7 ms bleibt sichtbar.
+const JITTER_MS = 0.5;
+const WINDOW_MS = 10000;
+const MEASURE_MS = 60000;
+
+/** true, wenn der URL-Suchteil perf=1 (oder perf=true/ja) enthält. */
+function perfEnabled(search = '') {
+  try { const v = new URLSearchParams(search || '').get('perf'); return v === '1' || v === 'true' || v === 'ja'; } catch { return false; }
+}
+/** Quantil (nächstliegender Rang) einer aufsteigend sortierten Liste; leer → null. */
+function quantile(sorted, p) {
+  if (!sorted.length) return null;
+  return sorted[Math.min(sorted.length - 1, Math.max(0, Math.ceil(p * sorted.length) - 1))];
+}
+/** Kennzahlen aus Frame-Abständen (ms). fps aus Fensterlänge, sonst aus Summe der Abstände. */
+function frameStats(deltas, windowMs = 0, budget = FRAME_BUDGET_MS, jitter = JITTER_MS) {
+  const v = [...deltas].sort((a, b) => a - b), n = v.length, sum = v.reduce((a, b) => a + b, 0);
+  const share = limit => n ? v.filter(d => d > limit).length / n : 0;
+  return {
+    frames: n, fps: n ? n / ((windowMs || sum) / 1000) : 0,
+    medianMs: quantile(v, .5), p95Ms: quantile(v, .95), p99Ms: quantile(v, .99), maxMs: n ? v[n - 1] : null,
+    overBudget: share(budget), overBudgetTol: share(budget + jitter), over20: share(20), over33: share(33.4)
+  };
+}
+/** FPS gleitend über windowMs: Anzahl Frame-Zeitstempel im Fenster (now-windowMs, now]. */
+function rollingFps(stamps, now, windowMs = 1000) {
+  let n = 0; for (let i = stamps.length - 1; i >= 0 && stamps[i] > now - windowMs; i--) n++;
+  return n * 1000 / windowMs;
+}
+/** Entfernt Einträge älter als cutoff aus einem nach Zeit sortierten Feld paralleler Listen (in place). */
+function trimBefore(times, cutoff, ...lists) {
+  let i = 0; while (i < times.length && times[i] <= cutoff) i++;
+  if (i) { times.splice(0, i); for (const l of lists) l.splice(0, i); }
+  return i;
+}
+/** Long Tasks [{ms}] → {count,totalMs,maxMs}. */
+function longTaskSummary(tasks) {
+  let total = 0, max = 0; for (const t of tasks) { total += t.ms; if (t.ms > max) max = t.ms; }
+  return { count: tasks.length, totalMs: total, maxMs: max };
+}
+/** Bewertung nach Ziel: p95 ≤ 16,7 ms und < 5 % Frames darüber (je mit VSync-Toleranz). */
+function assess(stats, budget = FRAME_BUDGET_MS, jitter = JITTER_MS) {
+  if (!stats.frames) return { ok: false, text: 'Keine Frames gemessen' };
+  const p95ok = stats.p95Ms <= budget + jitter, shareOk = stats.overBudgetTol < .05;
+  return { ok: p95ok && shareOk, p95ok, shareOk, text: p95ok && shareOk ? 'Ziel erreicht (60 FPS stabil)' : 'Ziel verfehlt' + (!p95ok ? ' · p95 zu hoch' : '') + (!shareOk ? ' · zu viele langsame Frames' : '') };
+}
+const n1 = v => v == null ? '—' : (Math.round(v * 10) / 10).toLocaleString('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const n2 = v => v == null ? '—' : (Math.round(v * 100) / 100).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const pct = v => n1(v * 100) + ' %';
+const speedLabel = s => s ? s + '×' : 'Pause';
+const VIEW = { hall: 'Halle', site: 'Gelände', network: 'Netzwerk', flat: 'Grundriss' };
+
+/** Ergebnistext der 60-s-Messung (zum Kopieren). r: {stats,longTasks,sim,meta,render,hidden,seconds}. */
+function formatReport(r) {
+  const s = r.stats, a = assess(s), lt = r.longTasks, m = r.meta || {}, ri = r.render;
+  const lines = [
+    'Industrie & Logistik – 60-s-Messung',
+    `Ergebnis: ${a.text}${r.hidden ? ' · UNGÜLTIG (Tab war im Hintergrund)' : ''}`,
+    `Dauer: ${n1(r.seconds)} s · Frames: ${s.frames} · FPS Ø: ${n1(s.fps)}`,
+    `Frame-Zeit Median/p95/p99/max: ${n2(s.medianMs)} / ${n2(s.p95Ms)} / ${n2(s.p99Ms)} / ${n1(s.maxMs)} ms`,
+    `Frames > 16,7 ms: ${pct(s.overBudget)} (mit 0,5 ms Toleranz: ${pct(s.overBudgetTol)}) · > 20 ms: ${pct(s.over20)} · > 33,4 ms: ${pct(s.over33)}`,
+    `Long Tasks: ${lt ? `${lt.count} · Summe ${Math.round(lt.totalMs)} ms · längste ${Math.round(lt.maxMs)} ms` : 'nicht verfügbar (Browser)'}`,
+    `Sim-Zeit: Ø ${n2(r.sim.perFrame)} ms je Frame · ${r.sim.steps} Schritte · max ${n2(r.sim.maxMs)} ms je Schritt`,
+    `Darstellung: ${ri ? `${ri.drawCalls} Draw Calls · ${ri.triangles.toLocaleString('de-DE')} Dreiecke · Pixelratio ${n2(ri.pixelRatio)}` : 'Canvas 2D'}`,
+    `Renderer: ${m.renderer || '—'}`,
+    `Einstellung: Geschwindigkeit ${m.speed || '—'} · Ansicht ${m.view || '—'} · Fenster ${m.viewport || '—'} · devicePixelRatio ${m.dpr ?? '—'}`,
+    `Version: ${m.version || '—'} · Zeit: ${m.date || '—'}`,
+    `Browser: ${m.ua || '—'}`
+  ];
+  return lines.join('\n');
+}
+
+/** WebGL-Version und GPU-Bezeichnung des Szenen-Renderers (ohne eigenen Kontext, wenn möglich). */
+function rendererInfo(scene, doc = globalThis.document) {
+  try {
+    let gl = scene?.renderer?.getContext?.();
+    if (!gl) return 'Canvas 2D';
+    const v2 = typeof WebGL2RenderingContext !== 'undefined' && gl instanceof WebGL2RenderingContext;
+    const ext = gl.getExtension('WEBGL_debug_renderer_info');
+    const gpu = ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
+    return `${v2 ? 'WebGL 2' : 'WebGL 1'} · ${gpu || 'unbekannt'}`;
+  } catch { return 'unbekannt'; }
+}
+
+const CSS = `#perfOverlay{position:fixed;top:calc(var(--hdr,56px) + 8px);right:calc(var(--tools,60px) + 8px);z-index:60;width:290px;max-width:calc(100vw - 24px);padding:8px 10px;border-radius:8px;background:rgba(18,30,28,.88);color:#e8f2ee;font:11px/1.45 ui-monospace,Consolas,monospace;box-shadow:0 4px 16px rgba(0,0,0,.25)}
+#perfOverlay b{color:#9fe3c8;font-weight:600}#perfOverlay .row{display:flex;justify-content:space-between;gap:8px}#perfOverlay .row span:last-child{text-align:right}
+#perfOverlay .head{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;font-weight:700;letter-spacing:.04em}
+#perfOverlay button{font:inherit;color:#10201c;background:#9fe3c8;border:0;border-radius:4px;padding:3px 8px;cursor:pointer;margin-top:6px}#perfOverlay button:disabled{opacity:.6;cursor:default}
+#perfOverlay .x{background:transparent;color:#e8f2ee;margin:0;padding:0 4px}#perfOverlay .gpu{opacity:.8;word-break:break-word;margin-top:2px}
+#perfOverlay pre{white-space:pre-wrap;margin:6px 0 0;max-height:30vh;overflow:auto;background:rgba(255,255,255,.06);padding:6px;border-radius:4px}
+#perfOverlay textarea{width:100%;height:120px;margin-top:6px;font:inherit}#perfOverlay .ok{color:#9fe3c8}#perfOverlay .bad{color:#ffb4a3}`;
+
+/**
+ * Startet die Messanzeige, falls ?perf=1. opts: {scene, speed:()=>number, search, doc, win}.
+ * Rückgabe null (inaktiv) oder {sim(ms,steps), stop(), snapshot(), measure(ms)}.
+ */
+function startPerfOverlay(opts = {}) {
+  const win = opts.win || globalThis.window, doc = opts.doc || globalThis.document;
+  const search = opts.search ?? globalThis.location?.search;
+  if (!perfEnabled(search) || !win?.requestAnimationFrame || !doc?.createElement) return null;
+  const scene = opts.scene, getSpeed = opts.speed || (() => null), now = () => performance.now();
+
+  // Ringpuffer letzte 10 s: Zeitstempel + Abstände; Sim-Zeit je Schritt mit Zeitstempel; Long Tasks.
+  const times = [], deltas = [], simTimes = [], simMs = [], ltTimes = [], ltMs = [];
+  let last = 0, rafId = 0, timer = 0, run = null, lastReport = null, observer = null, longTaskOk = false, stopped = false;
+  try {
+    if (typeof PerformanceObserver !== 'undefined' && PerformanceObserver.supportedEntryTypes?.includes('longtask')) {
+      observer = new PerformanceObserver(list => { for (const e of list.getEntries()) { ltTimes.push(e.startTime + e.duration); ltMs.push(e.duration); if (run) run.longtasks.push({ ms: e.duration }); } });
+      observer.observe({ type: 'longtask' }); longTaskOk = true;
+    }
+  } catch { observer = null; longTaskOk = false; }
+
+  const frame = t => {
+    if (stopped) return; rafId = win.requestAnimationFrame(frame);
+    if (last && !doc.hidden) { const d = t - last; times.push(t); deltas.push(d); if (run) run.deltas.push(d); }
+    last = t;
+  };
+  rafId = win.requestAnimationFrame(frame);
+  const onVis = () => { last = 0; if (doc.hidden && run) run.hidden = true; };
+  doc.addEventListener('visibilitychange', onVis);
+
+  // ----- DOM -----
+  const style = doc.createElement('style'); style.id = 'perfOverlayStyle'; style.textContent = CSS; doc.head.appendChild(style);
+  const box = doc.createElement('div'); box.id = 'perfOverlay'; box.setAttribute('role', 'region'); box.setAttribute('aria-label', 'Leistungsmessung');
+  box.innerHTML = `<div class="head"><span>LEISTUNG · ?perf=1</span><button class="x" data-perf="hide" title="Messanzeige ausblenden" aria-label="Messanzeige ausblenden">×</button></div><div data-perf="live"></div><div class="gpu" data-perf="gpu"></div><button data-perf="measure">60-s-Messung</button><div data-perf="result" role="status"></div>`;
+  doc.body.appendChild(box);
+  const live = box.querySelector('[data-perf="live"]'), gpuEl = box.querySelector('[data-perf="gpu"]'), btn = box.querySelector('[data-perf="measure"]'), out = box.querySelector('[data-perf="result"]');
+  const renderer = rendererInfo(scene, doc); gpuEl.textContent = 'Renderer: ' + renderer;
+  const renderInfo = () => { try { return scene?.renderInfo?.() || null; } catch { return null; } };
+  const row = (k, v, cls = '') => `<div class="row"><span>${k}</span><span${cls ? ` class="${cls}"` : ''}>${v}</span></div>`;
+
+  function snapshot() {
+    const t = now(); trimBefore(times, t - WINDOW_MS, deltas); trimBefore(simTimes, t - WINDOW_MS, simMs); trimBefore(ltTimes, t - WINDOW_MS, ltMs);
+    const stats = frameStats(deltas), simSum = simMs.reduce((a, b) => a + b, 0);
+    return { fps: rollingFps(times, t, 1000), stats, longTasks: longTaskOk ? { count: ltMs.length, totalMs: ltMs.reduce((a, b) => a + b, 0) } : null,
+      simPerFrame: stats.frames ? simSum / stats.frames : 0, render: renderInfo(), speed: getSpeed() };
+  }
+  function update() {
+    const s = snapshot(), st = s.stats, r = s.render;
+    live.innerHTML = row('FPS (1 s)', `<b>${n1(s.fps)}</b>`)
+      + row('Med/p95/p99', `${n1(st.medianMs)} / ${n1(st.p95Ms)} / ${n1(st.p99Ms)} ms`, st.p95Ms > FRAME_BUDGET_MS + JITTER_MS ? 'bad' : 'ok')
+      + row('Frames > 16,7 ms', pct(st.overBudget), st.overBudgetTol >= .05 ? 'bad' : '')
+      + row('Long Tasks (10 s)', s.longTasks ? `${s.longTasks.count} · ${Math.round(s.longTasks.totalMs)} ms` : 'n. v.')
+      + row('Sim je Frame', n2(s.simPerFrame) + ' ms')
+      + (r ? row('Draw Calls / Dreiecke', `${r.drawCalls} / ${r.triangles.toLocaleString('de-DE')}`) + row('Pixelratio', n2(r.pixelRatio)) : row('Darstellung', 'Canvas 2D'))
+      + row('Geschwindigkeit', speedLabel(s.speed));
+    if (run) { const left = Math.max(0, Math.ceil((run.end - now()) / 1000)); btn.textContent = `Messung läuft … ${left} s`; if (now() >= run.end) finish(); }
+  }
+  function measure(ms = MEASURE_MS) {
+    if (run) return; out.textContent = '';
+    run = { start: now(), end: now() + ms, deltas: [], longtasks: [], simMs: 0, simSteps: 0, simMax: 0, hidden: !!doc.hidden };
+    btn.disabled = true; update();
+  }
+  function finish() {
+    const r = run; run = null; btn.disabled = false; btn.textContent = '60-s-Messung';
+    const seconds = (now() - r.start) / 1000, stats = frameStats(r.deltas, seconds * 1000);
+    const view = scene?.view, version = doc.getElementById?.('appVersion')?.textContent;
+    const report = { seconds, stats, hidden: r.hidden, longTasks: longTaskOk ? longTaskSummary(r.longtasks) : null, render: renderInfo(),
+      sim: { perFrame: stats.frames ? r.simMs / stats.frames : 0, steps: r.simSteps, maxMs: r.simMax },
+      meta: { renderer, speed: speedLabel(getSpeed()), view: VIEW[view] || view || '2D', viewport: `${win.innerWidth}×${win.innerHeight}`, dpr: win.devicePixelRatio, version, date: new Date().toLocaleString('de-DE'), ua: win.navigator?.userAgent } };
+    const text = formatReport(report), a = assess(stats);
+    lastReport = { ...report, text, ok: a.ok && !r.hidden };
+    out.innerHTML = '';
+    const pre = doc.createElement('pre'); pre.textContent = text; pre.className = a.ok && !r.hidden ? 'ok' : 'bad';
+    const copy = doc.createElement('button'); copy.textContent = 'Kopieren'; copy.dataset.perf = 'copy';
+    copy.addEventListener('click', async () => {
+      try { await win.navigator.clipboard.writeText(text); copy.textContent = 'Kopiert ✓'; }
+      catch { // Rückfall: markiertes Textfeld zum manuellen Kopieren (Strg+C).
+        let ta = out.querySelector('textarea'); if (!ta) { ta = doc.createElement('textarea'); ta.readOnly = true; ta.value = text; ta.setAttribute('aria-label', 'Messergebnis zum Kopieren'); out.appendChild(ta); }
+        ta.focus(); ta.select(); copy.textContent = 'Text markiert · Strg+C';
+      }
+    });
+    out.append(pre, copy);
+  }
+  btn.addEventListener('click', () => measure());
+  box.querySelector('[data-perf="hide"]').addEventListener('click', () => stop());
+  timer = win.setInterval(update, 500); update();
+
+  function stop() {
+    stopped = true; win.cancelAnimationFrame(rafId); win.clearInterval(timer); observer?.disconnect();
+    doc.removeEventListener('visibilitychange', onVis); box.remove(); style.remove(); run = null;
+  }
+  const api = {
+    /** Sim-Zeit eines sim.step-Aufrufs melden (ms, Anzahl Spielminuten). */
+    sim(ms, steps = 1) { simTimes.push(now()); simMs.push(ms); if (run) { run.simMs += ms; run.simSteps += steps; if (ms > run.simMax) run.simMax = ms; } },
+    stop, snapshot, measure, finish: () => run && finish(), get report() { return lastReport; }, get running() { return !!run; }
+  };
+  // Messgriff für Browserprüfung (tests/browser/perf.mjs); nicht aufzählbar, kein Spielzustand.
+  Object.defineProperty(win, '__perfOverlay', { value: api, configurable: true });
+  return api;
+}
+
+return Object.freeze(Object.defineProperties({}, {"FRAME_BUDGET_MS":{enumerable:true,get:()=>FRAME_BUDGET_MS},"JITTER_MS":{enumerable:true,get:()=>JITTER_MS},"WINDOW_MS":{enumerable:true,get:()=>WINDOW_MS},"MEASURE_MS":{enumerable:true,get:()=>MEASURE_MS},"perfEnabled":{enumerable:true,get:()=>perfEnabled},"quantile":{enumerable:true,get:()=>quantile},"frameStats":{enumerable:true,get:()=>frameStats},"rollingFps":{enumerable:true,get:()=>rollingFps},"trimBefore":{enumerable:true,get:()=>trimBefore},"longTaskSummary":{enumerable:true,get:()=>longTaskSummary},"assess":{enumerable:true,get:()=>assess},"speedLabel":{enumerable:true,get:()=>speedLabel},"formatReport":{enumerable:true,get:()=>formatReport},"rendererInfo":{enumerable:true,get:()=>rendererInfo},"startPerfOverlay":{enumerable:true,get:()=>startPerfOverlay}}));
+})();
+// app.js
+__modules[28]=(()=>{
 const {injectPortableSave,portableTemplate}=__modules[0];
 const {RENTAL_RATES}=__modules[2];
-const {planTour}=__modules[5];
-const {createSaveGuard}=__modules[6];
-const {createSaveStore}=__modules[7];
-const {report}=__modules[8];
+const {planTour,committedQty}=__modules[5];
+const {maxLoad,maintenanceCost,EXTERNAL_SERVICE,WEAR_WARN}=__modules[6];
+const {createSaveGuard}=__modules[7];
+const {createSaveStore}=__modules[8];
+const {report}=__modules[9];
 const {Simulation}=__modules[22];
 const {ITEMS,BUILDINGS,RECIPES,ROLES,VEHICLES,RESEARCH}=__modules[1];
 const {createScene}=__modules[26];
-const {onShift}=__modules[4];
+const {onShift,describeAssignment,workRate,UNLOAD_BASE}=__modules[4];
+const {gateKey,unloadKey}=__modules[18];
+const {startPerfOverlay}=__modules[27];
+
+
+
 
 
 
@@ -4246,6 +4481,16 @@ const button=(text,action,id='',cls='')=>`<button class="${cls}" data-action="${
 const num=(v,t,neg=false)=>`<div class="number ${neg?'negative':''}"><b>${v}</b><small>${esc(t)}</small></div>`;
 const opts=(cat,sel)=>Object.entries(cat).map(([id,v])=>`<option value="${id}" ${id===sel?'selected':''}>${esc(v.name||v)}</option>`).join('');
 const field=(title,html,full=false)=>`<label class="field ${full?'full':''}">${esc(title)}${html}</label>`;
+/** Fahrzeugkapazität verständlich: Volumeneinheiten, Nutzlast und Paketäquivalent nach derselben Regel wie die Simulation (transport.maxLoad). */
+const weightCap=v=>VEHICLES[v.type]?.weightCapacity||v.capacity*4;
+const capacityText=v=>`${fmt(v.capacity)} Volumeneinheiten · ${fmt(weightCap(v))} kg · ≈ ${fmt(maxLoad(v,'parcel'))} Pakete`;
+/** Offene, noch nicht verplante Menge und je Fahrzeug passende Höchstmenge für einen Auftrag. */
+const openQty=(s,o)=>Math.max(0,o.qty-o.delivered-committedQty(s,o.id));
+const dispatchMax=(s,o,v)=>Math.min(openQty(s,o),maxLoad(v,o.item));
+function dispatchForm(s,o){const vs=s.vehicles.filter(v=>v.status==='idle'&&v.site===s.selectedSite),item=name(ITEMS,o.item),open=openQty(s,o),first=vs.find(v=>dispatchMax(s,o,v)>0)||vs[0],max=first?dispatchMax(s,o,first):open;
+ return `<form data-form="dispatch" data-id="${o.id}" class="form-grid">${field('Fahrzeug',`<select name="vehicleId" required>${vs.map(v=>{const m=maxLoad(v,o.item);return `<option value="${v.id}" data-max="${dispatchMax(s,o,v)}" ${v===first?'selected':''}>${esc(v.name)} · ${m?`fasst ${fmt(m)} × ${esc(item)}`:'ungeeignet (Kühlung)'}${v.condition<15?' · Wartung nötig':''}</option>`;}).join('')||'<option value="">Kein freies Fahrzeug</option>'}</select>`,true)}<label class="field">Teilmenge · <span data-dispatch-max>max. ${fmt(max)}</span> von ${fmt(open)} offen<input name="qty" type="number" min="1" max="${Math.max(1,max)}" value="${Math.max(1,max)}" required></label><button class="primary" style="grid-column:auto;align-self:end">Lieferung starten →</button></form>`;}
+/** Fahrzeugwechsel im Versandformular: Höchstmenge und Vorschlag aus data-max der gewählten Option. */
+function syncDispatchQty(form){const sel=form.querySelector?.('select[name="vehicleId"]'),qty=form.querySelector?.('input[name="qty"]');if(!sel||!qty)return;const max=Number(sel.options?.[sel.selectedIndex]?.dataset?.max)||0;qty.max=String(Math.max(1,max));qty.value=String(Math.max(1,max));const hint=form.querySelector('[data-dispatch-max]');if(hint)hint.textContent='max. '+fmt(max);}
 const progress=v=>`<div class="progress"><span style="width:${Math.max(0,Math.min(100,v*100))}%"></span></div>`;
 // Geführter Einstieg Logistik (A02 W1b): Depot-Stufe in Reihenfolge des ersten Kreislaufs; Sortierplatz zuletzt und optional.
 function requirements(){const s=sim.state,b=s.buildings.filter(x=>x.site===s.selectedSite),site=s.selectedSite,hub=s.orders.filter(o=>o.source==='hub'),hubIds=new Set(hub.map(o=>o.id));
@@ -4331,12 +4576,13 @@ function collectHud(s){
   else if(a?.kind==='tour')dest=status==='returning'||status==='returnUnloading'?siteName(v.site):orders.get(task.stops?.[task.stopIndex]?.orderId)?.customer||'Sammeltour';
   else if(a?.kind==='transfer')dest=siteName(task.toSite);
   else if(a?.kind==='service')dest='Retoure · '+(orders.get(task.orderId)?.customer||task.orderId);
-  else if(v.status==='maintenance')dest='Werkstatt';
+  else if(v.status==='maintenance')dest=v.maintenance?.external?'Externe Wartung':'Werkstatt';
   if(status==='returning'&&a?.kind!=='tour')dest='Rückfahrt · '+dest;
   const rest=Number.isFinite(task?.remaining)&&task.remaining>0?task.remaining:Number.isFinite(v.maintenance?.remaining)&&v.maintenance.remaining>0?v.maintenance.remaining:null;
   const tone=v.condition<15?'bad':task?.blocked?'wait':away?'move':'neutral';
   h.fleet[tone]=(h.fleet[tone]||0)+1;
-  if(v.condition<15)alert('vc:'+v.id,'bad',`${v.name} · Wartung nötig`,`Zustand ${fmt(v.condition)} % · unter 15 % keine Lieferung`,v.id);
+  if(v.condition<15)alert('vc:'+v.id,'bad',`${v.name} · Wartung nötig`,`Zustand ${fmt(v.condition)} % · unter 15 % keine Lieferung · Werkstatt mit Ersatzteil oder externe Wartung`,v.id);
+  else if(v.condition<WEAR_WARN&&v.status!=='maintenance')alert('vw:'+v.id,'wait',`${v.name} · Wartung planen`,`Zustand ${fmt(v.condition)} % · unter 15 % keine Fahrt · Werkstatt + Ersatzteil (${euro(maintenanceCost(v))}) oder externe Wartung (${euro(maintenanceCost(v,true))})`,v.id);
   h.vehicles.push({key:v.id,id:v.id,name:v.name||v.id,type:VEHICLES[v.type]?.name||v.type,route:`${siteName(v.site)} → ${dest}`,status:label(v.status)+(task&&task.status!==v.status?' · '+label(task.status):''),hint:task?.blocked||'',tone,rest:rest==null?'—':fmt(rest)+' Min.'});
  }
  if(s.money<0)alert('money','bad','Kontostand negativ',euro(s.money)+' · Kontokorrent prüfen',null,'finance');
@@ -4417,12 +4663,12 @@ function overview(){const s=sim.state,req=requirements(),blocked=s.buildings.fil
 function production(){const s=sim.state,rows=filtered(s.buildings.filter(b=>b.site===s.selectedSite));return `<div class="notice">Jede Station verarbeitet nur passende Rezepte. Material, Arbeitskraft, Energie und freie Ausgabe müssen verfügbar sein.</div>${rows.map(b=>{const j=s.jobs.find(j=>j.id===b.job);return `<div class="card"><div class="card-top"><div><h3>${esc(name(BUILDINGS,b.type))}</h3><small>${esc(b.id)} · Position ${b.x+1}/${b.y+1}</small></div>${badge(label(b.status),['materials','staff','storage','power','broken'].includes(b.status)?'warn':'')}</div>${j?progress(b.progress)+kv('Auftrag',esc(name(RECIPES,j.recipe)))+kv('Restzeit',fmt(j.remaining,1)+' Min.'):kv('Prozess',esc(name(RECIPES,b.recipe)))}${kv('Zustand',fmt(b.condition)+' %')}<div class="actions">${button('Details','select',b.id)}${button(b.enabled?'Pausieren':'Fortsetzen','toggle',b.id)}${button('Versetzen','move',b.id)}</div></div>`;}).join('')||empty('Noch keine Anlagen','Baue deine erste Linie über den Baumodus.')}<div class="actions">${button('Anlage bauen','build','','primary')}</div>`;}
 function inventory(){const s=sim.state,batches=filtered(s.batches.filter(b=>b.qty>0&&b.site===s.selectedSite)),{used,cap}=siteLoad(s,s.selectedSite);return `<div class="numbers">${num(fmt(used),'Einheiten am Standort')}${num(fmt(cap),'Lagerkapazität')}${num(fmt(s.reservations.reduce((n,r)=>n+r.qty,0)),'Reservierte Einheiten')}</div>${progress(cap?used/cap:0)}<div class="table-wrap"><table><thead><tr><th>Charge / Artikel</th><th class="num">Menge</th><th>Ort</th><th>Eigentum</th><th class="num">Qualität</th><th></th></tr></thead><tbody>${batches.map(b=>`<tr><td><b>${esc(name(ITEMS,b.item))}</b><br><small class="muted">${esc(b.id)}</small></td><td class="num">${fmt(b.qty)}${b.reserved?`<br><small>${b.reserved} gebunden</small>`:''}</td><td>${esc(label(b.location))}</td><td>${esc(label(b.owner))}</td><td class="num">${fmt(b.quality)} %</td><td>${button('Akte','select',b.id)}</td></tr>`).join('')}</tbody></table></div>${!batches.length?empty('Lager leer','Bestelle Material. Eine Lagerkraft prüft und lagert jede Lieferung ein.'):''}<div class="actions">${button('Material einkaufen','panel-purchasing','','primary')}${button('Kapazität bauen','build')}</div>`;}
 function purchasing(){const s=sim.state,materials=Object.fromEntries(Object.entries(ITEMS).filter(([id,v])=>['housing','board','carton','spare','metal','sensor_component'].includes(id)||v.purchasable));return `<section class="section"><h3>Material bestellen</h3><p class="fine" style="margin:9px 0 15px">Regulär: 30 Min. · Express: 10 Min. / +30 % · Premium: 45 Min. / +18 %, höhere Qualität.</p><form data-form="buy" class="form-grid">${field('Material',`<select name="item">${opts(materials)}</select>`,true)}${field('Menge','<input name="qty" type="number" min="1" max="1000" value="12" required>')}${field('Lieferant',`<select name="supplier"><option value="standard">Regulär</option><option value="express">Express</option><option value="quality">Premium</option></select>`)}<button class="primary">Verbindlich bestellen →</button></form><div class="actions">${button('Startmaterial · 12 Leuchten','buy-kit')}</div></section><section class="section"><div class="section-title"><h3>Bestellungen</h3>${badge(s.purchases.length+' Vorgänge')}</div>${filtered(s.purchases).slice().reverse().map(p=>`<div class="card"><div class="card-top"><h3>${p.qty} × ${esc(name(ITEMS,p.item))}</h3>${badge(label(p.status),p.blocked?'warn':p.status==='stored'?'good':'')}</div>${kv('Bestellwert',euro(p.cost))}${kv('Ankunft',time(p.eta))}${p.blocked?`<p>${esc(p.blocked)}</p>`:''}<small>${esc(p.id)} · ${label(p.supplier)}</small></div>`).join('')||empty('Keine offenen Bestellungen')}</section>`;}
-function staff(){const s=sim.state;return `<form data-form="hire" class="form-grid"><label class="field">Rolle<select name="role">${opts(ROLES)}</select></label><button class="primary" style="grid-column:auto;align-self:end">Person einstellen</button></form><p class="fine" style="margin:10px 0 20px">Tagschicht 08–16 Uhr. Beschäftigte können nur eine Aufgabe gleichzeitig übernehmen. Lohn je aktiver Schichtminute.</p>${filtered(s.workers).map(w=>`<div class="card"><div class="card-top"><div><h3>${esc(w.name)}</h3><small>${esc(name(ROLES,w.role))} · ${euro(w.wage)}/h</small></div>${badge(onShift(w,s.t)?w.task?'Beschäftigt':'Bereit':'Feierabend')}</div><div class="grid2"><div>${kv('Qualifikation',fmt(w.skill,2)+'×')}${w.training?kv('Fortbildung',fmt(w.training.remaining)+' Min.'):''}${kv('Müdigkeit',fmt(w.fatigue)+' %')}</div><div>${kv('Tätigkeit',esc(w.activity||'Bereit'))}${kv('Standort',esc(s.sites.find(x=>x.id===w.site)?.name))}</div></div><select aria-label="Schicht für ${esc(w.name)}" data-shift="${w.id}">${['day','night','all'].map(k=>`<option value="${k}" ${k===w.shift?'selected':''}>${label(k)}</option>`).join('')}</select><div class="actions">${button('Schulen · 90 Min. / 900 €','train',w.id)}${button('Akte','select',w.id)}${s.sites.length>1?`<select aria-label="Person versetzen" data-relocate="${w.id}"><option value="">Standort wechseln …</option>${s.sites.filter(a=>a.id!==w.site).map(a=>`<option value="${a.id}">${esc(a.name)}</option>`).join('')}</select>`:''}${button('Entlassen','fire',w.id,'danger')}</div></div>`).join('')||empty('Dein Team wartet auf dich','Für den Depotstart: 1 Lagerkraft und 1 Fahrdienst.')}`;}
-function orders(){const s=sim.state;return `<div class="notice">Erst tatsächliche Zustellung erzeugt eine Forderung. Zahlung folgt 60 Spielminuten später. Verspätete Lieferungen erhalten 10 % Preisabschlag.</div>${filtered(s.orders).map(o=>`<div class="card"><div class="card-top"><div><h3>${esc(o.customer)}</h3><small>${esc(o.id)} · ${esc(name(ITEMS,o.item))} · ${o.kind==='logistics'?'Fremdlogistik':o.kind==='manufacturing'?'Auftragsfertigung':'Eigenprodukte'}</small></div>${badge(o.late?'Frist überschritten':label(o.status),o.late?'bad':o.status==='fulfilled'?'good':'')}</div><div class="numbers">${num(`${o.delivered} / ${o.qty}`,'Geliefert')}${num(euro(o.price),'Preis / Stück')}${num(fmt(o.quality)+' %','Mindestqualität')}</div>${kv('Lieferfrist',time(o.due))}${kv('Vertragswert',euro(o.qty*o.price))}${kv('Bezahlt',euro(o.paid))}${o.status==='offer'?`<div class="actions">${button('Auftrag annehmen','accept',o.id,'primary')}${button('Akte','select',o.id)}</div>`:o.status==='active'?`<form data-form="dispatch" data-id="${o.id}" class="form-grid">${field('Fahrzeug',`<select name="vehicleId" required>${s.vehicles.filter(v=>v.status==='idle'&&v.site===s.selectedSite).map(v=>`<option value="${v.id}">${esc(v.name)} · ${v.capacity} Plätze</option>`).join('')||'<option value="">Kein freies Fahrzeug</option>'}</select>`,true)}${field('Teilmenge',`<input name="qty" type="number" min="1" max="${o.qty-o.delivered}" value="${Math.min(o.qty-o.delivered,20)}" required>`)}<button class="primary" style="grid-column:auto;align-self:end">Lieferung starten →</button></form><div class="actions">${button('Akte','select',o.id)}${button('Stornieren','cancelOrder',o.id)}</div>`:button('Auftragsakte','select',o.id)}</div>`).join('')}`;}
-function rentalOffer(s){return `<section class="section"><h3>Zusätzliche Fahrzeuge mieten</h3><p class="fine" style="margin:8px 0 12px">Je angefangene 1.440 Spielminuten vorausbezahlt. Erste Rate sofort. Weitere Raten bis Rückgabe, auch bei Stillstand. Keine anteilige Erstattung. Fahrtkosten, Wartung und Personal zusätzlich. Rückgabe nur leer und frei am Mietstandort.</p><form data-form="rental" class="form-grid">${field('Fahrzeug und Mietpreis',`<select name="vehicleType">${Object.entries(RENTAL_RATES).map(([id,rate])=>`<option value="${id}">${esc(VEHICLES[id].name)} · ${euro(rate)} sofort und je Spieltag · ${VEHICLES[id].capacity} Plätze</option>`).join('')}</select>`,true)}<p class="fine" style="grid-column:1/-1">Mietstandort: ${esc(s.sites.find(x=>x.id===s.selectedSite)?.name)}</p><button class="primary">Kostenpflichtig mieten</button></form></section>`;}
+function staff(){const s=sim.state;return `<form data-form="hire" class="form-grid"><label class="field">Rolle<select name="role">${opts(ROLES)}</select></label><button class="primary" style="grid-column:auto;align-self:end">Person einstellen</button></form><p class="fine" style="margin:10px 0 20px">Tagschicht 08–16 Uhr. Beschäftigte können nur eine Aufgabe gleichzeitig übernehmen. Lohn je aktiver Schichtminute.</p>${filtered(s.workers).map(w=>`<div class="card"><div class="card-top"><div><h3>${esc(w.name)}</h3><small>${esc(name(ROLES,w.role))} · ${euro(w.wage)}/h</small></div>${assignmentBadge(describeAssignment(s,w))}</div><div class="grid2"><div>${kv('Qualifikation',fmt(w.skill,2)+'×')}${w.training?kv('Fortbildung',fmt(w.training.remaining)+' Min.'):''}${kv('Müdigkeit',fmt(w.fatigue)+' %')}</div><div>${kv('Tätigkeit',assignmentHtml(describeAssignment(s,w)))}${kv('Standort',esc(s.sites.find(x=>x.id===w.site)?.name))}</div></div><select aria-label="Schicht für ${esc(w.name)}" data-shift="${w.id}">${['day','night','all'].map(k=>`<option value="${k}" ${k===w.shift?'selected':''}>${label(k)}</option>`).join('')}</select><div class="actions">${button('Schulen · 90 Min. / 900 €','train',w.id)}${button('Akte','select',w.id)}${s.sites.length>1?`<select aria-label="Person versetzen" data-relocate="${w.id}"><option value="">Standort wechseln …</option>${s.sites.filter(a=>a.id!==w.site).map(a=>`<option value="${a.id}">${esc(a.name)}</option>`).join('')}</select>`:''}${button('Entlassen','fire',w.id,'danger')}</div></div>`).join('')||empty('Dein Team wartet auf dich','Für den Depotstart: 1 Lagerkraft und 1 Fahrdienst.')}`;}
+function orders(){const s=sim.state;return `<div class="notice">Erst tatsächliche Zustellung erzeugt eine Forderung. Zahlung folgt 60 Spielminuten später. Verspätete Lieferungen erhalten 10 % Preisabschlag.</div>${filtered(s.orders).map(o=>`<div class="card"><div class="card-top"><div><h3>${esc(o.customer)}</h3><small>${esc(o.id)} · ${esc(name(ITEMS,o.item))} · ${o.kind==='logistics'?'Fremdlogistik':o.kind==='manufacturing'?'Auftragsfertigung':'Eigenprodukte'}</small></div>${badge(o.late?'Frist überschritten':label(o.status),o.late?'bad':o.status==='fulfilled'?'good':'')}</div><div class="numbers">${num(`${o.delivered} / ${o.qty}`,'Geliefert')}${num(euro(o.price),'Preis / Stück')}${num(fmt(o.quality)+' %','Mindestqualität')}</div>${kv('Lieferfrist',time(o.due))}${kv('Vertragswert',euro(o.qty*o.price))}${kv('Bezahlt',euro(o.paid))}${o.status==='offer'?`<div class="actions">${button('Auftrag annehmen','accept',o.id,'primary')}${button('Akte','select',o.id)}</div>`:o.status==='active'?`${dispatchForm(s,o)}<div class="actions">${button('Akte','select',o.id)}${button('Stornieren','cancelOrder',o.id)}</div>`:button('Auftragsakte','select',o.id)}</div>`).join('')}`;}
+function rentalOffer(s){return `<section class="section"><h3>Zusätzliche Fahrzeuge mieten</h3><p class="fine" style="margin:8px 0 12px">Je angefangene 1.440 Spielminuten vorausbezahlt. Erste Rate sofort. Weitere Raten bis Rückgabe, auch bei Stillstand. Keine anteilige Erstattung. Fahrtkosten, Wartung und Personal zusätzlich. Rückgabe nur leer und frei am Mietstandort.</p><form data-form="rental" class="form-grid">${field('Fahrzeug und Mietpreis',`<select name="vehicleType">${Object.entries(RENTAL_RATES).map(([id,rate])=>`<option value="${id}">${esc(VEHICLES[id].name)} · ${euro(rate)} sofort und je Spieltag · ${capacityText({type:id,capacity:VEHICLES[id].capacity})}</option>`).join('')}</select>`,true)}<p class="fine" style="grid-column:1/-1">Mietstandort: ${esc(s.sites.find(x=>x.id===s.selectedSite)?.name)}</p><button class="primary">Kostenpflichtig mieten</button></form></section>`;}
 function rentalDetails(s,v){const r=(s.rentals||[]).find(r=>r.id===v.rentalId);if(!r)return '';return `${kv('Mietrate',euro(r.rate)+' / Spieltag')}${kv('Nächste Rate',time(r.nextDue))}${kv('Bisher berechnet',euro(r.rate*r.paidDays)+' · '+fmt(r.paidDays)+' Miettage')}${kv('Rückgabeort',esc(s.sites.find(x=>x.id===r.homeSite)?.name||r.homeSite))}<div class="actions">${button('Mietfahrzeug zurückgeben','returnRental',r.id)}</div>`;}
 function rentalHistory(s){const returned=(s.rentals||[]).filter(r=>r.status==='returned');return returned.length?`<section class="section"><h3>Abgeschlossene Fahrzeugmieten</h3>${returned.slice().reverse().map(r=>`<div class="card"><div class="card-top"><h3>${esc(VEHICLES[r.vehicleType]?.name||r.vehicleType)}</h3>${badge('Zurückgegeben')}</div>${kv('Rückgabe',time(r.returnedAt))}${kv('Gesamte Mietkosten',euro(r.rate*r.paidDays))}<small>${esc(r.id)} · ${fmt(r.paidDays)} Miettage</small></div>`).join('')}</section>`:'';}
-function fleet(){const s=sim.state;return `${rentalOffer(s)}<form class="form-grid" data-form="vehicle">${field('Fahrzeug',`<select name="vehicleType">${Object.entries(VEHICLES).map(([id,v])=>`<option value="${id}">${esc(v.name)} · ${euro(v.cost)}</option>`).join('')}</select>`,true)}<button class="primary">Fahrzeug anschaffen</button></form><section class="section" style="margin-top:22px"><h3>Deine Flotte</h3>${filtered(s.vehicles.filter(v=>v.status!=='rentalReturned')).map(v=>`<div class="card" style="margin-top:12px"><div class="card-top"><h3>${esc(v.name)}</h3>${badge(label(v.status))}</div>${kv('Ladeplätze',fmt(v.capacity))}${kv('Nutzlast',fmt(VEHICLES[v.type]?.weightCapacity||v.capacity*4)+' kg')}${kv('Zustand',fmt(v.condition)+' %')}${rentalDetails(s,v)}<div class="actions">${button('Akte','select',v.id)}${button('Warten','vehicleMaintain',v.id)}</div></div>`).join('')||empty('Noch keine Fahrzeuge','Lieferwagen: 20 Ladeplätze, 9.000 €.')}</section><section class="section"><h3>Sendungen</h3>${filtered(s.shipments).slice().reverse().map(sh=>`<div class="card" style="margin-top:12px"><div class="card-top"><h3>${esc(sh.id)}</h3>${badge(label(sh.status),sh.blocked?'warn':'')}</div>${kv('Menge',fmt(sh.qty)+' Stück')}${kv('Nächster Schritt',fmt(sh.remaining)+' Min.')}${sh.blocked?`<p>${esc(sh.blocked)}</p>`:''}<div class="actions">${button('Verlauf','select',sh.id)}${sh.status==='loading'?button('Stornieren','cancelShipment',sh.id):''}</div></div>`).join('')||empty('Keine Sendungen','Plane eine Lieferung im Auftragsfenster.')}</section>${tourPanel(s)}${rentalHistory(s)}`;}
+function fleet(){const s=sim.state;return `${rentalOffer(s)}<form class="form-grid" data-form="vehicle">${field('Fahrzeug',`<select name="vehicleType">${Object.entries(VEHICLES).map(([id,v])=>`<option value="${id}">${esc(v.name)} · ${euro(v.cost)}</option>`).join('')}</select>`,true)}<button class="primary">Fahrzeug anschaffen</button></form><section class="section" style="margin-top:22px"><h3>Deine Flotte</h3>${filtered(s.vehicles.filter(v=>v.status!=='rentalReturned')).map(v=>`<div class="card" style="margin-top:12px"><div class="card-top"><h3>${esc(v.name)}</h3>${badge(label(v.status))}</div>${kv('Kapazität',capacityText(v))}${kv('Zustand',conditionHtml(v))}${rentalDetails(s,v)}<div class="actions">${button('Akte','select',v.id)}${button('Werkstatt-Wartung','vehicleMaintain',v.id)}${button('Externe Wartung','vehicleServiceExternal',v.id)}</div></div>`).join('')||empty('Noch keine Fahrzeuge',`Lieferwagen: ${capacityText({type:'van',capacity:VEHICLES.van.capacity})}, ${euro(VEHICLES.van.cost)}.`)}</section><section class="section"><h3>Sendungen</h3>${filtered(s.shipments).slice().reverse().map(sh=>`<div class="card" style="margin-top:12px"><div class="card-top"><h3>${esc(sh.id)}</h3>${badge(label(sh.status),sh.blocked?'warn':'')}</div>${kv('Menge',fmt(sh.qty)+' Stück')}${kv('Nächster Schritt',fmt(sh.remaining)+' Min.')}${sh.blocked?`<p>${esc(sh.blocked)}</p>`:''}<div class="actions">${button('Verlauf','select',sh.id)}${sh.status==='loading'?button('Stornieren','cancelShipment',sh.id):''}</div></div>`).join('')||empty('Keine Sendungen','Plane eine Lieferung im Auftragsfenster.')}</section>${tourPanel(s)}${rentalHistory(s)}`;}
 function finance(){const s=sim.state,r=report(s),deliveries=deliveryRows(s),outstanding=deliveries.filter(sh=>sh.paymentAt&&!sh.paid).reduce((n,sh)=>n+(sh.invoiceAmount||0),0),goods=s.batches.filter(b=>b.owner==='company').reduce((n,b)=>n+b.qty*b.unitCost,0),payments=s.ledger.filter(l=>l.category==='Umsatz').reduce((n,l)=>n+l.amount,0);const categories={};for(const l of s.ledger)categories[l.category]=(categories[l.category]||0)+l.amount;return `<div class="numbers">${num(euro(s.money),'Kontostand')}${num(euro(r.receivables.total),'Offene Forderungen')}${num(euro(r.inventory.ownValue),'Warenmodellwert')}</div><div class="notice">Zahlungsübersicht: Investitionen und Einkauf sind Geldabflüsse. Daraus allein folgt kein operativer Gewinn. Material trägt Beschaffungskosten; fertige Produkte zusätzlich direkte Fertigungslöhne und Maschinenenergie.</div><section class="section"><h3>Geldfluss seit Unternehmensgründung</h3><div class="grid2">${[['Betrieb',r.cashflow.operating],['Investitionen',r.cashflow.investing],['Finanzierung',r.cashflow.financing],['Sonstige Buchungen',r.cashflow.other]].map(([k,v])=>`<div class="card">${kv(k,euro(v))}</div>`).join('')}</div>${kv('Geldbestand zu Beginn (aus Journal)',euro(r.cash.openingBalance))}${kv('Netto-Geldfluss',euro(r.cash.net))}</section><section class="section"><h3>Gebundenes Kapital und Verpflichtungen</h3>${kv('Eigene Waren · Modellwert',euro(r.inventory.ownValue))}${kv('Davon gesperrt',euro(r.inventory.blockedValue))}${kv('Laufende Fertigung · Materialanteil',euro(r.inventory.workInProgress))}${kv('Vorausbezahlte Beschaffung',euro(r.inventory.prepaidPurchases))}${kv('Fremde Waren · kein eigenes Vermögen',fmt(r.inventory.foreignQty)+' Stück')}${kv('Offene Forderungen',euro(r.receivables.total))}${kv('Davon überfällig',euro(r.receivables.overdue))}${kv('Kredit, Überziehung und Terminalgebühren',euro(r.liabilities.total))}<details><summary>Bewertungsregeln und Grenzen</summary>${r.limitations.map(x=>`<p>${esc(x)}</p>`).join('')}</details></section><section class="section"><h3>Offene Kundenrechnungen</h3>${r.receivables.rows.map(row=>`<div class="list-row"><div><strong>${esc(row.customer)}</strong><small>${esc(row.source)} · ${esc(row.id)} · fällig ${time(row.due)}</small></div><b>${euro(row.amount)}${row.overdue?' · überfällig':''}</b></div>`).join('')||empty('Keine offenen Forderungen')}</section><div class="grid2"><div class="card"><h3>Zahlungsströme nach Bereich</h3>${Object.entries(categories).map(([k,v])=>kv(label(k),`<span class="${v<0?'money-minus':'money-plus'}">${euro(v)}</span>`)).join('')}</div><div class="card"><h3>Vertrieb</h3>${kv('Bezahlter Kundenumsatz',euro(payments))}${kv('Ausgelieferte Einheiten',fmt(s.stats.delivered))}${kv('Reputation',fmt(s.reputation)+' %')}${kv('Aktive Verträge',fmt(s.orders.filter(o=>o.status==='active').length))}</div></div><section class="section"><h3>Lieferungsbeiträge</h3><p class="fine">Rechnungswert minus bewertete Herstellung und direkte Fracht. Standortmiete, Verwaltung und Finanzierung sind noch nicht verteilt.</p><div class="table-wrap" style="margin-top:10px"><table><thead><tr><th>Kunde / Route</th><th class="num">Rechnung</th><th class="num">Direkte Kosten</th><th class="num">Beitrag</th></tr></thead><tbody>${deliveries.filter(sh=>sh.deliveredAt).map(sh=>`<tr><td>${esc(s.orders.find(o=>o.id===sh.orderId)?.customer)}<br><small>${esc(sh.id)}</small></td><td class="num">${euro(sh.invoiceAmount||0)}</td><td class="num">${euro((sh.materialCost||0)+(sh.transportCost||0))}</td><td class="num">${euro((sh.invoiceAmount||0)-(sh.materialCost||0)-(sh.transportCost||0))}</td></tr>`).join('')}</tbody></table></div></section><section class="section"><h3>Finanzierung</h3>${kv('Darlehenssaldo · 8 % p.a.',euro(s.loanBalance||0))}${kv('Kontokorrent · 15 % p.a.',euro(s.overdraft||0))}<form data-form="loan" class="form-grid">${field('Betrag','<input name="amount" type="number" min="100" max="50000" value="10000" required>')}${field('Aktion','<select name="operation"><option value="takeLoan">Kredit aufnehmen</option><option value="repayLoan">Kredit tilgen</option></select>')}<button class="primary">Finanzierung ausführen</button></form><p class="fine">Pflichtkosten laufen bei Geldmangel ins Kontokorrent. Neue freiwillige Ausgaben benötigen ausreichende Liquidität.</p></section><section class="section"><div class="section-title"><h3>Buchungsjournal</h3>${badge(s.ledger.length+' Buchungen')}</div><div class="table-wrap"><table><thead><tr><th>Zeit</th><th>Bereich / Anlass</th><th class="num">Betrag</th></tr></thead><tbody>${filtered(s.ledger).slice(-120).reverse().map(l=>`<tr><td>${time(l.t)}</td><td>${esc(label(l.category))}<br><small class="muted">${esc(l.note)}</small></td><td class="num ${l.amount<0?'money-minus':'money-plus'}">${euro(l.amount)}</td></tr>`).join('')}</tbody></table></div><p class="fine">Letzte 120 Treffer. Gesamter Zustand bleibt im Export enthalten.</p></section>`;}
 function research(){const s=sim.state;return `<div class="notice">Entwicklung verbindet Forschung, Personal und Anlagen. Laufende Projekte benötigen eine Entwicklungskraft und ein Labor.</div>${Object.entries(RESEARCH).map(([id,r])=>{const project=s.research.find(p=>p.key===id||p.type===id||p.id===id);return `<div class="card"><div class="card-top"><h3>${esc(r.name)}</h3>${badge(project?label(project.status):'Verfügbar')}</div>${kv('Investition',euro(r.cost))}${kv('Dauer',r.duration+' Min.')}${project?.blocked?`<p>${esc(project.blocked)}</p>`:''}${project?progress(1-(project.remaining||0)/r.duration):button('Forschung starten','research',id,'primary')}</div>`;}).join('')}<section class="section"><h3>Arbeitspläne</h3>${Object.entries(RECIPES).map(([id,r])=>`<div class="card" style="margin-top:10px"><h3>${esc(r.name)}</h3><p>${Object.entries(r.inputs).map(([i,q])=>q+' × '+esc(name(ITEMS,i))).join(' + ')} → ${r.output.qty} × ${esc(name(ITEMS,r.output.item))}</p>${kv('Nennzeit',r.duration+' Min.')}${kv('Anlage',esc(name(BUILDINGS,r.building)))}</div>`).join('')}</section>`;}
 function rules(){const s=sim.state;return `<div class="notice">Betriebsregeln nutzen dieselben Material-, Personal- und Budgetgrenzen wie manuelle Eingaben. Kein zusätzlicher Ertrag durch Automatisierung.</div><form class="form-grid" data-form="rule">${field('Regelart','<select name="kind"><option value="reorder">Material nachbestellen</option><option value="dispatch">Kundenlieferungen disponieren</option><option value="maintenance">Anlagen warten</option></select>',true)}${field('Material (Nachbestellung)',`<select name="item">${opts(Object.fromEntries(Object.entries(ITEMS).filter(([id,v])=>v.purchasable)))}</select>`,true)}${field('Bestand- / Zustandsgrenze','<input name="threshold" type="number" min="1" value="5">')}${field('Menge je Bestellung / Fahrt','<input name="qty" type="number" min="1" value="20">')}${field('Gesamtbudget der Regel','<input name="budget" type="number" min="1" value="1000">')}${field('Wartezeit in Minuten','<input name="cooldown" type="number" min="10" value="120">')}${field('Priorität · höher zuerst','<input name="priority" type="number" min="0" max="100" value="50">')}<button class="primary">Betriebsregel anlegen</button></form><section class="section" style="margin-top:20px">${s.rules.map(r=>`<div class="card"><h3>${esc(r.name||(r.kind==='dispatch'?'Versandleitung':r.kind==='maintenance'?'Wartungsleitung':name(ITEMS,r.item)))}</h3>${kv('Zustand',r.enabled?'Aktiv':'Pausiert')}${kv('Budgetverbrauch',euro(r.spent||0)+' / '+euro(r.budget))}${kv('Letzte Ausführung',r.lastRun?time(r.lastRun):'Noch nicht')}${r.lastReason?`<p>${esc(r.lastReason)}</p>`:''}<div class="actions">${button(r.enabled?'Pausieren':'Aktivieren','toggleRule',r.id)}${button('Entfernen','deleteRule',r.id)}</div></div>`).join('')||empty('Keine Regeln','Starte mit einem Sicherheitsbestand für Kartons.')}</section>`;}
@@ -4437,11 +4683,18 @@ function ticketPanel(s){const tickets=s.tickets||[],orders=s.orders.filter(o=>['
 
 function service(){const s=sim.state;return `${ticketPanel(s)}<h3 style="margin:20px 0">Retouren</h3><div class="notice">Rückläufe brauchen echte Ware, Abholung und Prüfung. Erstattung erfolgt einmalig. Gesperrte Ware bleibt unverkäuflich.</div><form data-form="return" class="form-grid">${field('Gelieferter Auftrag',`<select name="orderId">${s.orders.filter(o=>o.delivered>0).map(o=>`<option value="${o.id}">${esc(o.customer)} · ${o.delivered} geliefert</option>`).join('')||'<option value="">Noch keine Zustellung</option>'}</select>`,true)}${field('Rückgabemenge','<input name="qty" type="number" min="1" value="1">')}<button class="primary" style="grid-column:auto;align-self:end">Rücknahme beauftragen</button></form><section class="section" style="margin-top:20px">${s.returns.map(r=>`<div class="card"><div class="card-top"><h3>${esc(r.id)}</h3>${badge(label(r.status))}</div>${kv('Menge',fmt(r.qty))}${r.blocked?`<p>${esc(r.blocked)}</p>`:''}<div class="actions">${button('Reparieren','repairReturn',r.id)}${button('Verwerten','recycleReturn',r.id)}</div></div>`).join('')||empty('Keine Rückläufe','Zustellungen bilden die Grundlage späterer Rücknahmen.')}</section>`;}
 function history(ref=null){const rows=filtered(sim.state.events.filter(e=>!ref||e.refs?.includes(ref))).slice(-150).reverse();return `<div class="timeline">${rows.map(e=>`<div class="timeline-item"><small>${time(e.t)} · ${esc(e.kind)}</small><p>${esc(e.text)}</p>${e.refs?.length?`<div class="actions">${e.refs.slice(0,3).map(id=>button(esc(id),'select',id)).join('')}</div>`:''}</div>`).join('')||empty('Noch keine Ereignisse')}</div>`;}
-function detail(){const s=sim.state;let kind='',o;for(const k of ['buildings','workers','batches','orders','purchases','vehicles','shipments','returns','transfers','tours','freights']){o=(s[k]||[]).find(x=>x.id===selected);if(o){kind=k;break;}}if(!o)return empty('Objekt nicht gefunden','Einige abgeschlossene Arbeitsaufträge gehen in die Chronik über.');let html=`<div class="card"><div class="card-top"><h3>${esc(o.name||o.customer||name(kind==='buildings'?BUILDINGS:ITEMS,o.type||o.item)||o.id)}</h3>${badge(o.id)}</div>`;if(kind==='buildings'){const d=BUILDINGS[o.type];html+=kv('Status',label(o.status))+kv('Zustand',fmt(o.condition)+' %')+kv('Energiebedarf',d.power+' kW')+kv('Anschaffung',euro(d.cost));if(d.recipes.length)html+=`<label class="field">Arbeitsplan<select data-recipe="${o.id}">${d.recipes.map(id=>`<option value="${id}" ${id===o.recipe?'selected':''}>${esc(name(RECIPES,id))}</option>`).join('')}</select></label>`;html+=`<div class="actions">${button(o.enabled?'Pausieren':'Fortsetzen','toggle',o.id)}${button('Warten','maintain',o.id)}${button('Versetzen','move',o.id)}${button('Abreißen · 35 % Erlös','demolish',o.id,'danger')}</div>`;}else if(kind==='batches'){html+=kv('Artikel',esc(name(ITEMS,o.item)))+kv('Menge',fmt(o.qty))+kv('Reserviert',fmt(o.reserved))+kv('Ort',label(o.location))+kv('Eigentum',esc(label(o.owner)))+kv('Qualität',fmt(o.quality)+' %')+kv('Einstandspreis',euro(o.unitCost));html+=`<div class="actions">${button('Charge und Nachfolger sperren','recallBatch',o.id,'danger')}</div><p>Herkunft: ${(o.parents||[]).map(id=>button(esc(id),'select',id)).join(' ')||'Direkte Anlieferung'}</p>`;}else{for(const [k,title]of Object.entries({status:'Status',role:'Rolle',item:'Artikel',qty:'Menge',delivered:'Geliefert',remaining:'Restzeit',quality:'Qualität',condition:'Zustand',blocked:'Warteursache',task:'Tätigkeit',capacity:'Ladeplätze',paid:'Bezahlt'}))if(o[k]!==undefined)html+=kv(title,esc(k==='item'?name(ITEMS,o[k]):k==='role'?name(ROLES,o[k]):label(o[k])));}return html+'</div><h3 style="margin:20px 0">Verlauf</h3>'+history(o.id);}
+function detail(){const s=sim.state;let kind='',o;for(const k of ['buildings','workers','batches','orders','purchases','vehicles','shipments','returns','transfers','tours','freights']){o=(s[k]||[]).find(x=>x.id===selected);if(o){kind=k;break;}}if(!o)return empty('Objekt nicht gefunden','Einige abgeschlossene Arbeitsaufträge gehen in die Chronik über.');let html=`<div class="card"><div class="card-top"><h3>${esc(o.name||o.customer||name(kind==='buildings'?BUILDINGS:ITEMS,o.type||o.item)||o.id)}</h3>${badge(o.id)}</div>`;if(kind==='buildings'){const d=BUILDINGS[o.type];html+=kv('Status',label(o.status))+kv('Zustand',fmt(o.condition)+' %')+kv('Energiebedarf',d.power+' kW')+kv('Anschaffung',euro(d.cost));if(d.recipes.length)html+=`<label class="field">Arbeitsplan<select data-recipe="${o.id}">${d.recipes.map(id=>`<option value="${id}" ${id===o.recipe?'selected':''}>${esc(name(RECIPES,id))}</option>`).join('')}</select></label>`;html+=`<div class="actions">${button(o.enabled?'Pausieren':'Fortsetzen','toggle',o.id)}${button('Warten','maintain',o.id)}${button('Versetzen','move',o.id)}${button('Abreißen · 35 % Erlös','demolish',o.id,'danger')}</div>`;}else if(kind==='vehicles'){html+=vehicleDetail(s,o);}else if(kind==='batches'){html+=kv('Artikel',esc(name(ITEMS,o.item)))+kv('Menge',fmt(o.qty))+kv('Reserviert',fmt(o.reserved))+kv('Ort',label(o.location))+kv('Eigentum',esc(label(o.owner)))+kv('Qualität',fmt(o.quality)+' %')+kv('Einstandspreis',euro(o.unitCost));html+=`<div class="actions">${button('Charge und Nachfolger sperren','recallBatch',o.id,'danger')}</div><p>Herkunft: ${(o.parents||[]).map(id=>button(esc(id),'select',id)).join(' ')||'Direkte Anlieferung'}</p>`;}else{for(const [k,title]of Object.entries({status:'Status',role:'Rolle',item:'Artikel',qty:'Menge',delivered:'Geliefert',remaining:'Restzeit',quality:'Qualität',condition:'Zustand',blocked:'Warteursache',task:'Tätigkeit',capacity:'Ladeplätze',paid:'Bezahlt'}))if(k==='task'&&kind==='workers')html+=kv(title,assignmentHtml(describeAssignment(s,o)));else if(o[k]!==undefined)html+=kv(title,esc(k==='item'?name(ITEMS,o[k]):k==='role'?name(ROLES,o[k]):label(o[k])));}return html+'</div><h3 style="margin:20px 0">Verlauf</h3>'+history(o.id);}
+function conditionHtml(v){return `${fmt(v.condition)} %${v.condition<15?' · keine Fahrt':v.condition<WEAR_WARN?' · Wartung planen':''}`;}
+/** Fahrzeugakte: Kapazität je Artikelart, Zustand, beide Wartungswege mit Kosten und Dauer. */
+function vehicleDetail(s,v){const m=v.maintenance,need=v.condition<100,shop=s.buildings.some(b=>b.site===v.site&&b.type==='workshop'&&b.enabled&&b.condition>0);
+ let h=kv('Status',label(v.status))+kv('Typ',esc(VEHICLES[v.type]?.name||v.type))+kv('Ladevolumen',fmt(v.capacity)+' Volumeneinheiten')+kv('Nutzlast',fmt(weightCap(v))+' kg')+kv('Pakete',`≈ ${fmt(maxLoad(v,'parcel'))} (Gewichtsgrenze)`)+kv('Fertigware',`${fmt(maxLoad(v,'lamp'))} Arbeitsleuchten`)+kv('Zustand',conditionHtml(v));
+ if(v.status==='maintenance'&&m)h+=kv(m.external?'Externe Wartung':'Werkstatt-Wartung',fmt(m.remaining)+' Min. verbleibend'+(m.blocked?' · '+esc(m.blocked):''));
+ h+=`<p class="fine">Jede Fahrt kostet Zustand. Unter 15 % fährt das Fahrzeug nicht. Werkstatt-Wartung: Wartungswerkstatt am Standort, 1 Ersatzteil, Technikpersonal, 20 Min., ${need?euro(maintenanceCost(v)):'—'}${shop?'':' · keine Werkstatt am Standort'}. Externe Wartung: mobiler Servicepartner am Standort, ${fmt(EXTERNAL_SERVICE.minutes)} Min. außer Betrieb, ${need?euro(maintenanceCost(v,true)):'—'} (×1,5).</p>`;
+ const free=v.status==='idle'&&need;return h+`<div class="actions">${free?button('Werkstatt-Wartung · '+euro(maintenanceCost(v)),'vehicleMaintain',v.id):''}${free?button(`Externe Wartung · ${euro(maintenanceCost(v,true))} · ${fmt(EXTERNAL_SERVICE.minutes)} Min.`,'vehicleServiceExternal',v.id,'primary'):''}</div>`;}
 function planning(){const s=sim.state;return `<div class="notice good">Planung läuft auf vollständiger Kopie. Originalbestand, Geld und Zufallszustand bleiben unverändert. Prognose setzt heutige Befehle fort; neue Marktentscheidungen werden nicht erfunden.</div><form data-form="forecast" class="form-grid">${field('Zeitraum','<select name="minutes"><option value="60">1 Spielstunde</option><option value="480">8 Spielstunden</option><option value="1440">1 Spieltag</option></select>')}${field('Alternative','<select name="alternative"><option value="none">Aktuellen Betrieb fortführen</option><option value="worker">Zusätzliche Fertigungskraft</option></select>')}<button class="primary">Vorschau berechnen</button></form>${forecast?`<div class="forecast-comparison" style="margin-top:20px"><div class="card"><h3>Jetzt</h3>${kv('Geld',euro(s.money))}${kv('Fertigware erzeugt',s.stats.produced)}${kv('Ausgeliefert',s.stats.delivered)}</div><div class="card"><h3>${time(forecast.t)}</h3>${kv('Geld',euro(forecast.money))}${kv('Fertigware erzeugt',forecast.stats.produced)}${kv('Ausgeliefert',forecast.stats.delivered)}</div></div>`:''}`;}
 function help(){return `<p class="fine">Betriebshandbuch · Version ${VERSION}</p><div class="notice good">Alle Firmen, Personen, Preise und Verkehrsregeln sind fiktive Spielwerte. Simulation bleibt lokal. Keine Offlinefortschritte.</div>${[
  ['Erste Zustellung','Baue eine Laderampe (Dock) und ein Lagerregal. Stelle eine Lagerkraft ein. Nimm im Vertragsfenster den ersten Frachtvertrag an. Am Vormittag kommt der erste Lkw: Er dockt an und wird entladen, die Lagerkraft sortiert die Pakete von Hand. Stelle eine Fahrperson ein und kaufe einen Lieferwagen. Ordne im Auftragsfenster die sortierten Pakete dem Fahrzeug zu, einzeln oder als Sammeltour. Eine Stunde nach der Zustellung zahlt der Versender. „Startbetrieb einrichten“ in der Zentrale übernimmt den Aufbau über reguläre Befehle (ca. 14.500 €).'],
- ['Wirtschaftlichkeit im Depot','Erlös je Paket steht im Vertrag. Laufende Kosten: Löhne je Schichtminute, Strom, Hallenmiete und Fahrtkosten je Tour. Ein Startvertrag trägt Lagerkraft und Fahrer; mit einem zweiten Vertrag amortisiert sich die Grundausstattung in etwa fünf Spieltagen. Zustellung nach Fristende kostet 10 % des Erlöses und Ansehen. Eine Lagerkraft schafft von Hand rund 250 Pakete am Tag; darüber hinaus helfen eine zweite Lagerkraft oder ein Sortierplatz und ein weiteres Fahrzeug.'],
+ ['Wirtschaftlichkeit im Depot','Erlös je Paket steht im Vertrag, meist 7 bis 8,50 €. Gewinn entsteht über die Menge. Laufende Kosten: Löhne je Schichtminute (Lagerkraft und Fahrer zusammen rund 310 € am Tag), Strom, Hallenmiete und Fahrtkosten je Tour (rund 5 bis 25 €). Schon der Startvertrag mit 200 bis 250 Paketen am Tag trägt Lagerkraft und Fahrer. Ein Lieferwagen fasst 160 Pakete und schafft in der Tagschicht etwa drei Touren. Mit einer Lagerkraft sind so rund 350 bis 400 Pakete am Tag pünktlich zu schaffen. Mit einem passenden zweiten Vertrag bringt ein guter Tag rund 2.200 € Überschuss; die Grundausstattung ist dann nach sechs bis sieben Spieltagen bezahlt. Zustellung nach Fristende kostet 10 % des Erlöses und Ansehen. Liegengebliebene Pakete binden am nächsten Morgen den Lieferwagen. Mehr Verträge, als Lagerkraft und Lieferwagen schaffen, bringen kaum mehr Geld, nur Verspätungen. Für mehr Menge braucht es ein weiteres Fahrzeug mit Fahrer.'],
  ['Mehrwertdienste (später)','Montage, Prüfung und Verpackung bleiben als künftiges Geschäftsfeld „Mehrwertdienste“ erhalten, etwa Kommissionierung und Verpackung für Versender. Für den Einstieg werden sie nicht benötigt. Die vorhandenen Fertigungsanlagen lassen sich weiterhin bauen.'],
  ['Frachtverträge, Hof und Docks','Verträge: Angebot prüfen (Versender, Zustellgebiete, Ankünfte je Tag, Pakete, Preis je Paket, Frist ab Tor) und annehmen. Zu jeder Ankunft kommt ein fremder Lkw: Anfahrt, Torkontrolle, Wartet auf Dock, Zum Dock, Andocken, Entladen, Ausfahrt. Ohne freies Dock oder Lagerpersonal wartet er; der Grund steht im Torbuch unter Hof & Docks. „Vorziehen“ bittet die Hofsteuerung, einen noch nicht angedockten Lkw zuerst zu bedienen. Entladene Pakete liegen im Wareneingang, ein Sortierplatz macht sie versandfähig, eigene Fahrzeuge stellen sie zu.'],
  ['Material und Maschinen','Gehäuse + Platine → montierte Leuchte. Prüfstation → geprüfte Leuchte. Packstation + Karton → verkaufbare Leuchte. Anlagen wählen automatisch ihren ersten Arbeitsplan. Jedes Stück benötigt Arbeitszeit, Personal und Strom.'],
@@ -4462,8 +4715,8 @@ function confirm(title,text,action){$('#confirmTitle').textContent=title;$('#con
 // Depot-Grundausstattung (A02 W1b): nur reguläre Befehle; bereits Vorhandenes wird nicht doppelt gekauft. Bricht bei fehlendem Kapital ab.
 function starter(){const s=sim.state,site=s.selectedSite;for(const [buildingType,x,y]of [['dock',3,11],['rack',2,2]])if(!s.buildings.some(b=>b.type===buildingType&&b.site===site)){if(!send({type:'build',buildingType,x,y,rotation:0},true).ok)return;}for(const role of ['warehouse','driver'])if(!s.workers.some(w=>w.role===role&&w.site===site)&&!send({type:'hire',role},true).ok)return;if(!s.vehicles.some(v=>v.site===site&&v.status!=='rentalReturned')&&!send({type:'buyVehicle',vehicleType:'van'},true).ok)return;toast('Depot eingerichtet. Nächster Schritt: ersten Frachtvertrag annehmen.');openPanel('contracts');}
 document.addEventListener('click',e=>{if(!e.target.closest?.('.cmd,.site-pick,.bell-wrap'))closeMenus();const b=e.target.closest('button,a.brand');if(!b)return;if(b.matches('a.brand')){e.preventDefault();openPanel('overview');return;}if(b.dataset.panel){closeMenus();openPanel(b.dataset.panel);return;}if(b.dataset.toggle){hudToggle(b.dataset.toggle);return;}if(b.dataset.site){closeMenus();if(b.dataset.site!==sim.state.selectedSite){send({type:'selectSite',id:b.dataset.site},true);scene.home();}return;}if(b.dataset.hit){openHit(b.dataset.hit);return;}if(b.dataset.alert){const a=hudData?.alerts.find(x=>x.key===b.dataset.alert);if(a)openRef(a.ref,a.target);return;}if(b.dataset.station){openStation(b.dataset.station);return;}if(b.dataset.vehicle){openRef(b.dataset.vehicle);return;}if(b.dataset.arrival){openArrival(b.dataset.arrival);return;}if(b.dataset.labels){labelMode=b.dataset.labels;scene.setLabels?.(labelMode);$$('[data-labels]').forEach(x=>x.classList.toggle('active',x===b));return;}if(b.dataset.speed!==undefined){setSpeed(+b.dataset.speed);return;}if(b.dataset.view){scene.setView(b.dataset.view);$$('[data-view]').forEach(x=>x.classList.toggle('active',x===b));return;}if(b.dataset.camera){({plus:()=>scene.zoom(1),minus:()=>scene.zoom(-1),rotate:()=>scene.rotate(),home:()=>scene.home()})[b.dataset.camera]();return;}if(b.dataset.build){build=b.dataset.build;scene.setBuild(build,rotation,moving);renderBuild();return;}const a=b.dataset.action,id=b.dataset.id;if(!a)return;if(a.startsWith('panel-')){openPanel(a.slice(6));return;}
- const actions={'ticket-inform':()=>ticketRespond(id,'inform'),'ticket-approve':()=>ticketRespond(id,'approve'),'ticket-reject':()=>ticketRespond(id,'reject'),'ticket-goodwill':()=>ticketRespond(id,'goodwill'),'ticket-apologize':()=>ticketRespond(id,'apologize'),exportHtml,retryStorage,temporary:chooseTemporary,returnRental:()=>confirm('Mietfahrzeug zurückgeben?','Rückgabe beendet weitere Mietkosten. Angebrochene Miettage werden nicht erstattet. Fahrzeug muss leer und frei am Mietstandort stehen.',()=>send({type:'returnRental',id})),cancelTour:()=>send({type:'cancelTour',id}),disposeBatch:()=>confirm('Geschädigte Ware entsorgen?','Entsorgung kostet 2 € je Stück. Ware wird endgültig entfernt.',()=>send({type:'disposeBatch',batchId:id})),approveDocuments:()=>send({type:'approveDocuments',id}),cancelFreight:()=>confirm('Fracht stornieren?','Bereits gezahlte Fracht verfällt. Ware kehrt nur bei freier Lagerkapazität zurück.',()=>send({type:'cancelFreight',id})),recallBatch:()=>confirm('Charge zurückrufen?','Betroffene Charge und ihre nachverfolgbaren Nachfolger werden gesperrt. Bereits gelieferte Ware wird im Rückruf erfasst.',()=>send({type:'recallBatch',batchId:id})),acceptContract:()=>hubSend({type:'acceptContract',id},'Vertragsannahme'),cancelContract:()=>cancelContract(id),prioritizeArrival:()=>hubSend({type:'prioritizeArrival',id},'Vorziehen'),close:closePanel,refresh:()=>renderPanel(true),build:()=>startBuild(BUILDINGS[id]?id:undefined),endBuild,rotateBuild:()=>{rotation=(rotation+90)%360;scene.setBuild(build,rotation,moving);toast('Anlage gedreht: '+rotation+'°');},select:()=>{selected=id;openPanel('detail');scene.focus?.(id);},toggle:()=>send({type:'toggleBuilding',id}),maintain:()=>send({type:'maintain',id}),move:()=>{const o=sim.state.buildings.find(b=>b.id===id);if(o){moving=id;rotation=o.rotation;startBuild(o.type);toast('Neue Position auf Karte wählen.');}},demolish:()=>confirm('Anlage zurückbauen?','Rückbau gibt 35 % Anschaffungskosten zurück. Belegte Anlagen bleiben geschützt.',()=>send({type:'demolish',id})),accept:()=>send({type:'acceptOrder',id}),cancelOrder:()=>confirm('Auftrag stornieren?','Unvollständige Aufträge senken Reputation.',()=>send({type:'cancelOrder',id})),cancelShipment:()=>send({type:'cancelShipment',id}),train:()=>send({type:'train',id}),fire:()=>confirm('Person entlassen?','Aktive Tätigkeit muss vorher abgeschlossen werden.',()=>send({type:'fire',id})),vehicleMaintain:()=>send({type:'maintainVehicle',id}),research:()=>send({type:'startResearch',key:id}),toggleRule:()=>send({type:'toggleRule',id}),deleteRule:()=>send({type:'deleteRule',id}),site:()=>{send({type:'selectSite',id});scene.home();closePanel();},networkView:()=>{scene.setView('network');closePanel();},repairReturn:()=>send({type:'resolveReturn',id,resolution:'repair'}),recycleReturn:()=>send({type:'resolveReturn',id,resolution:'recycle'}),starter, 'buy-kit':()=>{for(const item of ['housing','board','carton'])if(!send({type:'buy',item,qty:12,supplier:'standard'},true).ok)return;toast('Drei getrennte Materiallieferungen bestellt.');},save:()=>save(true),export:()=>{const blob=new Blob([sim.serialize()],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`Industrie-Logistik-Tag-${Math.floor(sim.state.t/1440)+1}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);},import:()=>$('#importFile').click(),backup:loadBackup,welcomeBackup:loadBackup,discardBackup,loadPrevious,new:()=>confirm('Neues Unternehmen?','Vorherigen Spielstand bei Bedarf zuerst exportieren. Moduswahl öffnet sich danach.',()=>{showWelcome();setSpeed(0);}),hideMission:()=>{prefs.mission=false;applyPrefs();},start:()=>{const mode=$('input[name=mode]:checked').value;if(temporary)return confirm('Temporäres Unternehmen ersetzen?','Aktuellen Stand vorher als JSON exportieren.',()=>activate(mode,{reset:true}));let existing,prevExists=false;try{existing=store.has(STORE+'-'+mode);prevExists=store.has(STORE+'-'+mode+'-backup-prev');}catch{toast(lockMessage(),true);return false;}if(existing){confirm('Vorhandenen Spielstand ersetzen?','Dieser Modus besitzt bereits ein Unternehmen. Vorher bei Bedarf laden und exportieren. Letzte gültige Sicherung bleibt erhalten (eigener Platz „vorheriges Unternehmen“), bis du sie in den Einstellungen verwirfst.'+(prevExists?' Eine dort liegende ältere Sicherung wird dabei ersetzt.':''),()=>activate(mode,{reset:true}));return;}return activate(mode,{reset:true});},confirmCancel:()=>$('#confirm').close(),confirmOk:()=>{$('#confirm').close();const fn=confirmAction;confirmAction=null;return fn?.();}};return actions[a]?.();});
-document.addEventListener('change',e=>{const t=e.target;if(t.closest?.('[data-form="tour"]'))updateTourDraft(t.closest('[data-form="tour"]'));if(t.dataset.relocate&&t.value)send({type:'moveWorker',id:t.dataset.relocate,toSite:t.value});if(t.dataset.shift)send({type:'setShift',id:t.dataset.shift,shift:t.value});if(t.dataset.recipe)send({type:'setRecipe',id:t.dataset.recipe,recipe:t.value});if(t.dataset.pref){prefs[t.dataset.pref]=t.checked;applyPrefs();dirty=true;try{if(!temporary)localStorage.setItem(prefsKey,JSON.stringify({...prefs,mode:sim.state.mode}));}catch{}}});
+ const actions={'ticket-inform':()=>ticketRespond(id,'inform'),'ticket-approve':()=>ticketRespond(id,'approve'),'ticket-reject':()=>ticketRespond(id,'reject'),'ticket-goodwill':()=>ticketRespond(id,'goodwill'),'ticket-apologize':()=>ticketRespond(id,'apologize'),exportHtml,retryStorage,temporary:chooseTemporary,returnRental:()=>confirm('Mietfahrzeug zurückgeben?','Rückgabe beendet weitere Mietkosten. Angebrochene Miettage werden nicht erstattet. Fahrzeug muss leer und frei am Mietstandort stehen.',()=>send({type:'returnRental',id})),cancelTour:()=>send({type:'cancelTour',id}),disposeBatch:()=>confirm('Geschädigte Ware entsorgen?','Entsorgung kostet 2 € je Stück. Ware wird endgültig entfernt.',()=>send({type:'disposeBatch',batchId:id})),approveDocuments:()=>send({type:'approveDocuments',id}),cancelFreight:()=>confirm('Fracht stornieren?','Bereits gezahlte Fracht verfällt. Ware kehrt nur bei freier Lagerkapazität zurück.',()=>send({type:'cancelFreight',id})),recallBatch:()=>confirm('Charge zurückrufen?','Betroffene Charge und ihre nachverfolgbaren Nachfolger werden gesperrt. Bereits gelieferte Ware wird im Rückruf erfasst.',()=>send({type:'recallBatch',batchId:id})),acceptContract:()=>hubSend({type:'acceptContract',id},'Vertragsannahme'),cancelContract:()=>cancelContract(id),prioritizeArrival:()=>hubSend({type:'prioritizeArrival',id},'Vorziehen'),close:closePanel,refresh:()=>renderPanel(true),build:()=>startBuild(BUILDINGS[id]?id:undefined),endBuild,rotateBuild:()=>{rotation=(rotation+90)%360;scene.setBuild(build,rotation,moving);toast('Anlage gedreht: '+rotation+'°');},select:()=>{selected=id;openPanel('detail');scene.focus?.(id);},toggle:()=>send({type:'toggleBuilding',id}),maintain:()=>send({type:'maintain',id}),move:()=>{const o=sim.state.buildings.find(b=>b.id===id);if(o){moving=id;rotation=o.rotation;startBuild(o.type);toast('Neue Position auf Karte wählen.');}},demolish:()=>confirm('Anlage zurückbauen?','Rückbau gibt 35 % Anschaffungskosten zurück. Belegte Anlagen bleiben geschützt.',()=>send({type:'demolish',id})),accept:()=>send({type:'acceptOrder',id}),cancelOrder:()=>confirm('Auftrag stornieren?','Unvollständige Aufträge senken Reputation.',()=>send({type:'cancelOrder',id})),cancelShipment:()=>send({type:'cancelShipment',id}),train:()=>send({type:'train',id}),fire:()=>confirm('Person entlassen?','Aktive Tätigkeit muss vorher abgeschlossen werden.',()=>send({type:'fire',id})),vehicleMaintain:()=>send({type:'maintainVehicle',id}),vehicleServiceExternal:()=>{const v=sim.state.vehicles.find(v=>v.id===id);if(v)confirm('Externe Wartung beauftragen?',`${v.name}: ${euro(maintenanceCost(v,true))}, ${fmt(EXTERNAL_SERVICE.minutes)} Spielminuten außer Betrieb. Ohne eigene Werkstatt, Ersatzteil und Technikpersonal.`,()=>send({type:'serviceVehicleExternal',id}));},research:()=>send({type:'startResearch',key:id}),toggleRule:()=>send({type:'toggleRule',id}),deleteRule:()=>send({type:'deleteRule',id}),site:()=>{send({type:'selectSite',id});scene.home();closePanel();},networkView:()=>{scene.setView('network');closePanel();},repairReturn:()=>send({type:'resolveReturn',id,resolution:'repair'}),recycleReturn:()=>send({type:'resolveReturn',id,resolution:'recycle'}),starter, 'buy-kit':()=>{for(const item of ['housing','board','carton'])if(!send({type:'buy',item,qty:12,supplier:'standard'},true).ok)return;toast('Drei getrennte Materiallieferungen bestellt.');},save:()=>save(true),export:()=>{const blob=new Blob([sim.serialize()],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`Industrie-Logistik-Tag-${Math.floor(sim.state.t/1440)+1}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);},import:()=>$('#importFile').click(),backup:loadBackup,welcomeBackup:loadBackup,discardBackup,loadPrevious,new:()=>confirm('Neues Unternehmen?','Vorherigen Spielstand bei Bedarf zuerst exportieren. Moduswahl öffnet sich danach.',()=>{showWelcome();setSpeed(0);}),hideMission:()=>{prefs.mission=false;applyPrefs();},start:()=>{const mode=$('input[name=mode]:checked').value;if(temporary)return confirm('Temporäres Unternehmen ersetzen?','Aktuellen Stand vorher als JSON exportieren.',()=>activate(mode,{reset:true}));let existing,prevExists=false;try{existing=store.has(STORE+'-'+mode);prevExists=store.has(STORE+'-'+mode+'-backup-prev');}catch{toast(lockMessage(),true);return false;}if(existing){confirm('Vorhandenen Spielstand ersetzen?','Dieser Modus besitzt bereits ein Unternehmen. Vorher bei Bedarf laden und exportieren. Letzte gültige Sicherung bleibt erhalten (eigener Platz „vorheriges Unternehmen“), bis du sie in den Einstellungen verwirfst.'+(prevExists?' Eine dort liegende ältere Sicherung wird dabei ersetzt.':''),()=>activate(mode,{reset:true}));return;}return activate(mode,{reset:true});},confirmCancel:()=>$('#confirm').close(),confirmOk:()=>{$('#confirm').close();const fn=confirmAction;confirmAction=null;return fn?.();}};return actions[a]?.();});
+document.addEventListener('change',e=>{const t=e.target;if(t.closest?.('[data-form="tour"]'))updateTourDraft(t.closest('[data-form="tour"]'));if(t.name==='vehicleId'&&t.closest?.('[data-form="dispatch"]'))syncDispatchQty(t.closest('[data-form="dispatch"]'));if(t.dataset.relocate&&t.value)send({type:'moveWorker',id:t.dataset.relocate,toSite:t.value});if(t.dataset.shift)send({type:'setShift',id:t.dataset.shift,shift:t.value});if(t.dataset.recipe)send({type:'setRecipe',id:t.dataset.recipe,recipe:t.value});if(t.dataset.pref){prefs[t.dataset.pref]=t.checked;applyPrefs();dirty=true;try{if(!temporary)localStorage.setItem(prefsKey,JSON.stringify({...prefs,mode:sim.state.mode}));}catch{}}});
 document.addEventListener('input',e=>{const f=e.target.closest?.('[data-form="tour"]');if(f)updateTourDraft(f);});
 $('#search').addEventListener('input',e=>{search=e.target.value.toLowerCase();renderPanel();});
 document.addEventListener('submit',e=>{const f=e.target.closest('[data-form]');if(!f)return;e.preventDefault();const d=Object.fromEntries(new FormData(f));const t=f.dataset.form;for(const k of ['qty','threshold','budget','cooldown','minutes','amount','qty1','qty2','qty3','priority','extensionMinutes'])if(k in d)d[k]=Number(d[k]);const commands={ticket:{type:'createTicket',...d},rental:{type:'rentVehicle',vehicleType:d.vehicleType,site:sim.state.selectedSite},freight:{type:'bookFreight',...d},tour:tourCommand(d),loan:{type:d.operation,amount:d.amount},buy:{type:'buy',...d},hire:{type:'hire',...d},vehicle:{type:'buyVehicle',...d},dispatch:{type:'dispatch',orderId:f.dataset.id,...d},rule:{type:'addRule',kind:'reorder',...d},site:{type:'buySite',...d},transfer:{type:'transfer',...d},return:{type:'createReturn',...d}};if(t==='loadMode'){return activate(d.mode);}if(t==='forecast'){try{forecast=sim.forecast(d.minutes,d.alternative==='worker'?[{type:'hire',role:'production'}]:[]);renderPanel();toast('Vorschau berechnet. Echter Betrieb unverändert.');}catch(err){toast(err.message,true);}}else{const result=send(commands[t]);if(t==='tour'&&result.ok)tourDraft={};renderPanel();}});
@@ -4473,7 +4726,9 @@ document.addEventListener('visibilitychange',()=>{accumulator=0;lastTick=perform
 window.addEventListener('beforeunload',e=>{if(!started)return;if(temporary?dirty:leaveSave()!=='saved'){e.preventDefault();e.returnValue='';}});
 window.addEventListener('pagehide',()=>guard.release());
 window.addEventListener('pageshow',e=>{if(e.persisted){writable=false;speed=0;toast('Ansicht wiederhergestellt. Für sicheres Fortsetzen Seite neu laden.',true);render();}});
-setInterval(()=>{const now=performance.now(),dt=Math.min(1000,now-lastTick);lastTick=now;if(!started||switching||document.hidden||$('dialog[open]')||!speed||!canWrite()){accumulator=0;scene.setClock?.(sim.state.t);return;}accumulator+=dt*speed;const n=Math.floor(accumulator/1000);if(n){accumulator-=n*1000;try{sim.step(n);dirty=true;render();}catch(e){setSpeed(0);toast('Simulation angehalten: '+e.message,true);}}scene.setClock?.(sim.state.t+accumulator/1000);},100);
+// Messanzeige nur mit ?perf=1 (perf-overlay.js); sonst null und kein Messpfad im Takt.
+const perf=typeof startPerfOverlay==='function'?startPerfOverlay({scene,speed:()=>speed}):null;
+setInterval(()=>{const now=performance.now(),dt=Math.min(1000,now-lastTick);lastTick=now;if(!started||switching||document.hidden||$('dialog[open]')||!speed||!canWrite()){accumulator=0;scene.setClock?.(sim.state.t);return;}accumulator+=dt*speed;const n=Math.floor(accumulator/1000);if(n){accumulator-=n*1000;try{const p0=perf&&performance.now();sim.step(n);if(perf)perf.sim(performance.now()-p0,n);dirty=true;render();}catch(e){setSpeed(0);toast('Simulation angehalten: '+e.message,true);}}scene.setClock?.(sim.state.t+accumulator/1000);},100);
 // Autosave im Leerlauf; Verlassen (visibilitychange/beforeunload) speichert sofort (localStorage synchron; IndexedDB: Transaktion sofort + Notfall-Kopie).
 let idleSave=0;
 function requestIdleSave(){if(idleSave)return;const run=()=>{idleSave=0;if(started&&dirty)save();};idleSave=typeof requestIdleCallback==='function'?requestIdleCallback(run,{timeout:5000}):setTimeout(run,0);}
@@ -4492,6 +4747,16 @@ const slaText=m=>!Number.isFinite(m)?'—':m>=60?fmt(m/60,1)+' Std.':fmt(m)+' Mi
 function arrivalTone(a){return a.waitReason?'wait':PHASE_TONE[a.phase]||'neutral';}
 /** Wartezeit aus yard.js (waitSince); ohne Wartegrund zählt nur die Warteschlange ab Phasenbeginn. */
 function arrivalWait(a,t){if(a.phase==='gone'||a.phase==='approach')return 0;if(a.waitReason&&Number.isFinite(a.waitSince))return Math.max(0,t-a.waitSince);return a.phase==='queue'?Math.max(0,t-(a.phaseStart??t)):0;}
+/** Rest der Phase; wartet der Lkw (z. B. „Keine Torkontrolle“), ist phaseEnd nur das frühestmögliche Ende → „wartet“. */
+function arrivalRest(a,t){return a.waitReason&&a.phase!=='gone'?'wartet':a.phaseEnd!=null&&a.phaseEnd>t?fmt(a.phaseEnd-t)+' Min.':'—';}
+/** Gebundene Kraft am Lkw (yard.js-Schlüssel gateKey/unloadKey). Entladetempo nur Anzeige: workRate wie in yard.js. */
+function arrivalCrew(s,a){const key=a.phase==='gate'?gateKey(a):a.phase==='unloading'?unloadKey(a):null,w=key&&s.workers.find(w=>w.task===key);if(!w)return '';
+ return a.phase==='gate'?`Torkontrolle: ${esc(w.name)}`:`${esc(w.name)} · ${fmt(workRate(w,UNLOAD_BASE))} Pakete/min`;}
+/** Tätigkeit aus workforce.describeAssignment (Lesesicht A06) mit Klick auf den Bezug: Lkw → Hof & Docks, Sortierplatz → Anlage, Handsortierung → Sortierung. */
+function assignmentBadge(d){const [t,tone]={unload:['Entladen','good'],gate:['Torkontrolle','good'],sort:['Sortierung','good'],handsort:['Handsortierung','good'],task:['Beschäftigt','good'],break:['Pause','warn'],training:['Fortbildung',''],relocation:['Standortwechsel',''],off:['Feierabend','']}[d?.kind]||['Bereit',''];return badge(t,tone);}
+function assignmentHtml(d){if(!d)return '—';
+ const link=d.kind==='unload'||d.kind==='gate'?`<button class="ref-link" data-arrival="${esc(d.ref)}" title="Hof &amp; Docks öffnen">Hof &amp; Docks</button>`:d.kind==='sort'?`<button class="ref-link" data-action="select" data-id="${esc(d.ref)}" title="Anlage öffnen">Anlage</button>`:d.kind==='handsort'?`<button class="ref-link" data-station="sort" title="Sortierung öffnen">Sortierung</button>`:'';
+ return esc(d.text)+(link?' '+link:'');}
 function dockLabel(s,id){const b=s.buildings.find(x=>x.id===id);if(!b)return id||'—';const i=s.buildings.filter(x=>x.type==='dock'&&x.site===b.site).indexOf(b);return 'Dock '+(i+1);}
 function laneName(c,o){const lane=c?.lanes?.find(l=>l.id===o?.lane||l.name===o?.lane);return lane?.name||String(o?.customer||'').replace(/\s*\(.*\)$/,'')||o?.lane||'Ohne Gebiet';}
 const parcelsPerDay=c=>(c.arrivals||[]).reduce((n,a)=>n+(Number(a.parcels)||0),0);
@@ -4502,7 +4767,7 @@ function collectHub(s,h,{alert,orders,siteName,lateByContract}){
   if(w>HUB_WAIT_ALERT)alert('yw:'+a.id,'wait',`Lkw ${a.plate} wartet seit ${fmt(w)} Min.`,`${a.waitReason||phaseLabel(a.phase)} · ${a.carrier} · ${siteName(a.site)}`,a.id);
   if(a.atRisk)alert('yr:'+a.id,'bad',`Frist gefährdet · ${a.plate}`,`${c?.shipper||a.contractId} · Frist ${c&&Number.isFinite(c.slaMinutes)?time(a.eta+c.slaMinutes):'—'}`,a.id);
   h.fleet.foreign++;
-  h.foreignRows.push({key:'y:'+a.id,arrival:a.id,id:'Fremd',name:a.plate||a.id,type:'Fremd-Lkw · '+(a.carrier||'—'),route:`${c?.shipper||a.carrier||'—'} → ${a.dock?dockLabel(s,a.dock):siteName(a.site)}`,status:phaseLabel(a.phase)+(a.priority&&PRIORITIZABLE.has(a.phase)?' · vorgezogen':''),hint:a.waitReason||'',tone,rest:a.phaseEnd!=null&&a.phaseEnd>s.t?fmt(a.phaseEnd-s.t)+' Min.':'—'});}
+  h.foreignRows.push({key:'y:'+a.id,arrival:a.id,id:'Fremd',name:a.plate||a.id,type:'Fremd-Lkw · '+(a.carrier||'—'),route:`${c?.shipper||a.carrier||'—'} → ${a.dock?dockLabel(s,a.dock):siteName(a.site)}`,status:phaseLabel(a.phase)+(a.priority&&PRIORITIZABLE.has(a.phase)?' · vorgezogen':''),hint:a.waitReason||'',tone,rest:arrivalRest(a,s.t)});}
  for(const [id,n] of lateByContract){const c=contracts.get(id);alert('ct:'+id,'bad',`Vertrag ${c?.shipper||id} · ${fmt(n)} ${n===1?'Auftrag':'Aufträge'} verspätet`,`Zustellung nach Frist mit Abschlag · ${siteName(c?.site)}`,id);}
  for(const b of s.batches){if(b.item!=='parcel'||!(b.qty>0)||b.site!==site)continue;
   if(b.location==='inbound')u.inbound+=b.qty;
@@ -4556,17 +4821,21 @@ function yardPanel(){const s=sim.state,site=s.selectedSite,day=Math.floor(s.t/14
  const rows=filtered(all.filter(a=>a.phase!=='gone'||sameDay(a.eta,day))).sort((a,b)=>(a.eta??0)-(b.eta??0)||String(a.id).localeCompare(String(b.id)));
  const docks=s.buildings.filter(b=>b.site===site&&b.type==='dock'),onSite=all.filter(a=>!['approach','gone'].includes(a.phase)).length,queue=all.filter(a=>a.phase==='queue').length,busy=docks.filter(b=>b.task).length;
  return `<div class="numbers">${num(fmt(onSite),'Lkw am Hof')}${num(fmt(queue),'Warten auf Dock')}${num(`${fmt(busy)} / ${fmt(docks.length)}`,'Docks belegt')}</div>
-<section class="section"><div class="section-title"><h3>Torbuch heute</h3>${badge(fmt(rows.length)+' Ankünfte')}</div>${rows.length?`<div class="table-wrap"><table class="yard-table"><thead><tr><th>Kennzeichen</th><th>Spedition</th><th>Vertrag</th><th>Phase</th><th>Wartegrund</th><th>Dock</th><th class="num">Pakete</th><th class="num">Rest</th><th></th></tr></thead><tbody>${rows.map(a=>{const c=contracts.get(a.contractId),w=arrivalWait(a,s.t);return `<tr class="${hubFocus===a.id?'selected':''}" data-arrival-row="${esc(a.id)}"><td><b>${esc(a.plate)}</b><br><small class="muted">Ankunft ${clockOf((a.eta??0)%1440)}</small></td><td>${esc(a.carrier)}</td><td>${esc(c?.shipper||a.contractId)}<br><small class="muted">${esc(a.contractId)}</small></td><td><span class="chip tone-${arrivalTone(a)}">${esc(phaseLabel(a.phase))}</span>${a.priority&&PRIORITIZABLE.has(a.phase)?`<br><small class="muted">vorgezogen</small>`:''}${a.atRisk?`<br>${badge('Frist gefährdet','bad')}`:''}</td><td>${esc(a.waitReason||'—')}${w?`<br><small class="${w>HUB_WAIT_ALERT?'money-minus':'muted'}">seit ${fmt(w)} Min.</small>`:''}</td><td>${a.dock?esc(dockLabel(s,a.dock)):'—'}</td><td class="num">${fmt(a.unloaded)} / ${fmt(a.parcels)}</td><td class="num">${a.phaseEnd!=null&&a.phaseEnd>s.t?fmt(a.phaseEnd-s.t)+' Min.':'—'}</td><td>${PRIORITIZABLE.has(a.phase)&&!a.priority?button('Vorziehen','prioritizeArrival',a.id):''}</td></tr>`;}).join('')}</tbody></table></div>`:empty('Heute noch kein Lkw','Ankünfte entstehen aus aktiven Frachtverträgen.')}</section>
+<section class="section"><div class="section-title"><h3>Torbuch heute</h3>${badge(fmt(rows.length)+' Ankünfte')}</div>${rows.length?`<div class="table-wrap"><table class="yard-table"><thead><tr><th>Kennzeichen</th><th>Spedition</th><th>Vertrag</th><th>Phase</th><th>Wartegrund</th><th>Dock</th><th class="num">Pakete</th><th class="num">Rest</th><th></th></tr></thead><tbody>${rows.map(a=>{const c=contracts.get(a.contractId),w=arrivalWait(a,s.t),crew=arrivalCrew(s,a);return `<tr class="${hubFocus===a.id?'selected':''}" data-arrival-row="${esc(a.id)}"><td><b>${esc(a.plate)}</b><br><small class="muted">Ankunft ${clockOf((a.eta??0)%1440)}</small></td><td>${esc(a.carrier)}</td><td>${esc(c?.shipper||a.contractId)}<br><small class="muted">${esc(a.contractId)}</small></td><td><span class="chip tone-${arrivalTone(a)}">${esc(phaseLabel(a.phase))}</span>${a.priority&&PRIORITIZABLE.has(a.phase)?`<br><small class="muted">vorgezogen</small>`:''}${a.atRisk?`<br>${badge('Frist gefährdet','bad')}`:''}${crew&&a.phase==='gate'?`<br><small class="muted crew">${crew}</small>`:''}</td><td>${esc(a.waitReason||'—')}${w?`<br><small class="${w>HUB_WAIT_ALERT?'money-minus':'muted'}">seit ${fmt(w)} Min.</small>`:''}</td><td>${a.dock?esc(dockLabel(s,a.dock)):'—'}</td><td class="num">${fmt(a.unloaded)} / ${fmt(a.parcels)}${crew&&a.phase==='unloading'?`<br><small class="muted crew">${crew}</small>`:''}</td><td class="num">${arrivalRest(a,s.t)}</td><td>${PRIORITIZABLE.has(a.phase)&&!a.priority?button('Vorziehen','prioritizeArrival',a.id):''}</td></tr>`;}).join('')}</tbody></table></div>`:empty('Heute noch kein Lkw','Ankünfte entstehen aus aktiven Frachtverträgen.')}</section>
 <section class="section"><div class="section-title"><h3>Dock-Belegung</h3>${badge(fmt(docks.length-busy)+' frei',docks.length&&busy<docks.length?'good':'warn')}</div>${docks.map(b=>{const d=dockState(s,b,yard);return `<div class="list-row dock-row"><div><strong>${esc(dockLabel(s,b.id))} <span class="chip tone-${d.tone}">${esc(d.state)}</span></strong><small>${esc(d.text)} · ${esc(b.id)}</small></div>${button('Akte','select',b.id)}</div>`;}).join('')||`${empty('Kein Dock gebaut','Fremde Lkw warten am Tor, bis eine Laderampe frei ist.')}<div class="actions">${button('Laderampe bauen','build','dock','primary')}</div>`}</section>`;}
 const ready=bootstrap();
 
 /** Sammeltouren nutzen dieselben Auftrags-IDs und Fahrzeuge wie Einzellieferungen. */
 function tourCommand(d){return {type:'dispatchTour',vehicleId:d.vehicleId,stops:[1,2,3,4].filter(i=>d['order'+i]).map(i=>({orderId:d['order'+i],qty:Number(d['qty'+i]),returnQty:Number(d['returnQty'+i]||0)}))};}
-function updateTourDraft(form){tourDraft=Object.fromEntries(new FormData(form));const preview=form.querySelector('[data-tour-preview]');if(preview)preview.innerHTML=tourPreview(sim.state,tourDraft);}
+/** Höchstmenge je Stopp: offene Auftragsmenge und Fahrzeugkapazität für den Artikel (gleiche Regel wie Simulation). Gesamtladung prüft die Vorschau. */
+function tourStopLimit(s,d,i){const o=s.orders.find(o=>o.id===d['order'+i]),v=s.vehicles.find(v=>v.id===d.vehicleId);return o&&v?dispatchMax(s,o,v):null;}
+function tourStopMax(s,d,i){const m=tourStopLimit(s,d,i);return m==null?1000:Math.max(1,m);}
+function tourStopHint(s,d,i){const m=tourStopLimit(s,d,i);return m==null?'':` · max. ${fmt(m)}`;}
+function updateTourDraft(form){tourDraft=Object.fromEntries(new FormData(form));for(const i of [1,2,3,4]){const q=form.querySelector?.(`input[name="qty${i}"]`),h=form.querySelector?.(`[data-tour-max="${i}"]`);if(q)q.max=String(tourStopMax(sim.state,tourDraft,i));if(h)h.textContent=tourStopHint(sim.state,tourDraft,i);}const preview=form.querySelector('[data-tour-preview]');if(preview)preview.innerHTML=tourPreview(sim.state,tourDraft);}
 function driverForecastCard(f){if(!f)return '';return `<div class="notice">${f.elapsedMinutes==null?'<b>Fahrerprognose nicht verfügbar</b>':`${kv('Geschätzte Gesamtzeit mit Fahrpersonal',fmt(f.elapsedMinutes)+' Min.')}${kv('Davon Wartezeit',fmt(f.waitMinutes)+' Min.')}${kv('Pausen / Schichtwartezeit',fmt(f.breakMinutes)+' / '+fmt(f.shiftMinutes)+' Min.')}`}<p class="fine">${esc(f.assumption||'Freie Rampe und verfügbares Lagerpersonal vorausgesetzt. Keine verbindliche Ankunftszeit.')}</p></div>`;}
-function tourPreview(s,d){const command=tourCommand(d);if(command.stops.length<2)return '<p class="fine">Zwei bis vier unterschiedliche Aufträge wählen. Reihenfolge entspricht Fahrtfolge.</p>';const plan=planTour(s,command.vehicleId,command.stops);if(!plan.ok)return `<div class="notice">${esc(plan.message)}</div>`;const v=s.vehicles.find(v=>v.id===command.vehicleId),weightCapacity=VEHICLES[v.type].weightCapacity||v.capacity*4;const initial=command.stops.reduce((a,st)=>{const item=ITEMS[s.orders.find(o=>o.id===st.orderId).item];a.volume+=st.qty*(item.volume||1);a.weight+=st.qty*(item.weight||1);return a;},{volume:0,weight:0});return `${kv('Fahrtkosten',euro(plan.cost))}${kv('Arbeits- und Fahrtzeit',fmt(plan.minutes)+' Min.')}${driverForecastCard(plan.driverForecast)}${kv('Strecke',fmt(plan.distance)+' km')}${kv('Startladung',fmt(initial.volume)+' / '+fmt(v.capacity)+' Plätze · '+fmt(initial.weight)+' / '+fmt(weightCapacity)+' kg')}<ol class="tour-stops">${plan.stops.map(st=>`<li><b>${esc(s.orders.find(o=>o.id===st.orderId)?.customer||st.orderId)}</b><small>${fmt(st.qty)} zustellen · ${fmt(st.returnQty||0)} zurücknehmen</small><small>Danach: ${fmt(st.volume)} / ${fmt(v.capacity)} Plätze · ${fmt(st.weight)} / ${fmt(weightCapacity)} kg</small></li>`).join('')}</ol><p class="fine">Zeit ohne zusätzliche Schicht-, Pausen- und Engpasswartezeiten. Fahrtkosten ohne Löhne und Erstattungen. Bestand und Verfügbarkeit werden bei Beauftragung erneut geprüft.</p>`;}
-function tourCard(s,t){const v=s.vehicles.find(v=>v.id===t.vehicleId),capacity=v?.capacity||0,weightCapacity=VEHICLES[v?.type]?.weightCapacity||capacity*4;const ids=new Set(t.stops.flatMap(st=>[...(st.cargo||[]),...((s.returns||[]).find(r=>r.id===st.returnId)?.cargo||[])]));const cargo=s.batches.filter(b=>ids.has(b.id)&&b.location==='vehicle'&&b.qty>0);const load=cargo.reduce((a,b)=>{a.volume+=b.qty*(ITEMS[b.item]?.volume||1);a.weight+=b.qty*(ITEMS[b.item]?.weight||1);return a;},{volume:0,weight:0});return `<div class="card tour-card"><div class="card-top"><h3>${esc(t.id)}</h3>${badge(label(t.status),t.blocked?'warn':'')}</div>${kv('Fahrzeug',esc(v?.name||t.vehicleId))}${kv('Aktuelle Phase verbleibend',fmt(t.remaining)+' Min.')}${kv(t.transportCost==null?'Fahrtkosten':'Gebuchte Fahrtkosten',t.transportCost==null?'Bei Abfahrt':euro(t.transportCost))}${kv('Ladung an Bord',fmt(load.volume)+' / '+fmt(capacity)+' Plätze · '+fmt(load.weight)+' / '+fmt(weightCapacity)+' kg')}${t.blocked?`<div class="notice" role="status">${esc(t.blocked)}</div>`:''}<ol class="tour-stops">${(t.stops||[]).map((st,i)=>{const r=(s.returns||[]).find(r=>r.id===st.returnId);return `<li ${i===t.stopIndex&&!['complete','cancelled','loading','returning','returnUnloading'].includes(t.status)?'aria-current="step"':''}><b>${esc(s.orders.find(o=>o.id===st.orderId)?.customer||st.orderId)}</b><small>${fmt(st.qty)} Stück · ${st.status==='delivered'?'zugestellt':label(st.status==='pending'?'scheduled':st.status)}</small>${r?.qty?`<small>Rückladung: ${fmt(r.qty)} Stück · ${esc(r?label(r.status):'Eingeplant')}</small>`:''}</li>`;}).join('')}</ol>${t.status==='loading'?button('Tour vor Abfahrt stornieren','cancelTour',t.id):''}</div>`;}
-function tourPanel(s){const active=s.orders.filter(o=>o.status==='active'),vehicles=s.vehicles.filter(v=>v.site===s.selectedSite&&v.status==='idle');if(!tourDraft.vehicleId&&vehicles[0])tourDraft.vehicleId=vehicles[0].id;return `<section class="section"><h3>Sammeltour mit Rückladung</h3><p class="fine" style="margin:8px 0 14px">Zustellen, danach Rückladung aufnehmen. Rückgabe nur für bereits gelieferte, noch nicht retournierte Ware desselben Auftrags. Rückfahrt endet mit Entladung in Quarantäne.</p><form data-form="tour" class="form-grid">${field('Fahrzeug',`<select name="vehicleId">${vehicles.map(v=>`<option value="${v.id}" ${tourDraft.vehicleId===v.id?'selected':''}>${esc(v.name)} · ${v.capacity} Plätze${VEHICLES[v.type]?.cold?' · Kühlung':''}</option>`).join('')||'<option value="">Kein freies Fahrzeug</option>'}</select>`,true)}${[1,2,3,4].map(i=>`<fieldset class="tour-stop-input"><legend>Stopp ${i}</legend>${field('Auftrag',`<select name="order${i}"><option value="">${i<3?'Kunde auswählen':'Optionaler Stopp'}</option>${active.map(o=>`<option value="${o.id}" ${tourDraft['order'+i]===o.id?'selected':''}>${esc(o.customer)} · ${o.qty-o.delivered} offen · ${o.delivered} geliefert</option>`).join('')}</select>`,true)}<div class="grid2">${field('Zustellmenge',`<input name="qty${i}" type="number" value="${esc(tourDraft['qty'+i]??2)}" min="1" max="1000" step="1" required>`)}${field('Rückgabemenge',`<input name="returnQty${i}" type="number" value="${esc(tourDraft['returnQty'+i]??0)}" min="0" max="1000" step="1" required>`)}</div></fieldset>`).join('')}<div class="tour-preview" data-tour-preview aria-live="polite">${tourPreview(s,tourDraft)}</div><button class="primary">Sammeltour verbindlich planen</button></form><div class="section-title" style="margin-top:20px"><h3>Beauftragte Touren</h3></div>${(s.tours||[]).slice().reverse().map(t=>tourCard(s,t)).join('')||empty('Keine Sammeltouren')}</section>`;}
+function tourPreview(s,d){const command=tourCommand(d);if(command.stops.length<2)return '<p class="fine">Zwei bis vier unterschiedliche Aufträge wählen. Reihenfolge entspricht Fahrtfolge.</p>';const plan=planTour(s,command.vehicleId,command.stops);if(!plan.ok)return `<div class="notice">${esc(plan.message)}</div>`;const v=s.vehicles.find(v=>v.id===command.vehicleId),weightCapacity=VEHICLES[v.type].weightCapacity||v.capacity*4;const initial=command.stops.reduce((a,st)=>{const item=ITEMS[s.orders.find(o=>o.id===st.orderId).item];a.volume+=st.qty*(item.volume||1);a.weight+=st.qty*(item.weight||1);return a;},{volume:0,weight:0});return `${kv('Fahrtkosten',euro(plan.cost))}${kv('Arbeits- und Fahrtzeit',fmt(plan.minutes)+' Min.')}${driverForecastCard(plan.driverForecast)}${kv('Strecke',fmt(plan.distance)+' km')}${kv('Startladung',fmt(initial.volume)+' / '+fmt(v.capacity)+' Volumen · '+fmt(initial.weight)+' / '+fmt(weightCapacity)+' kg')}<ol class="tour-stops">${plan.stops.map(st=>`<li><b>${esc(s.orders.find(o=>o.id===st.orderId)?.customer||st.orderId)}</b><small>${fmt(st.qty)} zustellen · ${fmt(st.returnQty||0)} zurücknehmen</small><small>Danach: ${fmt(st.volume)} / ${fmt(v.capacity)} Volumen · ${fmt(st.weight)} / ${fmt(weightCapacity)} kg</small></li>`).join('')}</ol><p class="fine">Zeit ohne zusätzliche Schicht-, Pausen- und Engpasswartezeiten. Fahrtkosten ohne Löhne und Erstattungen. Bestand und Verfügbarkeit werden bei Beauftragung erneut geprüft.</p>`;}
+function tourCard(s,t){const v=s.vehicles.find(v=>v.id===t.vehicleId),capacity=v?.capacity||0,weightCapacity=VEHICLES[v?.type]?.weightCapacity||capacity*4;const ids=new Set(t.stops.flatMap(st=>[...(st.cargo||[]),...((s.returns||[]).find(r=>r.id===st.returnId)?.cargo||[])]));const cargo=s.batches.filter(b=>ids.has(b.id)&&b.location==='vehicle'&&b.qty>0);const load=cargo.reduce((a,b)=>{a.volume+=b.qty*(ITEMS[b.item]?.volume||1);a.weight+=b.qty*(ITEMS[b.item]?.weight||1);return a;},{volume:0,weight:0});return `<div class="card tour-card"><div class="card-top"><h3>${esc(t.id)}</h3>${badge(label(t.status),t.blocked?'warn':'')}</div>${kv('Fahrzeug',esc(v?.name||t.vehicleId))}${kv('Aktuelle Phase verbleibend',fmt(t.remaining)+' Min.')}${kv(t.transportCost==null?'Fahrtkosten':'Gebuchte Fahrtkosten',t.transportCost==null?'Bei Abfahrt':euro(t.transportCost))}${kv('Ladung an Bord',fmt(load.volume)+' / '+fmt(capacity)+' Volumen · '+fmt(load.weight)+' / '+fmt(weightCapacity)+' kg')}${t.blocked?`<div class="notice" role="status">${esc(t.blocked)}</div>`:''}<ol class="tour-stops">${(t.stops||[]).map((st,i)=>{const r=(s.returns||[]).find(r=>r.id===st.returnId);return `<li ${i===t.stopIndex&&!['complete','cancelled','loading','returning','returnUnloading'].includes(t.status)?'aria-current="step"':''}><b>${esc(s.orders.find(o=>o.id===st.orderId)?.customer||st.orderId)}</b><small>${fmt(st.qty)} Stück · ${st.status==='delivered'?'zugestellt':label(st.status==='pending'?'scheduled':st.status)}</small>${r?.qty?`<small>Rückladung: ${fmt(r.qty)} Stück · ${esc(r?label(r.status):'Eingeplant')}</small>`:''}</li>`;}).join('')}</ol>${t.status==='loading'?button('Tour vor Abfahrt stornieren','cancelTour',t.id):''}</div>`;}
+function tourPanel(s){const active=s.orders.filter(o=>o.status==='active'),vehicles=s.vehicles.filter(v=>v.site===s.selectedSite&&v.status==='idle');if(!tourDraft.vehicleId&&vehicles[0])tourDraft.vehicleId=vehicles[0].id;return `<section class="section"><h3>Sammeltour mit Rückladung</h3><p class="fine" style="margin:8px 0 14px">Zustellen, danach Rückladung aufnehmen. Rückgabe nur für bereits gelieferte, noch nicht retournierte Ware desselben Auftrags. Rückfahrt endet mit Entladung in Quarantäne.</p><form data-form="tour" class="form-grid">${field('Fahrzeug',`<select name="vehicleId">${vehicles.map(v=>`<option value="${v.id}" ${tourDraft.vehicleId===v.id?'selected':''}>${esc(v.name)} · ${fmt(v.capacity)} Vol. · ${fmt(weightCap(v))} kg${VEHICLES[v.type]?.cold?' · Kühlung':''}</option>`).join('')||'<option value="">Kein freies Fahrzeug</option>'}</select>`,true)}${[1,2,3,4].map(i=>`<fieldset class="tour-stop-input"><legend>Stopp ${i}</legend>${field('Auftrag',`<select name="order${i}"><option value="">${i<3?'Kunde auswählen':'Optionaler Stopp'}</option>${active.map(o=>`<option value="${o.id}" ${tourDraft['order'+i]===o.id?'selected':''}>${esc(o.customer)} · ${o.qty-o.delivered} offen · ${o.delivered} geliefert</option>`).join('')}</select>`,true)}<div class="grid2"><label class="field">Zustellmenge<span class="fine" data-tour-max="${i}">${tourStopHint(s,tourDraft,i)}</span><input name="qty${i}" type="number" value="${esc(tourDraft['qty'+i]??2)}" min="1" max="${tourStopMax(s,tourDraft,i)}" step="1" required></label>${field('Rückgabemenge',`<input name="returnQty${i}" type="number" value="${esc(tourDraft['returnQty'+i]??0)}" min="0" max="1000" step="1" required>`)}</div></fieldset>`).join('')}<div class="tour-preview" data-tour-preview aria-live="polite">${tourPreview(s,tourDraft)}</div><button class="primary">Sammeltour verbindlich planen</button></form><div class="section-title" style="margin-top:20px"><h3>Beauftragte Touren</h3></div>${(s.tours||[]).slice().reverse().map(t=>tourCard(s,t)).join('')||empty('Keine Sammeltouren')}</section>`;}
 
 
 function special(){const s=sim.state,cold=s.batches.filter(b=>b.qty>0&&ITEMS[b.item]?.cold);return `<div class="notice">Kalibriermodule benötigen passende Kühlung. Temperatur wirkt über Zeit auf Qualität. Frachtklassen und Dokumente folgen fiktiven Spielregeln.</div><section class="section"><h3>Kühlkette</h3>${cold.map(b=>`<div class="card" style="margin-top:10px"><div class="card-top"><h3>${b.qty} × ${esc(name(ITEMS,b.item))}</h3>${badge(b.blocked?'Gesperrt':label(b.location),b.blocked?'bad':'')}</div>${kv('Temperatur',fmt(b.temperature??20,1)+' °C')}${kv('Qualität',fmt(b.quality,1)+' %')}${kv('Wärmeexposition',fmt(b.exposure||0)+' Min.')}${button('Chargenakte','select',b.id)}${b.coldDamaged&&b.owner==='company'?button('Entsorgen · 2 €/Stk.','disposeBatch',b.id,'danger'):''}</div>`).join('')||empty('Keine temperaturgeführte Ware','Forschung Kühlkettenlogistik, Kühllager und Kühlfahrzeug vorbereiten.')}</section><section class="section"><h3>Bahn, See und Luft</h3><p class="fine" style="margin:8px 0 15px">Buchbare Fremdleistungen ab eigenem Terminal. Dokumentprüfung, Umschlag und Fahrplan bestimmen tatsächliche Abfahrt.</p><form data-form="freight" class="form-grid">${field('Aktiver Auftrag',`<select name="orderId">${s.orders.filter(o=>o.status==='active').map(o=>`<option value="${o.id}">${esc(o.customer)} · ${esc(name(ITEMS,o.item))}</option>`).join('')||'<option value="">Kein aktiver Auftrag</option>'}</select>`,true)}${field('Verkehrsträger','<select name="mode"><option value="rail">Bahn</option><option value="sea">Seefracht</option><option value="air">Luftfracht</option></select>')}${field('Menge','<input name="qty" type="number" min="1" max="1000" value="8">')}<button class="primary">Fracht verbindlich buchen</button></form></section><section class="section"><h3>Frachtaufträge</h3>${(s.freights||[]).slice().reverse().map(f=>`<div class="card" style="margin-top:10px"><div class="card-top"><h3>${esc(label(f.mode))} · ${f.qty} Stück</h3>${badge(label(f.status),f.blocked?'warn':'')}</div>${kv('Auftrag',esc(s.orders.find(o=>o.id===f.orderId)?.customer||f.orderId))}${kv(f.departedAt?'Abgefahren':'Nächster Fahrplan',time(f.departedAt||f.nextDeparture))}${kv('Dokumente',f.documents==='approved'?'Freigegeben':f.documents==='processing'?'Prüfung · '+f.documentRemaining+' Min.':'Prüfung erforderlich')}${kv('Verpasste Anschlüsse',fmt(f.missedConnections||0))}${kv('Restzeit',fmt(f.remaining)+' Min.')}${f.blocked?`<p>${esc(f.blocked)}</p>`:''}<div class="actions">${f.documents==='pending'&&f.status!=='cancelled'?button('Dokumentprüfung starten','approveDocuments',f.id):''}${button('Akte','select',f.id)}${['loading','waiting'].includes(f.status)?button('Stornieren · Fracht verfällt','cancelFreight',f.id):''}</div></div>`).join('')||empty('Keine gebuchten Frachten')}</section>`;}
