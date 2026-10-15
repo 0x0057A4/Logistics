@@ -316,3 +316,10 @@ button.ref-link{border:0;background:none;padding:0 0 0 4px;color:#3f6d34;text-de
 button.ref-link:hover{background:none;color:var(--ink)}
 .kv b{text-align:right}
 .yard-table small.crew{white-space:nowrap}
+/* W2b (A10): Palettenhinweis, Stapler-Akku. */
+.notice.warn{background:#f6e3d8;border-color:#c46a45}
+.notice .actions{margin-top:8px}
+.progress.charge{margin:6px 0 8px}
+.progress.charge.low>span{background:#c46a45}
+.fork-row strong .chip{margin-left:6px;font-weight:500}
+.fork-row>div{flex:1;min-width:0}

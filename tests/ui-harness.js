@@ -11,7 +11,8 @@ import fs from 'node:fs';
 import {Simulation} from '../dist/core.js';
 import * as catalog from '../dist/catalog.js';
 import {onShift,describeAssignment,workRate,UNLOAD_BASE} from '../dist/workforce.js';
-import {gateKey,unloadKey} from '../dist/yard.js';
+import {gateKey,unloadKey,forkliftKey,sitePowered,FORKLIFT,PALLET_BASE} from '../dist/yard.js';
+import {unitOf,TERMS} from '../dist/contracts.js';
 import {maxLoad,maintenanceCost,EXTERNAL_SERVICE,WEAR_WARN} from '../dist/transport.js';
 const html=fs.readFileSync(new URL('../dist/index.html',import.meta.url),'utf8');
 const code=fs.readFileSync(new URL('../dist/app.js',import.meta.url),'utf8').replace(/^import .*;$/gm,'');
@@ -30,7 +31,7 @@ export async function boot(options={}){
  // Spielstandspeicher: ohne options.indexedDB Rückfall localStorage (bisheriges Verhalten); mit Stub IndexedDB-Pfad.
  let context;
  const createSaveStore=opts=>realStore({...opts,storage:()=>context.localStorage,indexedDB:options.indexedDB??null,...(options.storeOptions||{})});
- context=vm.createContext({...catalog,injectPortableSave,portableTemplate,fetch:options.fetch,RENTAL_RATES,planTour:tours.planTour,committedQty:tours.committedQty,maxLoad,maintenanceCost,EXTERNAL_SERVICE,WEAR_WARN,createSaveGuard,createSaveStore,report,Simulation,onShift,describeAssignment,workRate,UNLOAD_BASE,gateKey,unloadKey,Scene,document,window:{addEventListener(){}},localStorage:storage,matchMedia:()=>({matches:false}),performance:{now:()=>1000},setTimeout(){},clearTimeout(){},setInterval(){},Blob,URL,FormData:class{constructor(f){return Object.entries(f.values);}}});
+ context=vm.createContext({...catalog,injectPortableSave,portableTemplate,fetch:options.fetch,RENTAL_RATES,planTour:tours.planTour,committedQty:tours.committedQty,maxLoad,maintenanceCost,EXTERNAL_SERVICE,WEAR_WARN,createSaveGuard,createSaveStore,report,Simulation,onShift,describeAssignment,workRate,UNLOAD_BASE,gateKey,unloadKey,forkliftKey,sitePowered,FORKLIFT,PALLET_BASE,unitOf,TERMS,Scene,document,window:{addEventListener(){}},localStorage:storage,matchMedia:()=>({matches:false}),performance:{now:()=>1000},setTimeout(){},clearTimeout(){},setInterval(){},Blob,URL,FormData:class{constructor(f){return Object.entries(f.values);}}});
  if(options.storageGetterError)Object.defineProperty(context,'localStorage',{get(){throw new DOMException('Access denied','SecurityError');}});
  vm.runInContext(code,context);await vm.runInContext('ready',context);
  const run=source=>vm.runInContext(source,context);
