@@ -11,7 +11,7 @@ import { Scene, vehicleActivity, vehicleAtSite, coldWarnings } from './scene.js'
 export const VIEWS = ['hall', 'site', 'network', 'flat'];
 export const LABEL_MODES = ['fleet', 'infra', 'all', 'none'];
 export const MAX_LABELS = 40;
-const HEIGHT = { assembly: 1.5, testing: 1.45, packing: 1.2, rack: 1.75, dock: 2.3, power: 1.4, workshop: 1.25, research: 1.6, coldstore: 1.6, terminal: 1.45 };
+const HEIGHT = { assembly: 1.5, testing: 1.45, packing: 1.2, rack: 1.75, dock: 2.3, power: 1.4, workshop: 1.25, research: 1.6, coldstore: 1.6, terminal: 1.45, sorter: 1.35 };
 const ACTIVE = ['working', 'running', 'producing', 'active'];
 const BLOCKED = /wait|blocked|paused|material|staff|off|broken|power|storage/;
 const OUT = ['transit', 'collecting', 'linehaul', 'outbound'], IN = ['returning', 'inbound'];
@@ -36,7 +36,8 @@ export function yardLayout(site) {
   const W = site.width || 20, H = site.height || 16, gate = Math.min(8, H - 1);
   const count = Math.max(1, Math.floor((W - 1) / 3.2)), bays = [];
   for (let i = 0; i < count; i++) bays.push(1.9 + i * 3.2);
-  return { W, H, gate, gateZ: gate + .5, laneZ: H + 6.6, roadOutZ: H + 11.1, roadInZ: H + 12.4, entryX: -5, exitX: -2.6, far: -62, bays, bayZ: H + .3 };
+  // yardGateZ: Schranke der Hofeinfahrt (Einfahrspur exitX, zwischen Hofgasse laneZ und Straße); queue: gelbe Wartefläche.
+  return { W, H, gate, gateZ: gate + .5, laneZ: H + 6.6, roadOutZ: H + 11.1, roadInZ: H + 12.4, entryX: -5, exitX: -2.6, far: -62, bays, bayZ: H + .3, yardGateZ: H + 8, queue: { x0: -16.6, x1: -3.2, z0: H + .6, z1: H + 6.1 } };
 }
 /** Stellplatz eines Fahrzeugs im Hof. Kopf zeigt vom Tor weg (Heck an der Rampe). */
 export function slotPose(layout, k, len = 4.2, dockX = null) {
@@ -108,7 +109,8 @@ export function vehicleT(plan, v, clock, stateT, visibleMinutes = 8) {
 /** Paletten je Regal wie in scene.js: Füllung aus Standortbestand, 3 Ebenen × Fachbreite. */
 export function rackPallets(state, rack) {
   const racks = (state?.buildings || []).filter(a => a.site === rack.site && /rack|shelf|regal/.test(a.type));
-  let qty = 0; for (const a of state?.batches || []) if (a.site === rack.site && a.location === 'stock') qty += a.qty;
+  // Pakete (Fremdware, W1) erscheinen als Kartonstapel (parcelLoads), nicht als Paletten.
+  let qty = 0; for (const a of state?.batches || []) if (a.site === rack.site && a.location === 'stock' && a.item !== 'parcel') qty += a.qty;
   qty -= Math.max(0, racks.findIndex(a => a.id === rack.id)) * 80;
   const width = Math.max(1, Math.floor(BUILDINGS[rack.type]?.w || 2)), slots = [];
   for (let k = 0; k < 3; k++) for (let j = 0; j < width; j++) if (qty > k * 25 + j * 12) slots.push({ level: k, cell: j });
@@ -172,6 +174,161 @@ export function networkLayout(sites, k = .26) {
   const pins = sites.map(s => ({ id: s.id, x: ((s.x || 0) - cx) * k, z: ((s.y || 0) - cy) * k }));
   let ext = 12; for (const p of pins) ext = Math.max(ext, Math.abs(p.x) + 6, Math.abs(p.z) + 6);
   return { pins, ext };
+}
+
+// ---------- Hof: Fremd-Lkw aus s.yard (W1-S2/W1-S4), nur lesend ----------
+
+export const FOREIGN_LEN = 5.0;            // Sattelzug (Zugmaschine + Auflieger), Weltmaß
+export const YARD_TURN = 2.5;              // Kurvenradius im Hof
+export const QUEUE_PLACES = 6;             // Plätze auf der gelben Wartefläche, danach Rückstau auf der Hofgasse
+export const QUEUE_DRIVE = 1;              // Spielminuten Fahrt Tor → Warteplatz (Phase queue hat kein phaseEnd)
+export const PHASE_LABEL = { approach: 'Anfahrt', gate: 'Torkontrolle', queue: 'Wartet auf Dock', toDock: 'Zum Dock', docking: 'Andocken', unloading: 'Entladen', exit: 'Ausfahrt' };
+const QUEUE_DX = 1.95;
+
+/** Warteschlange am Standort wie yard.js: vorgezogene (priority) zuerst, dann Ankunft am Tor (gateAt, sonst phaseStart), dann Listenfolge. */
+export function queueOrder(yard, siteId) {
+  const list = []; (yard || []).forEach((a, i) => { if (a && a.site === siteId && a.phase === 'queue') list.push({ a, i }); });
+  const prio = a => (a.priority ? 0 : 1), start = a => (Number.isFinite(a.gateAt) ? a.gateAt : Number.isFinite(a.phaseStart) ? a.phaseStart : Infinity);
+  list.sort((p, q) => prio(p.a) - prio(q.a) || start(p.a) - start(q.a) || p.i - q.i);
+  return list.map(p => p.a.id);
+}
+/** Warteplatz k: 0 liegt der Ausfahrt der Wartefläche am nächsten (Osten), nebeneinander mit Bug zur Halle. Ab QUEUE_PLACES Rückstau auf der Hofgasse. */
+export function queuePlace(L, k, len = FOREIGN_LEN) {
+  if (k < QUEUE_PLACES) return { x: L.queue.x1 - 2.55 - k * QUEUE_DX, z: (L.queue.z0 + L.queue.z1) / 2, heading: -Math.PI / 2 };
+  return { x: L.queue.x0 - 2.4 - (k - QUEUE_PLACES) * (len + .6), z: L.laneZ, heading: Math.PI };
+}
+/** Halt an der Torschranke (Bug an der Schranke, Blick zur Halle). */
+export function gatePose(L, len = FOREIGN_LEN) { return { x: L.exitX, z: L.yardGateZ + len / 2, heading: -Math.PI / 2 }; }
+/** Dockposition des zugeteilten Docks (Heck an der Rampe), sonst null. */
+export function dockPoseFor(L, buildings, dockId, len = FOREIGN_LEN) {
+  const b = dockId != null && (buildings || []).find(o => o.id === dockId); if (!b) return null;
+  const box = buildingBox(b); return slotPose(L, 0, len, (box.x0 + box.x1) / 2);
+}
+/** Polygonzug mit abgerundeten Ecken (quadratische Bézier) und Rückwärtskennung r je Segmentende. Spitzkehren (Wechsel vor/zurück) bleiben Ecke. */
+export function makePath(pts, radius = YARD_TURN, steps = 6) {
+  const out = [pts[0]];
+  for (let i = 1; i < pts.length - 1; i++) {
+    const a = pts[i - 1], b = pts[i], c = pts[i + 1], l1 = Math.hypot(b.x - a.x, b.z - a.z), l2 = Math.hypot(c.x - b.x, c.z - b.z);
+    const cross = l1 && l2 ? ((b.x - a.x) * (c.z - b.z) - (b.z - a.z) * (c.x - b.x)) / (l1 * l2) : 0;
+    if (!!b.r !== !!c.r || Math.abs(cross) < 1e-3) { out.push(b); continue; }
+    const cut = Math.min(radius, i > 1 ? l1 / 2 : l1 * .8, i < pts.length - 2 ? l2 / 2 : l2 * .8); // an Endpunkten bleibt ein gerades Stück (stetige Richtung)
+    const p1 = { x: b.x - (b.x - a.x) / l1 * cut, z: b.z - (b.z - a.z) / l1 * cut }, p2 = { x: b.x + (c.x - b.x) / l2 * cut, z: b.z + (c.z - b.z) / l2 * cut };
+    out.push({ x: p1.x, z: p1.z, r: b.r });
+    for (let k = 1; k <= steps; k++) { const t = k / steps, u = 1 - t; out.push({ x: u * u * p1.x + 2 * u * t * b.x + t * t * p2.x, z: u * u * p1.z + 2 * u * t * b.z + t * t * p2.z, r: b.r }); }
+  }
+  out.push(pts[pts.length - 1]);
+  let total = 0; for (let i = 1; i < out.length; i++) total += Math.hypot(out[i].x - out[i - 1].x, out[i].z - out[i - 1].z);
+  return { pts: out, total };
+}
+/** Pose bei Anteil t (0…1); rückwärts befahrene Segmente (r) drehen den Bug gegen die Fahrtrichtung. Schreibt in out, keine Allokation. */
+export function pathPose(path, t, out = {}) {
+  const p = path.pts; let d = Math.max(0, Math.min(1, t)) * path.total;
+  for (let i = 1; i < p.length; i++) {
+    const a = p[i - 1], b = p[i], len = Math.hypot(b.x - a.x, b.z - a.z);
+    if (len < 1e-9 && i < p.length - 1) continue;
+    if (d <= len || i === p.length - 1) { const r = len ? Math.min(1, d / len) : 1; out.x = a.x + (b.x - a.x) * r; out.z = a.z + (b.z - a.z) * r; out.heading = Math.atan2(b.z - a.z, b.x - a.x) + (b.r ? Math.PI : 0); return out; }
+    d -= len;
+  }
+  out.x = p[0].x; out.z = p[0].z; out.heading = 0; return out;
+}
+const pt = (x, z, r) => (r ? { x, z, r: true } : { x, z });
+/** Wege je Phase. Docken: vorwärts bis hinter das Dock, dann rückwärts in einer Kurve ans Dock (Heck voran, kein 180°-Sprung). */
+export function approachPath(L, len = FOREIGN_LEN) { const g = gatePose(L, len); return makePath([pt(L.far, L.roadInZ), pt(L.exitX, L.roadInZ), pt(g.x, g.z)]); }
+export function queueEntryPath(L, place, len = FOREIGN_LEN) {
+  const g = gatePose(L, len);
+  if (place.heading === Math.PI) return makePath([pt(g.x, g.z), pt(g.x, L.laneZ), pt(place.x, place.z)]);
+  return makePath([pt(g.x, g.z), pt(g.x, L.laneZ), pt(place.x, L.laneZ), pt(place.x, place.z)]);
+}
+/** Start vom Warteplatz: rückwärts ausparken (Bug bleibt Richtung Halle), dann vorwärts die Hofgasse entlang. Sonst vorwärts. */
+export function toDockPath(L, from, dock) {
+  const end = pt(dock.x + YARD_TURN, L.laneZ), parked = Math.abs(Math.sin(from.heading) + 1) < .05 && from.z < L.laneZ - 1 && from.x < L.queue.x1;
+  if (parked) return makePath([pt(from.x, from.z), pt(from.x, L.laneZ, true), pt(from.x - YARD_TURN, L.laneZ, true), end]);
+  if (Math.abs(from.z - L.laneZ) < .05) return makePath([pt(from.x, from.z), end]);
+  return makePath([pt(from.x, from.z), pt(from.x, L.laneZ), end]);
+}
+export function dockingPath(L, dock) { return makePath([pt(dock.x + YARD_TURN, L.laneZ), pt(dock.x, L.laneZ, true), pt(dock.x, dock.z, true)]); }
+export function exitPath(L, from) { return makePath(vehiclePath(L, from, 'out')); }
+/** Farbe nach W1-S4: gelb wartet, blau fährt, grau Ein-/Ausfahrt, grün am Dock. */
+export function arrivalTone(a) {
+  switch (a?.phase) {
+    case 'queue': return 'wait';
+    case 'toDock': case 'docking': return 'move';
+    case 'unloading': return a.waitReason ? 'wait' : 'dock';
+    case 'gate': return a.waitReason ? 'wait' : 'gate';
+    default: return 'gate';
+  }
+}
+/** Label: Kennzeichen · deutsche Phase (· Wartegrund, außer in der Warteschlange – dort ist er „Kein freies Dock“). */
+export function arrivalLabel(a) { const text = `${a?.plate || a?.id || 'Lkw'} · ${PHASE_LABEL[a?.phase] || a?.phase || ''}`; return a?.waitReason && a.phase !== 'queue' ? `${text} · ${a.waitReason}` : text; }
+const CARRIER_CAB = ['#b5473f', '#7d5fa8', '#3f7556', '#5c6670'];
+/** Fahrerhausfarbe des Fremdfrachtführers (deterministisch, abweichend von der eigenen Flotte). */
+export function carrierColor(carrier) { let h = 0; for (const ch of String(carrier || '')) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return CARRIER_CAB[h % CARRIER_CAB.length]; }
+/**
+ * Darstellungsplan eines Hofeintrags. ctx: {rank, dock (Pose|null), from (letzte Pose bei Phasenwechsel), slide ({from, at} bei Nachrücken)}.
+ * Liefert null für gone/unbekannt. path + t0/t1 (absolute Spielminuten) werden nur interpoliert, wenn beide gesetzt sind.
+ */
+export function arrivalPlan(L, a, ctx = {}) {
+  if (!a || !PHASE_LABEL[a.phase]) return null;
+  const g = gatePose(L), dock = ctx.dock || null, timed = Number.isFinite(a.phaseStart) && Number.isFinite(a.phaseEnd);
+  const plan = { id: a.id, phase: a.phase, path: null, t0: timed ? a.phaseStart : null, t1: timed ? a.phaseEnd : null, pose: g, fixedHeading: null, tone: arrivalTone(a), label: arrivalLabel(a), color: carrierColor(a.carrier), x: g.x, z: g.z, heading: g.heading };
+  switch (a.phase) {
+    case 'approach': plan.path = approachPath(L); break;
+    case 'gate': break;
+    case 'queue': {
+      const place = plan.pose = queuePlace(L, Math.max(0, ctx.rank ?? 0));
+      if (ctx.slide) { plan.path = makePath([pt(ctx.slide.from.x, ctx.slide.from.z), pt(place.x, place.z)]); plan.t0 = ctx.slide.at; plan.t1 = ctx.slide.at + QUEUE_DRIVE; plan.fixedHeading = place.heading; }
+      else if (Number.isFinite(a.phaseStart)) { plan.path = queueEntryPath(L, place); plan.t0 = a.phaseStart; plan.t1 = a.phaseStart + QUEUE_DRIVE; }
+      break;
+    }
+    case 'toDock': { const from = ctx.from || g; plan.pose = from; if (dock) plan.path = toDockPath(L, from, dock); break; }
+    case 'docking': if (dock) plan.path = dockingPath(L, dock); break;
+    case 'unloading': plan.pose = dock || g; break;
+    case 'exit': plan.path = exitPath(L, dock || g); break;
+  }
+  if (plan.path && plan.t1 == null) plan.pose = pathPose(plan.path, 1, {});
+  arrivalPose(plan, plan.t0 ?? 0, plan);
+  return plan;
+}
+/** Pose zur (gebrochenen) Spielzeit clock; schreibt in out, keine Allokation. Ohne phaseEnd stationär. */
+export function arrivalPose(plan, clock, out) {
+  if (plan.path && plan.t1 != null) {
+    const t = plan.t1 > plan.t0 ? Math.max(0, Math.min(1, (clock - plan.t0) / (plan.t1 - plan.t0))) : 1;
+    pathPose(plan.path, t, out); if (plan.fixedHeading != null) out.heading = plan.fixedHeading;
+  } else { out.x = plan.pose.x; out.z = plan.pose.z; out.heading = plan.pose.heading; }
+  return out;
+}
+/** Läuft gerade eine Fahrt (für Rendern pro Frame)? */
+export function arrivalMoving(plan, clock) { return !!plan.path && plan.t1 != null && clock >= plan.t0 && clock < plan.t1; }
+
+// ---------- Pakete: Rollcontainer (inbound, an Docks) und Kartonstapel (stock, am Sortierplatz-Ausgang bzw. Regal) ----------
+
+export const PARCELS_PER_CAGE = 40, PARCELS_PER_STACK = 20, MAX_CAGES = 48, MAX_STACKS = 48;
+const CAGES_PER_DOCK = 8;
+function toWorld(b, lx, lz, out) {
+  const box = buildingBox(b), cx = (box.x0 + box.x1) / 2, cz = (box.z0 + box.z1) / 2, rot = -((b.rotation || 0) % 360) * Math.PI / 180, c = Math.cos(rot), s = Math.sin(rot);
+  out.x = cx + lx * c + lz * s; out.z = cz - lx * s + lz * c; out.rot = rot; return out;
+}
+/** Paketplätze am Standort, Dichte nach Menge (gedeckelt). Nur item 'parcel'; Docks mit entladendem Fremd-Lkw zuerst. */
+export function parcelLoads(state, siteId, buildings = (state?.buildings || []).filter(b => b.site === siteId)) {
+  let inbound = 0, stock = 0;
+  for (const a of state?.batches || []) if (a.site === siteId && a.item === 'parcel' && a.qty > 0) { if (a.location === 'inbound') inbound += a.qty; else if (a.location === 'stock') stock += a.qty; }
+  const busy = new Set(); for (const a of state?.yard || []) if (a.site === siteId && a.dock && a.phase === 'unloading') busy.add(a.dock);
+  const docks = buildings.filter(b => b.type === 'dock').sort((p, q) => (busy.has(q.id) ? 1 : 0) - (busy.has(p.id) ? 1 : 0));
+  const cages = [], stacks = [];
+  const nc = Math.min(MAX_CAGES, docks.length * CAGES_PER_DOCK, Math.ceil(inbound / PARCELS_PER_CAGE));
+  for (let i = 0; i < nc; i++) { const j = i % CAGES_PER_DOCK; cages.push(toWorld(docks[Math.floor(i / CAGES_PER_DOCK)], -.6 + (j % 4) * .5, -.6 + Math.floor(j / 4) * .55, { dock: docks[Math.floor(i / CAGES_PER_DOCK)].id })); }
+  let anchors = buildings.filter(b => b.type === 'sorter').concat(buildings.filter(b => /rack|shelf|regal/.test(b.type))); if (!anchors.length) anchors = docks;
+  const slots = [];
+  for (const b of anchors) {
+    const d = BUILDINGS[b.type] || { w: 2, h: 2 }, cols = Math.max(1, Math.floor(d.w / .7));
+    for (let row = 0; row < 2; row++) for (let col = 0; col < cols; col++) slots.push([b, -d.w / 2 + .4 + col * .7, d.h / 2 + .35 + row * .6]);
+  }
+  const ns = Math.min(MAX_STACKS, slots.length, Math.ceil(stock / PARCELS_PER_STACK));
+  for (let i = 0; i < ns; i++) {
+    const [b, lx, lz] = slots[i], rest = stock - i * PARCELS_PER_STACK, fill = i === ns - 1 && ns === Math.ceil(stock / PARCELS_PER_STACK) ? Math.min(1, rest / PARCELS_PER_STACK) : 1;
+    stacks.push(toWorld(b, lx, lz, { anchor: b.id, sy: .35 + .65 * fill }));
+  }
+  return { inbound, stock, cages, stacks };
 }
 
 // ---------- Geometrie-Werkzeuge ----------
@@ -255,6 +412,20 @@ function buildingModel(P, type, d) {
       P.box(-hw + .1, 0, -hh + .1, 1.25, 1.2, d.h - .2, '#ece8f7'); P.box(-hw + .07, .8, -hh + .07, 1.31, .16, d.h - .14, tint); P.box(-hw + .07, 1.2, -hh + .07, 1.31, .06, d.h - .14, '#8f84b8');
       P.box(-.1, 0, -.75, 1.35, .55, .6, '#c96f4a'); P.box(-.1, 0, .05, 1.35, .55, .6, '#4f86a6'); P.box(-.1, .55, -.75, 1.35, .55, .6, '#7ea36a');
       for (const x of [-.25, 1.35]) P.box(x, 0, -hh + .1, .08, 1.35, d.h - .2, '#f2c363'); break;
+    case 'sorter': {
+      // Sortierplatz 3×2: Aufgabetisch (−x), Förderband mit Rollen, Scanner-Portal, drei Rutschen zur Ausgangsseite (+z), Schaltschrank mit Signalsäule.
+      plinth();
+      for (const x of [-1.3, -.45, .4, 1.25]) for (const z of [-.32, .22]) P.box(x, .12, z, .07, .42, .07, '#5f7478');
+      P.box(-1.4, .54, -.36, 2.8, .08, .66, '#5b6b6e'); P.box(-1.38, .62, -.3, 2.76, .025, .54, '#2f3a3c');
+      for (let i = 0; i < 12; i++) P.box(-1.34 + i * .232, .645, -.3, .03, .008, .54, '#7b8b8e');
+      P.box(-1.4, .62, -.37, 2.8, .08, .05, tint); P.box(-1.4, .62, .25, 2.8, .08, .05, tint);
+      P.box(-hw + .08, .12, -.45, .5, .55, .85, '#c7cfcb'); P.box(-hw + .14, .67, -.4, .38, .18, .3, '#d9b37a');
+      P.box(-.55, .62, -.48, .08, .72, .08, tint); P.box(-.55, .62, .34, .08, .72, .08, tint); P.box(-.58, 1.3, -.5, .14, .14, .94, tint); P.box(-.56, 1.12, -.2, .1, .18, .32, '#2e3a3c');
+      for (const x of [-.1, .55, 1.15]) { P.box(x, .3, .3, .42, .06, .55, '#a9b8bb'); P.box(x - .02, .1, .8, .46, .3, .16, '#4f6667'); P.box(x + .06, .4, .82, .3, .2, .1, '#d9b37a'); }
+      for (const x of [-1.15, .05, .95]) P.box(x, .64, -.18, .26, .16, .28, x > 0 ? '#e3c08a' : '#d9b37a');
+      P.box(hw - .5, .12, -hh + .12, .38, .9, .3, '#d3dadb'); P.cyl(hw - .31, 1.02, -hh + .27, .04, .2, '#5d6d70'); P.cyl(hw - .31, 1.22, -hh + .27, .07, .1, '#3cbb8e'); P.cyl(hw - .31, 1.32, -hh + .27, .07, .1, '#e4ab4b'); P.cyl(hw - .31, 1.42, -hh + .27, .07, .1, '#cb675d');
+      break;
+    }
     default:
       plinth(); P.box(-hw + .2, .12, -hh + .2, d.w - .4, .8, d.h - .4, tint);
   }
@@ -277,7 +448,7 @@ export class Scene3D {
     this.build = null; this.buildRotation = 0; this.movingId = null; this.hover = null; this.selected = null; this.ghostCache = null;
     this.dead = false; this.listeners = []; this.width = 1; this.height = 1; this.signature = ''; this.sigDirty = true; this.dynDirty = true; this.needs = true;
     this.quarter = 0; this.scale = 1; this.cam = { tx: 10, tz: 8, dist: 30, yaw: Math.PI / 4 }; this.goal = { tx: 10, tz: 8, dist: 30, yaw: Math.PI / 4 }; this.animating = false;
-    this.clock = { base: null, at: 0, rate: 0, shown: null }; this.fleet = []; this.boxes = []; this.infra = []; this.pins = []; this.transfers = [];
+    this.clock = { base: null, at: 0, rate: 0, shown: null }; this.fleet = []; this.yardFleet = []; this.yardMap = null; this.boxes = []; this.infra = []; this.pins = []; this.transfers = [];
     this.res = { ratio: Math.min(window.devicePixelRatio || 1, 1.5), max: Math.min(window.devicePixelRatio || 1, 1.5), min: .75, avg: 0, cond: null, since: null, lastDrop: null };
     this.lastFrame = 0; this.renderedLast = false; this.layout = yardLayout(defaultSite(null));
     // Wiederverwendete Objekte für die Hot-Loop.
@@ -427,6 +598,12 @@ export class Scene3D {
       body: inst(mergedGeo(P => { P.cyl(-.07, 0, 0, .05, .26, '#40565d'); P.cyl(.07, 0, 0, .05, .26, '#40565d'); P.cyl(0, .26, 0, .13, .3, '#ffffff'); }), this.mat.inst, 16),
       head: inst(mergedGeo(P => { P.ball(0, .66, 0, .1, '#e7c599'); P.cyl(0, .7, 0, .115, .06, '#f3d582'); }), this.mat.inst, 16),
       trunk: inst(mergedGeo(P => P.cyl(0, 0, 0, .1, .9, '#8b7a63')), this.mat.inst, 40), crown: inst(mergedGeo(P => { P.cone(0, .7, 0, .75, 1.5, '#ffffff'); P.cone(0, 1.5, 0, .55, 1.1, '#ffffff'); }), this.mat.inst, 40),
+      // Fremd-Sattelzug (Bug +x, Länge FOREIGN_LEN): Auflieger (Instanzfarbe hell) und Zugmaschine (Frachtführerfarbe), je 1 Draw Call.
+      ftrailer: inst(mergedGeo(P => { P.box(-2.5, .5, -.63, 3.55, 1.45, 1.26, '#ffffff'); P.box(-2.52, .55, -.64, .04, 1.35, 1.28, '#c8ccc4'); P.box(-2.45, .78, -.645, 3.4, .1, 1.29, '#9fb0b6'); P.box(-2.4, .3, -.5, 3.3, .2, 1.0, '#3c4a4d'); for (const x of [-2.05, -1.6, -1.15]) for (const z of [-.66, .52]) { const r = new THREE.Matrix4().makeRotationX(Math.PI / 2).multiply(new THREE.Matrix4().makeScale(.56, .14, .56)).setPosition(x, .28, z); P.add(prims().cyl10, r, '#2f3a3d'); } }), this.mat.inst, 8),
+      fcab: inst(mergedGeo(P => { P.box(.7, .3, -.5, 1.8, .18, 1.0, '#3c4a4d'); P.box(1.45, .42, -.62, 1.05, 1.15, 1.24, '#ffffff'); P.box(2.42, .95, -.55, .1, .45, 1.1, '#355862'); P.box(1.45, 1.57, -.55, .7, .25, 1.1, '#ffffff'); P.box(2.45, .38, -.6, .08, .16, 1.2, '#c8ccc4'); for (const x of [1.0, 2.05]) for (const z of [-.66, .52]) { const r = new THREE.Matrix4().makeRotationX(Math.PI / 2).multiply(new THREE.Matrix4().makeScale(.56, .14, .56)).setPosition(x, .28, z); P.add(prims().cyl10, r, '#2f3a3d'); } }), this.mat.inst, 8),
+      // Rollcontainer (inbound) und Kartonstapel (stock), instanziert.
+      cage: inst(mergedGeo(P => { P.box(-.22, .03, -.24, .44, .04, .48, '#7d8a8e'); for (const x of [-.22, .2]) for (const z of [-.24, .22]) P.box(x, .07, z, .02, .8, .02, '#a9b6ba'); P.box(-.22, .45, -.24, .44, .015, .48, '#a9b6ba'); P.box(-.18, .07, -.2, .36, .3, .4, '#d9b37a'); P.box(-.16, .47, -.18, .32, .28, .36, '#e3c08a'); P.box(-.21, .07, -.235, .42, .78, .005, '#c7d0d3'); }), this.mat.inst, 16),
+      stack: inst(mergedGeo(P => { P.box(-.26, 0, -.26, .52, .08, .52, '#c9a26a'); P.box(-.24, .08, -.24, .23, .2, .23, '#d9b37a'); P.box(.01, .08, -.24, .23, .2, .23, '#e3c08a'); P.box(-.24, .08, .01, .23, .2, .23, '#e3c08a'); P.box(.01, .08, .01, .23, .2, .23, '#d9b37a'); P.box(-.22, .28, -.22, .44, .22, .44, '#e8cf9f'); P.box(-.18, .5, -.18, .36, .2, .36, '#d9b37a'); }), this.mat.inst, 16),
       car: inst(mergedGeo(P => { P.box(-.9, .15, -.42, 1.8, .42, .84, '#ffffff'); P.box(-.5, .57, -.38, .95, .32, .76, '#ffffff'); P.box(-.48, .6, -.39, .9, .24, .78, '#3c5560'); }), this.mat.inst, 16)
     };
     for (const m of Object.values(this.inst)) g.add(m);
@@ -464,6 +641,10 @@ export class Scene3D {
     // Tor/Einfahrt bei Zelle (0, gate): Vorfläche, Warnstreifen, Rahmen
     P.quad(-4.2, g - 1, 4.2, 3, -.006, '#c3cbc6'); for (let i = 0; i < 6; i++) P.quad(-.6, g - .4 + i * .3, .55, .14, .004, i % 2 ? '#3f4f50' : '#f2c363');
     P.box(-.22, 0, g - .62, .2, 2.4, .2, '#8aa29b'); P.box(-.22, 0, g + 1.42, .2, 2.4, .2, '#8aa29b'); P.box(-.22, 2.4, g - .62, .2, .25, 2.24, '#e9b94d');
+    // Hofeinfahrt (W1): Pförtnerhaus zwischen Aus- und Einfahrspur, Schranke über der Einfahrspur, Haltelinie
+    { const gz = L.yardGateZ; P.box(-4.35, 0, gz - .5, .8, 1.5, 1.2, '#eef0e8'); P.box(-4.42, 1.5, gz - .58, .94, .1, 1.36, '#4f9a85'); P.box(-4.37, .75, gz - .3, .02, .45, .8, '#3d5b6b');
+      P.box(-3.5, 0, gz - .08, .16, 1.05, .16, '#5d6d70'); for (let i = 0; i < 5; i++) P.box(-3.38 + i * .4, .9, gz - .04, .4, .08, .08, i % 2 ? '#f4f5ec' : '#cb675d');
+      P.quad(L.exitX - .7, gz + .1, 1.4, .12, .004, '#f4f5ec'); }
     // Halle: Bodenplatte, Wandsockel mit Toröffnung, Stützen
     P.box(-.05, -.02, -.05, W + .1, .08, H + .1, '#e3e8e0');
     const wall = (x, z, sx, sz) => P.box(x, 0, z, sx, .5, sz, '#f1f2ea');
@@ -540,6 +721,25 @@ export class Scene3D {
     }
     this.fleet = plans; this.ensure('vbox', plans.length); this.ensure('vcab', plans.length); this.ensure('vbase', plans.length);
     for (const p of plans) { p.hit = { id: p.v.id, box: { x0: 0, x1: 0, y0: 0, y1: 1.9, z0: 0, z1: 0 }, fleet: p }; this.boxes.push(p.hit); }
+    // Fremd-Lkw aus s.yard (W1-S4); Positionen folgen pro Frame. Phasenwechsel übernehmen die zuletzt gezeigte Pose (nur Darstellung).
+    const prevYard = this.yardMap, yardMap = new Map(), yplans = [], order = queueOrder(st?.yard, s.id), now = this.clock.shown ?? st?.t ?? 0;
+    for (const a of st?.yard || []) {
+      if (a.site !== s.id || !PHASE_LABEL[a.phase]) continue;
+      const p0 = prevYard?.get(a.id), rank = a.phase === 'queue' ? order.indexOf(a.id) : -1, last = p0 ? { x: p0.x, z: p0.z, heading: p0.heading } : null;
+      let from = null, slide = null;
+      if (a.phase === 'queue' && p0) slide = p0.phase === 'queue' ? (p0.rank === rank ? p0.slide : { from: last, at: now }) : ['toDock', 'docking'].includes(p0.phase) ? { from: last, at: now } : null;
+      if (a.phase === 'toDock') from = p0?.phase === 'toDock' ? p0.from : last;
+      const dock = dockPoseFor(L, buildings, a.dock) || (a.phase === 'exit' ? p0?.dock || null : null);
+      const plan = arrivalPlan(L, a, { rank, dock, from, slide }); if (!plan) continue;
+      Object.assign(plan, { rank, from, slide, dock, shown: true }); arrivalPose(plan, now, plan);
+      plan.hit = { id: a.id, box: { x0: 0, x1: 0, y0: 0, y1: 2, z0: 0, z1: 0 }, fleet: plan }; this.boxes.push(plan.hit);
+      yardMap.set(a.id, plan); yplans.push(plan);
+    }
+    this.yardMap = yardMap; this.yardFleet = yplans; this.ensure('ftrailer', yplans.length); this.ensure('fcab', yplans.length);
+    // Pakete (W1): Rollcontainer (inbound) auf den Docks, Kartonstapel (stock) am Sortierplatz-Ausgang bzw. an Regalen.
+    const loads = parcelLoads(st, s.id, buildings), cage = this.ensure('cage', loads.cages.length), stack = this.ensure('stack', loads.stacks.length);
+    loads.cages.forEach((c, i) => this.setInst(cage, i, c.x, .56, c.z, c.rot, 1, 1, 1)); this.finish(cage, loads.cages.length);
+    loads.stacks.forEach((c, i) => this.setInst(stack, i, c.x, .065, c.z, c.rot, 1, c.sy, 1)); this.finish(stack, loads.stacks.length);
     // Auswahlrahmen und Baugeist
     const sel = buildings.find(b => b.id === this.selected);
     if (sel && this.view !== 'network') { const b = buildingBox(sel); this.selectBox.scale.set(b.w + .16, b.y1 + .1, b.h + .16); this.selectBox.position.set(b.x0 - .08, .02, b.z0 - .08); this.selectBox.visible = true; } else this.selectBox.visible = false;
@@ -588,7 +788,7 @@ export class Scene3D {
     for (const key of CAM_KEYS) { const d = g[key] - c[key]; if (Math.abs(d) > (key === 'yaw' ? 1e-4 : 1e-3)) { c[key] += dt ? d * k : 0; moving = true; } else c[key] = g[key]; }
     if (moving || this.needs) this.applyCamera();
     const net = this.view === 'network'; this.siteGroup.visible = !net; this.netGroup.visible = net;
-    const clock = this.displayClock(now), animated = net ? this.placeTransfers(clock) : this.placeVehicles(clock);
+    const clock = this.displayClock(now), animated = net ? this.placeTransfers(clock) : !!(this.placeVehicles(clock) | this.placeYard(clock));
     const render = moving || this.needs || animated || this.pointer?.moved;
     if (render) { this.renderer.render(this.scene, this.camera()); this.updateLabels(); this.needs = false; }
     this.renderedLast = render;
@@ -605,6 +805,15 @@ export class Scene3D {
       const r = p.len / 2, hb = p.hit.box; hb.x0 = p.x - r; hb.x1 = p.x + r; hb.z0 = p.z - r; hb.z1 = p.z + r;
     }
     this.finish(box, n); this.finish(cab, n); this.finish(base, n); return animated;
+  }
+  placeYard(clock) {
+    const tr = this.inst.ftrailer, cab = this.inst.fcab; let n = 0, animated = false;
+    for (const p of this.yardFleet) {
+      arrivalPose(p, clock, p); if (arrivalMoving(p, clock)) animated = true;
+      const rot = -p.heading; this.setInst(tr, n, p.x, 0, p.z, rot, 1, 1, 1, '#e3e6ea'); this.setInst(cab, n, p.x, 0, p.z, rot, 1, 1, 1, p.color); n++;
+      const r = FOREIGN_LEN / 2, hb = p.hit.box; hb.x0 = p.x - r; hb.x1 = p.x + r; hb.z0 = p.z - r; hb.z1 = p.z + r;
+    }
+    this.finish(tr, n); this.finish(cab, n); return animated;
   }
   placeTransfers(clock) {
     const m = this.inst.marker, st = this.state; let n = 0, animated = false;
@@ -636,6 +845,7 @@ export class Scene3D {
     } else {
       if (this.ghostInfo) this.candidate('ghost', this.ghostInfo.x, this.ghostInfo.y, this.ghostInfo.z, this.ghostInfo.text, this.ghostInfo.tone, 0);
       if (fleet) for (const p of this.fleet) if (p.shown) this.candidate(p.v.id, p.x, 2.3, p.z, p.label, p.tone, 2);
+      if (fleet) for (const p of this.yardFleet) this.candidate(p.id, p.x, 2.6, p.z, p.label, p.tone, 2);
       if (mode !== 'none') for (const b of this.infra) { const sel = b.id === this.selected; if (infra || sel) this.candidate(b.id, b.x, b.y, b.z, b.text, b.tone, sel ? 0 : b.prio); }
     }
     const out = selectLabels(t.cands, this.width, this.height, MAX_LABELS, t.labelOut);

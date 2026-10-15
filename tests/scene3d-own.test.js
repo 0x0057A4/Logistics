@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import {cellToWorld,worldToCell,buildingBox,buildingTone,sceneSignature,yardLayout,slotPose,vehiclePath,pointOnPath,phaseDuration,phaseProgress,vehiclePlan,vehicleT,vehicleTag,rackPallets,workerSpots,selectLabels,adaptResolution,rayBox,rayGround,networkLayout,MAX_LABELS} from '../dist/scene3d.js';
+import {cellToWorld,worldToCell,buildingBox,buildingTone,sceneSignature,yardLayout,slotPose,vehiclePath,pointOnPath,phaseDuration,phaseProgress,vehiclePlan,vehicleT,vehicleTag,rackPallets,workerSpots,selectLabels,adaptResolution,rayBox,rayGround,networkLayout,MAX_LABELS,FOREIGN_LEN,QUEUE_PLACES,QUEUE_DRIVE,PHASE_LABEL,queueOrder,queuePlace,gatePose,dockPoseFor,makePath,pathPose,approachPath,toDockPath,dockingPath,arrivalTone,arrivalLabel,carrierColor,arrivalPlan,arrivalPose,arrivalMoving,parcelLoads,PARCELS_PER_CAGE,PARCELS_PER_STACK,MAX_CAGES,MAX_STACKS} from '../dist/scene3d.js';
 import {chooseRenderer,hasWebGL} from '../dist/scene-select.js';
 const frozen=value=>{if(value&&typeof value==='object'){Object.freeze(value);Object.values(value).forEach(frozen);}return value;};
 function fixture(){return {t:600,selectedSite:'a',sites:[{id:'a',name:'Morgenfeld',x:0,y:0,width:20,height:16,energy:30},{id:'b',name:'Lindenhain',x:44,y:18,width:20,height:16,energy:30}],buildings:[],workers:[],jobs:[],research:[],batches:[],vehicles:[],transfers:[],shipments:[],returns:[],tours:[],freights:[]};}
@@ -119,4 +119,84 @@ test('app.js nutzt createScene und meldet gebrochene Spielzeit, 2D-Rückfall ble
 test('Darstellungslogik verändert eingefrorenen Zustand nicht',()=>{
  const s=fixture();s.buildings.push({id:'r',type:'rack',site:'a',x:0,y:0,rotation:90});s.batches.push({site:'a',qty:90,location:'stock'});s.vehicles.push({id:'v',type:'refrigerated',site:'a',status:'idle'});s.workers.push({id:'w',site:'a',role:'warehouse'});
  const before=JSON.stringify(s);frozen(s);sceneSignature(s,'a');rackPallets(s,s.buildings[0]);workerSpots(s,s.sites[0],s.buildings);vehicleT(vehiclePlan(s,s.vehicles[0],'a'),s.vehicles[0],600.5,600);assert.equal(JSON.stringify(s),before);
+});
+
+// ---------- Welle 1: Fremd-Lkw aus s.yard (W1-S2/W1-S4), Sortierplatz, Pakete ----------
+const L1=yardLayout({width:20,height:16});
+// Probe-Hofeintrag nach Datenform W1-S2 (inkl. Zusatzfelder aus yard.js).
+const arr=(id,phase,extra={})=>({id,site:'a',contractId:'contract-1',orderIds:['order-1'],carrier:'Talgrund Spedition',plate:`TGD-AB ${id.slice(-1)}00`,parcels:120,phase,phaseStart:600,phaseEnd:null,eta:600,dock:null,waitReason:null,waitSince:null,unloaded:0,atRisk:false,forecast:null,gateAt:598,priority:false,split:[{owner:'order-1',target:120,done:0}],...extra});
+const angle=(a,b)=>Math.abs(Math.atan2(Math.sin(a-b),Math.cos(a-b)));
+function sweep(path,n=200){const o={},poses=[];for(let i=0;i<=n;i++){pathPose(path,i/n,o);poses.push({...o});}return poses;}
+
+test('W1 Warteschlange: FIFO nach Torzeit, vorgezogene zuerst, Plätze nebeneinander auf der gelben Wartefläche',()=>{
+ const yard=frozen([arr('arrival-1','queue',{gateAt:610}),arr('arrival-2','queue',{gateAt:590}),arr('arrival-3','unloading'),arr('arrival-4','queue',{gateAt:600,priority:true}),{...arr('arrival-5','queue',{gateAt:580}),site:'b'}]);
+ assert.deepEqual(queueOrder(yard,'a'),['arrival-4','arrival-2','arrival-1']);
+ assert.deepEqual(queueOrder([arr('arrival-7','queue',{gateAt:600}),arr('arrival-6','queue',{gateAt:600})],'a'),['arrival-7','arrival-6'],'Gleichstand: Listenfolge');
+ const q=L1.queue,places=[];for(let k=0;k<QUEUE_PLACES;k++)places.push(queuePlace(L1,k));
+ for(const p of places){assert.ok(p.x-.63>=q.x0&&p.x+.63<=q.x1,'innerhalb der Fläche (Breite)');assert.ok(p.z-FOREIGN_LEN/2>=q.z0-1e-9&&p.z+FOREIGN_LEN/2<=q.z1+1e-9,'innerhalb der Fläche (Länge)');assert.equal(p.heading,-Math.PI/2);assert.equal(p.z,places[0].z);}
+ for(let k=1;k<places.length;k++)assert.ok(places[k-1].x-places[k].x>=1.26+.5,'Abstand > Fahrzeugbreite + Gasse');
+ assert.ok(places[0].x>places[5].x,'Platz 0 liegt der Ausfahrt am nächsten');
+ const over=queuePlace(L1,QUEUE_PLACES);assert.ok(over.x<q.x0&&over.z===L1.laneZ,'Rückstau auf der Hofgasse');
+ assert.ok(gatePose(L1).z-FOREIGN_LEN/2>=L1.yardGateZ-1e-9&&gatePose(L1).x===L1.exitX,'Torhalt vor der Schranke auf der Einfahrspur');
+});
+test('W1 Interpolation je Phase über phaseStart→phaseEnd; offene Phasen stationär',()=>{
+ const g=gatePose(L1),o={};
+ const ap=arrivalPlan(L1,arr('arrival-1','approach',{phaseStart:585,phaseEnd:600}));
+ arrivalPose(ap,585,o);assert.ok(o.x<-40&&Math.abs(o.z-L1.roadInZ)<1e-9,'Start auf der Straße');
+ const mid={...arrivalPose(ap,592.5,{})};assert.ok(mid.x>-62&&mid.x<L1.exitX,'Mitte unterwegs');
+ arrivalPose(ap,600,o);assert.ok(Math.abs(o.x-g.x)<1e-9&&Math.abs(o.z-g.z)<1e-9,'Ende am Tor');assert.ok(angle(o.heading,g.heading)<1e-6);
+ assert.ok(arrivalMoving(ap,592)&&!arrivalMoving(ap,600));
+ const gate=arrivalPlan(L1,arr('arrival-1','gate',{phaseStart:600,phaseEnd:602}));assert.equal(gate.path,null);arrivalPose(gate,601.3,o);assert.deepEqual([o.x,o.z],[g.x,g.z]);
+ const place=queuePlace(L1,2),q=arrivalPlan(L1,arr('arrival-1','queue',{phaseStart:602}),{rank:2});
+ arrivalPose(q,602,o);assert.ok(Math.hypot(o.x-g.x,o.z-g.z)<1e-6,'Wartefahrt beginnt am Tor');
+ arrivalPose(q,602+QUEUE_DRIVE,o);assert.ok(Math.hypot(o.x-place.x,o.z-place.z)<1e-6&&angle(o.heading,place.heading)<1e-6,'nach QUEUE_DRIVE auf Platz 2');
+ arrivalPose(q,700,o);assert.ok(Math.hypot(o.x-place.x,o.z-place.z)<1e-6,'offene Phase: bleibt stehen');
+ const slide=arrivalPlan(L1,arr('arrival-1','queue',{phaseStart:602}),{rank:1,slide:{from:place,at:650}});arrivalPose(slide,650.5,o);assert.ok(o.x>place.x&&o.x<queuePlace(L1,1).x,'Nachrücken gleitet');assert.equal(o.heading,place.heading,'Nachrücken ohne Drehen');
+ const dockB={id:'d1',type:'dock',site:'a',x:6,y:13,rotation:0},dock=dockPoseFor(L1,[dockB],'d1');assert.equal(dock.x,7.5);assert.equal(dock.heading,Math.PI/2);assert.equal(dockPoseFor(L1,[dockB],'x'),null);
+ const un=arrivalPlan(L1,arr('arrival-1','unloading',{dock:'d1'}),{dock});arrivalPose(un,900,o);assert.deepEqual([o.x,o.z,o.heading],[dock.x,dock.z,dock.heading]);
+ const ex=arrivalPlan(L1,arr('arrival-1','exit',{phaseStart:700,phaseEnd:703}),{dock});arrivalPose(ex,700,o);assert.ok(Math.hypot(o.x-dock.x,o.z-dock.z)<1e-6,'Ausfahrt startet am Dock');assert.ok(angle(o.heading,dock.heading)<1e-6);
+ arrivalPose(ex,703,o);assert.ok(o.x<-40&&Math.abs(o.z-L1.roadOutZ)<1e-9,'Ausfahrt endet auf der Gegenspur');
+ assert.equal(arrivalPlan(L1,arr('arrival-1','gone')),null,'gone wird nicht gezeigt');
+ const noEnd=arrivalPlan(L1,arr('arrival-1','approach',{phaseEnd:null}));arrivalPose(noEnd,590,o);assert.ok(Math.hypot(o.x-g.x,o.z-g.z)<1e-6,'ohne phaseEnd keine Interpolation');
+});
+test('W1 Andocken: vorwärts hinter das Dock, dann rückwärts mit dem Heck ans Dock – ohne 180°-Sprung',()=>{
+ const dock=dockPoseFor(L1,[{id:'d1',type:'dock',site:'a',x:6,y:13,rotation:0}],'d1');
+ const toDock=toDockPath(L1,queuePlace(L1,0),dock),dk=dockingPath(L1,dock);
+ const a=sweep(toDock),b=sweep(dk);
+ assert.ok(angle(a[0].heading,-Math.PI/2)<1e-6,'Ausparken: Bug bleibt Richtung Halle');assert.ok(a[5].z>a[0].z,'rückwärts aus dem Platz (Richtung Hofgasse)');
+ assert.ok(angle(a.at(-1).heading,0)<1e-6,'Ende Zum Dock: Bug nach Osten');assert.ok(angle(b[0].heading,a.at(-1).heading)<.05,'Übergang Zum Dock → Andocken stetig');
+ for(const s of [a,b])for(let i=1;i<s.length;i++)assert.ok(angle(s[i].heading,s[i-1].heading)<.6,`kein Richtungssprung (${i})`);
+ for(let i=1;i<b.length;i++)assert.ok(b[i].z<=b[i-1].z+1e-9,'Andocken bewegt sich nur Richtung Rampe');
+ const end=b.at(-1);assert.ok(Math.hypot(end.x-dock.x,end.z-dock.z)<1e-6&&angle(end.heading,Math.PI/2)<1e-6,'Endpose = Dockpose (Heck an der Rampe)');
+ for(let i=0;i<b.length-1;i++){const p=b[i],q=b[i+1];if(Math.hypot(q.x-p.x,q.z-p.z)<1e-6)continue;const travel=Math.atan2(q.z-p.z,q.x-p.x);assert.ok(angle(travel,p.heading)>Math.PI/2,'Heck voran (Fahrtrichtung entgegen Bug)');}
+ const fromGate=sweep(toDockPath(L1,gatePose(L1),dock));assert.ok(angle(fromGate[0].heading,-Math.PI/2)<1e-6&&angle(fromGate.at(-1).heading,0)<1e-6,'vom Tor direkt: vorwärts');
+ const p=makePath([{x:0,z:0},{x:4,z:0},{x:4,z:4}]);assert.ok(p.total>7&&p.total<8,'Ecke abgerundet');
+ const ap=sweep(approachPath(L1));for(let i=1;i<ap.length;i++)assert.ok(angle(ap[i].heading,ap[i-1].heading)<.6);
+});
+test('W1 Labels: Kennzeichen und deutsche Phase, Farben gelb/blau/grau/grün',()=>{
+ assert.deepEqual(PHASE_LABEL,{approach:'Anfahrt',gate:'Torkontrolle',queue:'Wartet auf Dock',toDock:'Zum Dock',docking:'Andocken',unloading:'Entladen',exit:'Ausfahrt'});
+ const tones={approach:'gate',gate:'gate',queue:'wait',toDock:'move',docking:'move',unloading:'dock',exit:'gate'};
+ for(const [phase,tone] of Object.entries(tones)){const a=arr('arrival-3',phase);assert.equal(arrivalTone(a),tone,phase);assert.equal(arrivalLabel(a),`TGD-AB 300 · ${PHASE_LABEL[phase]}`);}
+ assert.equal(arrivalTone(arr('arrival-3','unloading',{waitReason:'Keine Lagerkraft am Standort'})),'wait');
+ assert.equal(arrivalLabel(arr('arrival-3','unloading',{waitReason:'Keine Lagerkraft am Standort'})),'TGD-AB 300 · Entladen · Keine Lagerkraft am Standort');
+ assert.equal(arrivalLabel(arr('arrival-3','queue',{waitReason:'Kein freies Dock'})),'TGD-AB 300 · Wartet auf Dock','Wartegrund in der Schlange nicht doppelt');
+ assert.equal(carrierColor('Talgrund Spedition'),carrierColor('Talgrund Spedition'));assert.ok(!['#ebac53','#5ea7a3','#6b9fd6'].includes(carrierColor('x')),'abweichend von eigener Flotte');
+ const plan=arrivalPlan(L1,arr('arrival-3','docking',{phaseStart:600,phaseEnd:601,dock:'d1'}),{dock:dockPoseFor(L1,[{id:'d1',type:'dock',x:2,y:13}],'d1')});assert.equal(plan.tone,'move');assert.equal(plan.label,'TGD-AB 300 · Andocken');
+});
+test('W1 Pakete: Rollcontainer (inbound) an Docks, Kartonstapel (stock) am Sortierplatz, Dichte nach Menge gedeckelt',()=>{
+ const s=fixture();s.yard=[];s.buildings.push({id:'d1',type:'dock',site:'a',x:2,y:13,rotation:0},{id:'d2',type:'dock',site:'a',x:6,y:13,rotation:0},{id:'so',type:'sorter',site:'a',x:8,y:8,rotation:0},{id:'r1',type:'rack',site:'a',x:0,y:0,rotation:0});
+ assert.deepEqual([parcelLoads(s,'a').cages.length,parcelLoads(s,'a').stacks.length],[0,0]);
+ s.batches.push({id:'k1',item:'parcel',site:'a',qty:100,location:'inbound',owner:'order-1'},{id:'k2',item:'parcel',site:'a',qty:30,location:'stock',owner:'order-1'},{id:'k3',item:'housing',site:'a',qty:500,location:'inbound'},{id:'k4',item:'parcel',site:'b',qty:500,location:'inbound'});
+ let l=parcelLoads(s,'a');assert.equal(l.inbound,100);assert.equal(l.cages.length,Math.ceil(100/PARCELS_PER_CAGE));assert.equal(l.stacks.length,Math.ceil(30/PARCELS_PER_STACK));
+ assert.ok(l.stacks.every(c=>c.anchor==='so'),'Ausgang: Sortierplatz zuerst');assert.ok(l.stacks[1].sy<l.stacks[0].sy,'angebrochener Stapel niedriger');
+ const dock=buildingBox(s.buildings[0]);assert.ok(l.cages.every(c=>c.x>dock.x0&&c.x<dock.x1&&c.z>dock.z0&&c.z<dock.z1),'Rollcontainer stehen auf dem Dock');
+ s.yard.push({id:'arrival-1',site:'a',dock:'d2',phase:'unloading'});assert.ok(parcelLoads(s,'a').cages.every(c=>c.dock==='d2'),'Dock mit entladendem Lkw zuerst');
+ s.batches[0].qty=40000;s.batches[1].qty=40000;l=parcelLoads(s,'a');assert.equal(l.cages.length,16,'8 je Dock');assert.ok(l.cages.length<=MAX_CAGES);assert.ok(l.stacks.length<=MAX_STACKS&&l.stacks.length===12,'Ausgang 8 + Regal 4');assert.ok(l.stacks.every(c=>c.sy===1));
+ assert.equal(rackPallets(s,s.buildings[3]).length,0,'Pakete füllen keine Regalpaletten');
+});
+test('W1 Darstellungslogik verändert eingefrorenen Hofzustand nicht',()=>{
+ const s=fixture();s.buildings.push({id:'d1',type:'dock',site:'a',x:6,y:13,rotation:90,task:'arrival-2'});s.batches.push({id:'k',item:'parcel',site:'a',qty:77,location:'inbound',owner:'o'});
+ s.yard=[arr('arrival-1','queue'),arr('arrival-2','toDock',{phaseEnd:602,dock:'d1'}),arr('arrival-3','gone')];const before=JSON.stringify(s);frozen(s);
+ const order=queueOrder(s.yard,'a'),dock=dockPoseFor(L1,s.buildings,'d1');for(const a of s.yard){const p=arrivalPlan(L1,a,{rank:order.indexOf(a.id),dock});if(p)arrivalPose(p,601.5,p);}parcelLoads(s,'a');
+ assert.equal(JSON.stringify(s),before);
 });

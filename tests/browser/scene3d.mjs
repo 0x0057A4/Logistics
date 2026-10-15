@@ -94,7 +94,7 @@ try {
     let clock = 600; s.setClock(clock);
     await new Promise(r => setTimeout(r, 1500));
     const t0 = s.fleet.map(p => p.shown ? `${p.x.toFixed(2)},${p.z.toFixed(2)}` : '-');
-    clock += .6; s.setClock(clock); await new Promise(r => setTimeout(r, 400));
+    clock += .6; s.setClock(clock); await new Promise(r => setTimeout(r, 900));
     const t1 = s.fleet.map(p => p.shown ? `${p.x.toFixed(2)},${p.z.toFixed(2)}` : '-');
     const chips = [...host.querySelectorAll('.scene3d-chip')].filter(c => c.style.display !== 'none').map(c => c.textContent);
     window.__probe = { s, host }; return { t0, t1, chips, info: s.renderInfo(), pallets: s.inst.pallet.count, workers: s.inst.body.count, vehicles: s.inst.vbox.count };
@@ -105,6 +105,42 @@ try {
   check('Probe: Fahrzeuge auf Zu-/Abfahrt bewegen sich mit gebrochener Uhr', probe.t0[2] !== probe.t1[2] || probe.t0[3] !== probe.t1[3], JSON.stringify([probe.t0, probe.t1]));
   check('Probe: Fahrzeug-Labels mit Kennung und Status', probe.chips.some(c => /LKW-1 · Beladen/.test(c)), probe.chips.join(' | '));
   await page.evaluate(() => { window.__probe.s.destroy(); window.__probe.host.remove(); });
+  // Welle 1: Hofprobe – Fremd-Lkw aus s.yard (Datenform W1-S2) in allen Phasen, Sortierplatz, Pakete inbound/stock.
+  const hof = await page.evaluate(async () => {
+    const { Scene3D } = await import('./scene3d.js');
+    const host = document.createElement('div'); host.style.cssText = 'position:fixed;inset:0;z-index:999;background:#fff'; document.body.appendChild(host);
+    const canvas = document.createElement('canvas'); canvas.style.cssText = 'width:100%;height:100%;display:block'; host.appendChild(canvas);
+    const B = (id, type, x, y, status = 'idle', extra = {}) => ({ id, type, site: 's1', x, y, rotation: 0, status, enabled: true, condition: 100, ...extra });
+    const A = (n, phase, extra) => ({ id: `arrival-${n}`, site: 's1', contractId: 'contract-1', orderIds: [`order-${n}`], carrier: ['Talgrund Spedition', 'Ostheiden Logistik', 'Lerchental Transporte'][n % 3], plate: `TGD-K${'ABCDEFGH'[n]} ${1200 + n * 37}`, parcels: 120, phase, phaseStart: 600, phaseEnd: null, eta: 600, dock: null, waitReason: null, waitSince: null, unloaded: 0, atRisk: false, forecast: null, gateAt: 590, priority: false, split: [{ owner: `order-${n}`, target: 120, done: 0 }], ...extra });
+    const state = { t: 600, selectedSite: 's1', sites: [{ id: 's1', name: 'Hub Probe', x: 0, y: 0, width: 20, height: 16, energy: 60 }],
+      buildings: [B('d1', 'dock', 1, 13, 'idle', { task: 'arrival-5' }), B('d2', 'dock', 5, 13, 'idle', { task: 'arrival-4' }), B('d3', 'dock', 9, 13, 'idle', { task: 'arrival-6' }), B('d4', 'dock', 13, 13), B('so', 'sorter', 8, 8, 'working'), B('r1', 'rack', 2, 6), B('r2', 'rack', 2, 9), B('pw', 'power', 17, 1)],
+      batches: [{ id: 'k1', item: 'parcel', site: 's1', qty: 150, location: 'inbound', owner: 'order-5' }, { id: 'k2', item: 'parcel', site: 's1', qty: 90, location: 'stock', owner: 'order-1' }, { id: 'k3', item: 'housing', site: 's1', qty: 60, location: 'stock' }],
+      workers: [{ id: 'w1', site: 's1', role: 'warehouse', task: 'so:sort' }, { id: 'w2', site: 's1', role: 'warehouse', task: 'arrival-5:warehouse' }], jobs: [], research: [], vehicles: [], shipments: [], transfers: [], tours: [], freights: [], returns: [],
+      yard: [A(0, 'approach', { phaseStart: 590, phaseEnd: 605, gateAt: null }), A(1, 'gate', { phaseStart: 599, phaseEnd: 601, gateAt: 599 }), A(2, 'queue', { phaseStart: 592, gateAt: 590, waitReason: 'Kein freies Dock' }), A(3, 'queue', { phaseStart: 596, gateAt: 594, waitReason: 'Kein freies Dock' }),
+        A(4, 'docking', { phaseStart: 600, phaseEnd: 601, dock: 'd2' }), A(5, 'unloading', { dock: 'd1', unloaded: 40, waitReason: 'Keine Lagerkraft am Standort' }), A(6, 'toDock', { phaseStart: 599, phaseEnd: 601, dock: 'd3' }), A(7, 'gone', { phaseStart: 400 })] };
+    const before = JSON.stringify(state);
+    const s = new Scene3D(canvas, {}); s.setState(state); s.setView('site'); s.setLabels('fleet');
+    let clock = 600; s.setClock(clock);
+    s.goal.tx = 0; s.goal.tz = 21; s.goal.dist = 30; s.cam = { ...s.goal }; s.applyCamera(); s.needs = true;
+    await new Promise(r => setTimeout(r, 1500));
+    const pose = () => s.yardFleet.map(p => `${p.id}:${p.x.toFixed(2)},${p.z.toFixed(2)},${p.heading.toFixed(2)}`);
+    const p0 = pose();
+    clock += .5; s.setClock(clock); await new Promise(r => setTimeout(r, 500));
+    const p1 = pose();
+    const chips = [...host.querySelectorAll('.scene3d-chip')].filter(c => c.style.display !== 'none').map(c => c.textContent);
+    window.__hof = { s, host };
+    return { p0, p1, chips, labels: s.yardFleet.map(p => `${p.label}|${p.tone}`), trucks: s.inst.ftrailer.count, cabs: s.inst.fcab.count, cages: s.inst.cage.count, stacks: s.inst.stack.count, info: s.renderInfo(), unchanged: JSON.stringify(state) === before };
+  });
+  await page.screenshot({ path: path.join(root, 'docs/assets/hof-0.9.png') });
+  report.hof = hof;
+  check('Hof: 7 Fremd-Lkw instanziert (gone ausgeblendet)', hof.trucks === 7 && hof.cabs === 7, `${hof.trucks}/${hof.cabs}`);
+  check('Hof: Labels Kennzeichen · deutsche Phase', ['Anfahrt', 'Torkontrolle', 'Wartet auf Dock', 'Andocken', 'Entladen · Keine Lagerkraft am Standort', 'Zum Dock'].every(t => hof.labels.some(l => l.includes(t))) && hof.chips.some(c => /^TGD-K\w \d+ · /.test(c)), hof.labels.join(' | ') + ' // ' + hof.chips.join(' | '));
+  check('Hof: Farben wartet/fährt/Einfahrt/Dock', hof.labels.some(l => /Wartet auf Dock\|wait/.test(l)) && hof.labels.some(l => /Andocken\|move/.test(l)) && hof.labels.some(l => /Anfahrt\|gate/.test(l)) && hof.labels.some(l => /Entladen.*\|wait/.test(l)), hof.labels.join(' | '));
+  check('Hof: Anfahrt und Andocken bewegen sich mit gebrochener Uhr, Warteschlange steht', hof.p0[0] !== hof.p1[0] && hof.p0[4] !== hof.p1[4] && hof.p0[2] === hof.p1[2] && hof.p0[3] === hof.p1[3], JSON.stringify([hof.p0, hof.p1]));
+  check('Hof: Rollcontainer (inbound) und Kartonstapel (stock) sichtbar', hof.cages === 4 && hof.stacks === 5, `${hof.cages}/${hof.stacks}`);
+  check('Hof: unter 150 Draw Calls', hof.info.drawCalls < 150, String(hof.info.drawCalls));
+  check('Hof: Spielzustand unverändert', hof.unchanged);
+  await page.evaluate(() => { window.__hof.s.destroy(); window.__hof.host.remove(); });
   check('Keine Konsolenfehler (3D)', report.errors.length === 0, report.errors.join(' | '));
   // 2D-Rückfall per URL-Parameter
   const p2 = await browser.newPage({ viewport: { width: 1200, height: 800 } }); const err2 = [];
