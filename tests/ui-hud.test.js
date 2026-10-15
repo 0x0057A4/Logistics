@@ -23,7 +23,7 @@ test('HUD: Kopfzeile, Statuszeile und Standortfluss zeigen Werte aus echten Befe
  assert.equal(text(ui,'siteCode'),'WM-01');assert.equal(text(ui,'siteName'),'Werk Morgenfeld');
  assert.equal(text(ui,'sbDocks'),'Rampen 0/1');assert.equal(text(ui,'sbVehicles'),'Fahrzeuge 1');assert.equal(text(ui,'sbStaff'),'Personal 5/5 im Dienst');
  const cap=ui.run("sim.api.inventory.capacity('site-1')");assert.equal(text(ui,'sbStock'),`Lager 0/${cap}`);assert.equal(text(ui,'siteStatus'),`Rampen 0/1 · Lager 0/${cap}`);
- assert.equal(text(ui,'kpiVehicles'),'1 / 0');assert.equal(text(ui,'st-production-n'),'0/1');assert.equal(text(ui,'st-quality-n'),'0/2');assert.equal(text(ui,'st-shipping-n'),'0/1');
+ assert.equal(text(ui,'kpiVehicles'),'1 / 0');assert.equal(text(ui,'st-production-n'),'0/1');assert.equal(text(ui,'st-quality-n'),'0/2');assert.equal(text(ui,'st-unload-n'),'0/1');assert.equal(ui.nodes.get('#stl-production').hidden,false,'Fertigungsstationen sichtbar, sobald Fertigungsanlagen existieren');
  assert.equal(text(ui,'clock'),'Tag 1 · 08:00');assert.equal(text(ui,'shiftName'),'Tagschicht');
  ui.click('buy-kit');assert.equal(text(ui,'st-inbound-sub'),'3 unterwegs');
  ui.run('sim.step(1)');ui.run('render(true)');assert.match(text(ui,'st-production-sub'),/^Engpass: Material fehlt$/);assert.match(ui.nodes.get('#st-production').className,/tone-wait/);
