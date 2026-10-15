@@ -37,27 +37,30 @@ const SCENARIOS={
 // ab Tag 3 Palettenangebote (gleiche Zahl Zufallszüge) entstehen. Gegenprobe: contracts.js ohne die drei Felder und mit
 // TERMS.pallet.fromDay=999 reproduziert die vorherigen Hashes exakt (4/4 grün); Seed/ID-Zähler nach 9000 min mit und
 // ohne Palettenangebote identisch. Node v22.22.0.
+// Welle 2b (A02): erneut erzeugt, weil TERMS.pallet.price (110–140 €) und Strafsätze (Paket 2,50/8 €, Palette 25/60 €) in
+// Angeboten stehen. Gleiche Zahl Zufallszüge. Gegenprobe: contracts.js aus 91c08cf (mit neuem yard.js, Akku-Hysterese)
+// reproduziert die vorherigen Hashes exakt (4/4 grün). Node v22.22.0.
 const EXPECTED={
  klein:[
-  '425efaeefd2bc3e9b35d813aa9f359767c5c4b3f6fc2c88f2054538fdd134743',
-  'f7b7e2b58ff4d23f1e173f9c323482133c52f6598cc26ddf778542c4583b7608',
-  'e4f982f01cf2940af59b47aa73148b1f22357009cbb606a2ecce62c07fcebf25',
-  'edb4892046e34cffd054dada1e07961fc6c831359d9013dae9cdf5e30b3c1473',
+  'f1dafd6deff70c2a198e658ed56ea5fe9c5b7da48aa8eea9943408da8382bd53',
+  '8e9d32faad7316d26e0ffcf43ee49d7a648feb6a429f75818904bd8aab173865',
+  '06d39f4700dc82359141a366dcf7430bb0b852ba73c93114eb15d79474973959',
+  'b5b2f89c7094b5cfe0e6019cbe50fb32f70eb8b752dadf8bf5a17accc889af9b',
  ],
  dienste:[
-  'ef091065942dcb981998cfba63478af9192cad641cbdfcbc7e18a5e92a749cfe',
-  'a8ded180e6194cb19bfbd7bc90dec4286b994daf9eadbc7f3010b73f4ff67c27',
-  '8d03a8dada5e68c1e4ecedb07be0223502c1bc207bdee7f5d2e40fed4b836e6f',
-  '13c79d00e79e92f32b72d9350f589340010b5733800f120dea32f05a4fe022e6',
+  '07c12c6cb82dcc2feeb696abeeb7fce0f302cbfa592523f7d07dc990cdc85cba',
+  'acd75a05af49707854e2d42f6868768c9e09450cd43c1d449899c848a0b975c5',
+  '3bdb3004741946b05071468caeb54abfa5577e141fd5bc4315c9e89ab1ef1ae1',
+  '33431b1626e2cbf3fe6f7f680d4d4937a6e91441fd086f1b991ac58ca6e54778',
  ],
  gross:[
-  '23194178482a4ac1e1b5e0490f8416f00c26b9883f2c602e5b870e8ab3508aab',
-  '4be95899b85fd9890e8f7be1d06e94465a2ad2f572caf13093b37bd72e04764d',
-  '2670071dc8b5fcb30a21688bb83e04d293e9692cbe882a475c979bf76a3c6d2d',
-  '64bfa125be52e0b351a990d33ae7dc1c7e373a11c8fcff68d67abba42ef2de0b',
+  'da11301f9367270bfbdbb1cc72ae46a086737b54d807714790a7c7be694165de',
+  '21f7a357a18ecb4f59cc74cb279774b29596d5ac1fec8a213b7f79b1e8ec4cfd',
+  '1a066501859b9be445607a6adb4901aa9e6cb259956391b111d061e6c0940d41',
+  '20a5fc40f56e7fa0d26c5711ba41428c5b9f8fb04dd0ab85170654838af6ffa7',
  ],
  prognose:[
-  '323ca3098ffa2233a86d19e71352f34dba44100f0c1d09042bb77804430c2127',
+  '22e58acdd84e107e8f501a215715b10e4af00ed773fc7537d269a2540f6cb4ab',
  ],
 };
 

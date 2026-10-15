@@ -61,15 +61,35 @@ test('Ohne Stapler: Wartegrund „Kein Stapler“, keine Lagerkraft gebunden; Ba
  runUntil(sim,()=>a.phase==='exit');assert.equal(pallets(s,'stock'),5);
 });
 
-test('Akku unter 10: „Stapler lädt“, nach Laden weiter; Grenze exakt',()=>{
+test('Akku unter 10: „Stapler lädt“ mit Hysterese bis 30, kein Minutentakt-Pendeln; Speichern/Laden erhält Ladezwang',()=>{
  const {sim,s,fork}=setup();const a=arrive(sim,[5],485);
  runUntil(sim,()=>a.phase==='unloading');fork(0).charge=8;
  sim.step(1);assert.equal(a.unloaded,0);assert.equal(a.waitReason,'Stapler lädt');assert.ok(!fork(0).task);assert.equal(fork(0).charge,9);
+ assert.equal(fork(0).charging,true);
  assert.ok(!s.workers.some(w=>w.task===`${a.id}:warehouse`));
  sim.step(1);assert.equal(fork(0).charge,10);assert.equal(a.unloaded,0);
- sim.step(1);assert.equal(a.unloaded,1);assert.equal(fork(0).charge,9.5);
- sim.step(1);assert.equal(a.unloaded,1);assert.equal(a.waitReason,'Stapler lädt');
+ // 10 reicht nicht mehr: gesperrt bis 30.
+ sim.step(5);assert.equal(fork(0).charge,15);assert.equal(a.unloaded,0);assert.equal(a.waitReason,'Stapler lädt');assert.equal(fork(0).charging,true);
+ const r=reload(sim);const rf=r.state.buildings.find(b=>b.id===fork(0).id);assert.equal(rf.charging,true);assert.equal(rf.charge,15);
+ runUntil(sim,()=>fork(0).charge>=30);assert.equal(fork(0).charge,30);assert.equal(fork(0).charging,undefined);assert.equal(a.unloaded,0);
+ sim.step(1);assert.equal(a.unloaded,1);assert.equal(fork(0).charge,29.5);
  runUntil(sim,()=>a.phase==='exit');assert.equal(pallets(s,'stock'),5);yard.validate(s);
+ // Reload-Zweig läuft identisch weiter.
+ runUntil(r,()=>r.state.yard.find(x=>x.id===a.id).phase==='exit');assert.equal(pallets(r.state,'stock'),5);
+});
+
+test('Akku-Hysterese im Dauerbetrieb: unter 10 → genau ein Ladeblock bis 30, kein Wechsel je Minute',()=>{
+ const {sim,s,fork}=setup();const a=arrive(sim,[20],485);
+ runUntil(sim,()=>a.phase==='unloading');fork(0).charge=12;
+ const trace=[];for(let i=0;i<60&&a.phase==='unloading';i++){sim.step(1);trace.push({u:a.unloaded,c:fork(0).charge,w:!!fork(0).charging});yard.validate(s);}
+ // Ladezwang wechselt genau zweimal (an, aus); dazwischen keine Entladung.
+ let switches=0;for(let i=1;i<trace.length;i++)if(trace[i].w!==trace[i-1].w)switches++;
+ assert.equal(switches,2,`Pendeln: ${switches} Wechsel`);
+ const on=trace.findIndex(x=>x.w),off=trace.findIndex((x,i)=>i>on&&!x.w);assert.equal(trace[off-1].u,trace[on].u);assert.ok(off-on>=20);
+ assert.ok(trace.some(x=>x.w),'Ladezwang erreicht');assert.ok(trace.every(x=>!x.w||x.c<30));
+ assert.ok(Math.max(...trace.filter((x,i)=>i&&trace[i-1].w&&!x.w).map(x=>x.c))>=29.5);
+ runUntil(sim,()=>a.phase==='exit');assert.equal(pallets(s,'stock'),20);
+ fork(0).charging=1;assert.throws(()=>yard.validate(s),/Staplerakku/);
 });
 
 test('Ein Stapler, zwei Lkw an zwei Docks: nie doppelt gebunden, Mengen exakt',()=>{

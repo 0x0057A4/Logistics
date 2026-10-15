@@ -37,11 +37,13 @@ const isPallet=a=>a.item===PALLET;
 // Je Gebäude 'forklift' ein Stapler. b.charge 0–100 (fehlend = 100, beim ersten Takt gesetzt). Bindung exklusiv über
 // b.task = forkliftKey(Vorgang) (Fremd-Lkw-Entladung `${arrival.id}:forklift`, Lieferung `${shipment.id}:forklift`,
 // Sammeltour `${tour.id}:forklift`). Einsatzbereit: eingeschaltet, condition>0, Strom am Standort (Grundlast wie
-// production.js: Standortenergie + Energieversorgung − Bedarf aller eingeschalteten Nebenanlagen ≥ 0) und charge ≥ 10.
+// production.js: Standortenergie + Energieversorgung − Bedarf aller eingeschalteten Nebenanlagen ≥ 0) und Akku bereit.
+// Hysterese (W2b): fällt charge unter 10, gilt b.charging=true (gespeichert) und der Stapler bleibt bis charge ≥ 30
+// gesperrt (kein Minutentakt-Pendeln um 10). Feld fehlt = nicht im Ladezwang (Altstände).
 // Akku: tickForklifts am Ende jeder Minute (yard.step läuft nach transport/tours): im Einsatz genutzt −0,5,
 // sonst mit Strom +1 (max. 100). Nutzung meldet der Vorgang mit useForklift in derselben Minute (Laufzeitmarke, nicht
 // gespeichert – zwischen zwei Minuten leer).
-export const FORKLIFT={min:10,work:0.5,charge:1,full:100};
+export const FORKLIFT={min:10,resume:30,work:0.5,charge:1,full:100};
 export const forkliftKey=id=>`${id}:forklift`;
 const forkUse=new WeakMap();
 export function useForklift(s,b){let x=forkUse.get(s);if(!x||x.t!==s.t){x={t:s.t,ids:new Set()};forkUse.set(s,x);}x.ids.add(b.id);}
@@ -54,16 +56,18 @@ export function sitePowered(s,site){
 }
 const forkUsable=b=>b.enabled&&b.condition>0;
 const charge=b=>b.charge??FORKLIFT.full;
+/** Akku einsatzbereit: nicht im Ladezwang und charge ≥ min. */
+const charged=b=>!b.charging&&charge(b)>=FORKLIFT.min;
 /** Bindet bzw. hält den Stapler für key. Rückgabe {forklift} oder {forklift:null,reason}. Nicht mehr einsatzbereite
  * eigene Bindung wird gelöst (lädt dann frei weiter). */
 export function acquireForklift(s,site,key){
  let held=null,any=false;for(const b of s.buildings)if(b.type==='forklift'&&b.task===key){held=b;break;}
  const powered=sitePowered(s,site);
- if(held){if(held.site===site&&forkUsable(held)&&powered&&charge(held)>=FORKLIFT.min)return {forklift:held};held.task=null;}
+ if(held){if(held.site===site&&forkUsable(held)&&powered&&charged(held))return {forklift:held};held.task=null;}
  let charging=false;
  for(const b of s.buildings){
   if(b.type!=='forklift'||b.site!==site||!forkUsable(b))continue;any=true;
-  if(b.task||!powered)continue;if(charge(b)<FORKLIFT.min){charging=true;continue;}
+  if(b.task||!powered)continue;if(!charged(b)){charging=true;continue;}
   b.charge=charge(b);b.task=key;return {forklift:b};
  }
  return {forklift:null,reason:!any?WAIT.forklift:!powered?WAIT.forkliftPower:charging?WAIT.forkliftCharge:WAIT.forklift};
@@ -71,7 +75,7 @@ export function acquireForklift(s,site,key){
 /** Wie acquireForklift, aber nur lesend: wäre für key jetzt ein Stapler einsatzbereit? */
 export function forkliftAvailable(s,site,key){
  const powered=sitePowered(s,site);if(!powered)return false;
- for(const b of s.buildings)if(b.type==='forklift'&&b.site===site&&forkUsable(b)&&(!b.task||b.task===key)&&charge(b)>=FORKLIFT.min)return true;
+ for(const b of s.buildings)if(b.type==='forklift'&&b.site===site&&forkUsable(b)&&(!b.task||b.task===key)&&charged(b))return true;
  return false;
 }
 export function releaseForklift(s,key){for(const b of s.buildings)if(b.type==='forklift'&&b.task===key)b.task=null;}
@@ -86,9 +90,10 @@ export function tickForklifts(s){
   if(b.type!=='forklift')continue;
   if(b.charge===undefined)b.charge=FORKLIFT.full;
   if(b.task&&!forkliftHolderActive(s,b.task))b.task=null;
-  if(usedNow(s,b)){b.charge=Math.max(0,b.charge-FORKLIFT.work);continue;}
-  power??=new Map();let p=power.get(b.site);if(p===undefined)power.set(b.site,p=sitePowered(s,b.site));
-  if(p&&b.enabled&&b.charge<FORKLIFT.full)b.charge=Math.min(FORKLIFT.full,b.charge+FORKLIFT.charge);
+  if(usedNow(s,b))b.charge=Math.max(0,b.charge-FORKLIFT.work);
+  else{power??=new Map();let p=power.get(b.site);if(p===undefined)power.set(b.site,p=sitePowered(s,b.site));
+   if(p&&b.enabled&&b.charge<FORKLIFT.full)b.charge=Math.min(FORKLIFT.full,b.charge+FORKLIFT.charge);}
+  if(b.charge<FORKLIFT.min)b.charging=true;else if(b.charging&&b.charge>=FORKLIFT.resume)delete b.charging;
  }
 }
 
@@ -284,6 +289,7 @@ export function validate(s){
  for(const b of s.buildings){
   if(b.type!=='forklift')continue;
   if(b.charge!==undefined&&!(typeof b.charge==='number'&&Number.isFinite(b.charge)&&b.charge>=0&&b.charge<=FORKLIFT.full))fail('Staplerakku');
+  if(b.charging!==undefined&&b.charging!==true)fail('Staplerakku');
   if(b.task==null)continue;
   if(typeof b.task!=='string'||!b.task.endsWith(':forklift'))fail('Staplerbindung');
   if(forks.has(b.task))fail('Stapler doppelt gebunden');forks.add(b.task);
