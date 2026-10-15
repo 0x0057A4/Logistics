@@ -102,15 +102,15 @@ test('Build-Tray: Staplerplatz mit Icon',async()=>{
  assert.match(ui.nodes.get('#buildItems').innerHTML,/data-build="forklift" class="active"><i>⇈<\/i><b>Staplerplatz<\/b>/);
 });
 
-test('Paketvertrag: Strafsätze 1,50 € / 4 €, angefallene Strafen aus Journal, Finanzen „Vertragsstrafe“, drohende Strafe in der Glocke, Abrechnung wartet',async()=>{
+test('Paketvertrag: Strafsätze laut TERMS (2,50 € / 8 €), angefallene Strafen aus Journal, Finanzen „Vertragsstrafe“, drohende Strafe in der Glocke, Abrechnung wartet',async()=>{
  const {sim,ids}=hubProbe(Simulation);const s=sim.state,c=s.contracts.find(k=>k.id===ids.contract);
- assert.equal(c.penaltyLate,1.5);assert.equal(c.penaltyOpen,4);
+ assert.equal(c.penaltyLate,2.5);assert.equal(c.penaltyOpen,8);
  const ui=await load(sim);press(ui,{panel:'contracts'});
- assert.ok(body(ui).includes('1,50 € je verspätetem Paket · 4 € je liegengebliebenem Paket bei Vertragsende'));assert.match(body(ui),/Pakete \/ Tag/);assert.match(body(ui),/Preis \/ Paket/);
+ assert.ok(body(ui).includes('2,50 € je verspätetem Paket · 8 € je liegengebliebenem Paket bei Vertragsende'));assert.match(body(ui),/Pakete \/ Tag/);assert.match(body(ui),/Preis \/ Paket/);
  assert.doesNotMatch(body(ui),/Palettenvertrag/);
  // Drohende Strafe: Ausgangslage Frist eines Auftrags in 30 Minuten.
  const o=ids.orders[0];ui.run(`sim.state.orders.find(o=>o.id==='${o}').due=sim.state.t+30`);ui.run('render(true)');
- const pd=alerts(ui).find(a=>a.key==='pd:'+c.id);assert.ok(pd,'Strafe droht');assert.match(pd.title,/^Strafe droht · /);assert.match(pd.sub,/Pakete offen, fällig \d\d:\d\d \(30 Min\.\) · 1,50 € je verspäteter Einheit, bis /);
+ const pd=alerts(ui).find(a=>a.key==='pd:'+c.id);assert.ok(pd,'Strafe droht');assert.match(pd.title,/^Strafe droht · /);assert.match(pd.sub,/Pakete offen, fällig \d\d:\d\d \(30 Min\.\) · 2,50 € je verspäteter Einheit, bis /);
  // Verspätete Zustellung über echte Fachmodule: Frist vorbei, Lieferung mit Lieferwagen.
  until(ui,`sim.state.batches.some(b=>b.owner==='${o}'&&b.location==='stock'&&b.qty>=10)`);
  ui.run(`sim.state.orders.find(o=>o.id==='${o}').due=sim.state.t-1`);
@@ -118,9 +118,9 @@ test('Paketvertrag: Strafsätze 1,50 € / 4 €, angefallene Strafen aus Journa
  assert.equal(ui.run("sim.state.shipments.length"),1,ui.nodes.get('#toast').textContent);
  until(ui,"sim.state.ledger.some(l=>l.key.startsWith('penalty:'))");
  assert.ok(!alerts(ui).some(a=>a.key==='pd:'+c.id&&/fällig.*\(-/.test(a.sub)),'nur künftige Fristen');
- const sum=ui.run(`sim.state.ledger.filter(l=>/^penalty(-open)?:/.test(l.key)&&l.refs.includes('${c.id}')).reduce((n,l)=>n+l.amount,0)`);assert.equal(sum,-15);
- press(ui,{panel:'contracts'});assert.match(body(ui),/Angefallene Strafen<\/span><b><span class="money-minus">-15 €<\/span> · 1 Buchung</);assert.match(body(ui),/1 Buchung/);
- press(ui,{panel:'finance'});assert.match(body(ui),/<span>Vertragsstrafe<\/span><b><span class="money-minus">-15 €<\/span>/);assert.match(body(ui),/<span>Vertragsstrafen<\/span><b><span class="money-minus">-15 €<\/span> · 1 Buchung/);
+ const sum=ui.run(`sim.state.ledger.filter(l=>/^penalty(-open)?:/.test(l.key)&&l.refs.includes('${c.id}')).reduce((n,l)=>n+l.amount,0)`);assert.equal(sum,-25) /* 10 × 2,50 € */;
+ press(ui,{panel:'contracts'});assert.match(body(ui),/Angefallene Strafen<\/span><b><span class="money-minus">-25 €<\/span> · 1 Buchung</);assert.match(body(ui),/1 Buchung/);
+ press(ui,{panel:'finance'});assert.match(body(ui),/<span>Vertragsstrafe<\/span><b><span class="money-minus">-25 €<\/span>/);assert.match(body(ui),/<span>Vertragsstrafen<\/span><b><span class="money-minus">-25 €<\/span> · 1 Buchung/);
  // Abrechnung wartet: Vertrag kündigen, kurz vor Abrechnung abfahren (Ware unterwegs).
  ui.click('cancelContract',c.id);ui.click('confirmOk');
  const endT=ui.run(`sim.state.contracts.find(k=>k.id==='${c.id}').endT`);press(ui,{panel:'contracts'});
@@ -136,5 +136,5 @@ test('Finanzen: Kategorie Vertragsstrafe mit aktivem Vertrag auch bei 0 € sich
  const {sim}=hubProbe(Simulation);const ui=await load(sim);
  press(ui,{panel:'finance'});assert.match(body(ui),/<span>Vertragsstrafe<\/span><b><span class="money-plus">0 €<\/span>/);assert.match(body(ui),/<span>Vertragsstrafen<\/span><b><span class="">0 €<\/span> · 0 Buchungen/);
  press(ui,{panel:'help'});const h=body(ui);
- assert.match(h,/Paletten und Stapler/);assert.match(h,/Kein Strom für Stapler/);assert.match(h,/Vertragsstrafen/);assert.match(h,/Paket 1,50 €, Palette 8 €/);assert.match(h,/Paket 4 €, Palette 20 €/);assert.match(h,/Abrechnung wartet/);
+ assert.match(h,/Paletten und Stapler/);assert.match(h,/Kein Strom für Stapler/);assert.match(h,/Vertragsstrafen/);assert.match(h,/Paket 2,50 €, Palette 25 €/);assert.match(h,/Paket 8 €, Palette 60 €/);assert.match(h,/Abrechnung wartet/);
 });
