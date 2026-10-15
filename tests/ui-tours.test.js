@@ -18,7 +18,7 @@ test('Tourentwurf bleibt beim Neurendern erhalten und wird beim Spielstandwechse
 test('Tourkarte zeigt Rückladung, echte Fahrzeugladung und Wartegrund ohne HTML-Injektion',async()=>{
  const ui=await boot();await ui.click('start');ui.click('starter');
  const html=ui.run(`(()=>{const s=sim.state,v=s.vehicles[0],o=s.orders[0];const batch=sim.api.inventory.add({item:o.item,qty:2,site:v.site,location:'vehicle',owner:'company',quality:45,unitCost:10});s.returns.push({id:'ret-ui',qty:2,status:'onTour',cargo:[batch.id]});return tourCard(s,{id:'tour-ui',vehicleId:v.id,status:'returnUnloading',remaining:4,transportCost:14.4,blocked:'<Rampe fehlt>',stopIndex:1,stops:[{orderId:o.id,qty:3,status:'delivered',cargo:[],returnId:'ret-ui'}]});})()`);
- assert.match(html,/Quarantäne entladen/);assert.match(html,/Rückladung an Bord/);assert.match(html,/&lt;Rampe fehlt&gt;/);assert.match(html,/2 \/ 20 Plätze/);assert.doesNotMatch(html,/Tour vor Abfahrt stornieren/);
+ assert.match(html,/Quarantäne entladen/);assert.match(html,/Rückladung an Bord/);assert.match(html,/&lt;Rampe fehlt&gt;/);assert.match(html,/2 \/ 20 Volumen/);assert.doesNotMatch(html,/Tour vor Abfahrt stornieren/);
 });
 test('Vorschau zeigt Fachprüfung und Kosten ohne Simulation zu verändern',async()=>{
  const ui=await boot();await ui.click('start');ui.click('starter');
