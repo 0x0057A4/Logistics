@@ -203,3 +203,21 @@ test('QS-W0 Speichern: Hauptstand wird während Betrieb von außen beschädigt �
  assert.ok(Simulation.fromJSON(memory.get(K)).state.t>JSON.parse(lastGood).t);
  ui.run('guard.dispose()');
 });
+
+// Befund QS-W0-11 (niedrig, A12/A10, Nebenwirkung der Behebung 05): Solange die Sicherung des vorherigen Unternehmens
+// festgehalten ist, erhält das neue Unternehmen keine eigene Sicherung. Wird sein Hauptstand später beschädigt, ist es
+// nicht wiederherstellbar (in der Sicherung liegt nur das alte Unternehmen). Vor der Behebung lag ab dem 2. Speichern
+// eine Kopie des neuen Unternehmens vor.
+test('QS-W0 Befund 11: neues Unternehmen (gegründet über gültigem Stand) bleibt nach Beschädigung seines Hauptstands wiederherstellbar',{todo:'Befund QS-W0-11 (niedrig, A12/A10), siehe docs/QS-0.9-W0.md'},async()=>{
+ const memory=new Map(),K='industrie-logistik-v1-guided';
+ const valid=new Simulation({mode:'guided',seed:9});valid.step(30);const good=valid.serialize();memory.set(K,good);
+ const ui=await boot({memory});
+ await ui.click('new');await ui.click('confirmOk');await ui.click('start');await ui.click('confirmOk');
+ assert.equal(memory.get(K+'-backup'),good,'Vorbedingung: Sicherung = altes Unternehmen');
+ const written=new Set();
+ for(let i=0;i<3;i++){ui.run('sim.step(15)');ui.run('dirty=true');assert.ok(ui.run('save()'));written.add(memory.get(K));}
+ ui.run('guard.dispose()');
+ memory.set(K,'{kaputt');
+ // Kopie des neuen Unternehmens = einer seiner eigenen geschriebenen Stände (nicht nur gleiche Uhrzeit wie das alte).
+ assert.ok(written.has(memory.get(K+'-backup')),`Kopie des neuen Unternehmens erwartet; Sicherung = altes Unternehmen: ${memory.get(K+'-backup')===good}`);
+});
