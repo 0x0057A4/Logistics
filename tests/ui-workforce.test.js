@@ -32,7 +32,7 @@ test('Personalfenster: Tätigkeit aus describeAssignment, Klick auf Bezug öffne
 
 test('Torbuch: gebundene Entladekraft mit Tempo aus workRate (nur Anzeige)',async()=>{
  const {ui,ids}=await probe();const a=ui.run(`sim.state.yard.find(a=>a.id==='${ids.arrival}')`),w=ui.run(`sim.state.workers.find(w=>w.task==='${a.id}:warehouse')`);
- press(ui,{panel:'yard'});assert.ok(body(ui).includes(`${a.unloaded} / ${a.parcels}<br><small class="muted crew">${w.name} · 20 Pakete/min</small>`));
+ press(ui,{panel:'yard'});assert.ok(body(ui).includes(`${a.unloaded} / ${a.parcels} Pakete<br><small class="muted crew">${w.name} · 20 Pakete/min</small>`));
  ui.run(`Object.assign(sim.state.workers.find(x=>x.id==='${w.id}'),{skill:1.5,fatigue:65})`);const rate=workRate({skill:1.5,fatigue:65},UNLOAD_BASE);assert.notEqual(rate,UNLOAD_BASE);
  const before=ui.run('sim.serialize()');ui.run('render(true)');assert.ok(body(ui).includes(`${w.name} · ${rate} Pakete/min`));assert.equal(ui.run('sim.serialize()'),before);
 });
