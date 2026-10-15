@@ -78,9 +78,9 @@ for(const [width,height] of [[1920,1080],[1280,800]]){
  // Nur Szene.
  await page.click('#sceneOnlyBtn');check(await page.locator('#flow').isHidden()&&await page.locator('.kpis').isHidden(),`${label}: Panels ausblenden zeigt nur die Szene`);await page.click('#sceneOnlyBtn');
  // Größere Schrift über die bestehende Einstellung: HUD bleibt überlappungsfrei.
- await page.click('[data-panel="settings"]');await page.click('#panelBody [data-pref="large"]');await page.click('[data-action="close"]');
+ await page.click('button.square[data-panel="settings"]');await page.click('#panelBody [data-pref="large"]');await page.click('[data-action="close"]');
  check(await page.evaluate(()=>document.body.classList.contains('large')),`${label}: Einstellung „Größere Schrift“ aktiv`);await overlapCheck(page,label+' große Schrift',false);
- await page.click('[data-panel="settings"]');await page.click('#panelBody [data-pref="large"]');await page.click('[data-action="close"]');
+ await page.click('button.square[data-panel="settings"]');await page.click('#panelBody [data-pref="large"]');await page.click('[data-action="close"]');
  check(!errors.length,`${label}: keine Konsolenfehler${errors.length?' – '+errors.join(' | '):''}`);
  await context.close();
 }

@@ -100,3 +100,19 @@ test('HUD: Standortwahl, Stationen, Fahrzeugzeile und Einklappen nutzen bestehen
  ui.run("scene.setLabels=m=>{globalThis.labels=m;}");ui.run('render(true)');assert.equal(ui.nodes.get('#labelGroup').hidden,false);press(ui,{labels:'fleet'});assert.equal(ui.run('labels'),'fleet');
  ui.run('guard.dispose()');
 });
+
+test('Version (QS-W0-10): Statuszeile, Einstellungen und Handbuch nennen „0.9 · ENTWICKLUNG“',async()=>{
+ const ui=await boot();await ui.click('start');
+ assert.equal(text(ui,'appVersion'),'0.9 · ENTWICKLUNG');
+ for(const p of ['settings','help']){ui.run(`openPanel('${p}')`);const body=ui.nodes.get('#panelBody').innerHTML;assert.match(body,/0\.9 · ENTWICKLUNG/,p);assert.doesNotMatch(body,/Entwicklungsfassung 0\.8|0\.8 · ENTWICKLUNG/,p);}
+ ui.run('guard.dispose()');
+});
+
+test('Lagerpanel (QS-W0-06): Belegung und Kapazität = Lager-API wie HUD, Ware in Anlage zählt nicht',async()=>{
+ const ui=await line(),de=n=>new Intl.NumberFormat('de-DE').format(n);
+ ui.run("sim.api.inventory.add({item:'housing',qty:5,site:'site-1',location:'stock'})");ui.run("sim.api.inventory.add({item:'housing',qty:3,site:'site-1',location:'machine'})");ui.run('render(true)');
+ const used=ui.run("sim.api.inventory.used('site-1')"),cap=ui.run("sim.api.inventory.capacity('site-1')");assert.equal(used,5);
+ ui.run("openPanel('inventory')");const body=ui.nodes.get('#panelBody').innerHTML;
+ assert.ok(body.includes(`<b>${de(used)}</b><small>Einheiten am Standort`),'Panel Belegung');assert.ok(body.includes(`<b>${de(cap)}</b><small>Lagerkapazität`),'Panel Kapazität');
+ assert.equal(text(ui,'sbStock'),`Lager ${de(used)}/${de(cap)}`);ui.run('guard.dispose()');
+});

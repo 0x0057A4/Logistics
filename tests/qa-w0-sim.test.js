@@ -150,9 +150,9 @@ test('QS-W0 HUD: Kennzahlen nach 600 Min. Betrieb gegen eigene Rechnung aus stat
  ui.run('guard.dispose()');
 });
 
-// Befund QS-W0-06 (niedrig, A10): HUD „Lager x/y“ (Lager-API: stock+inbound+quarantine) und Panel Lager
-// „Einheiten am Standort“ (alle außer vehicle, also auch machine) zeigen bei laufender Fertigung verschiedene Zahlen.
-test('QS-W0 Befund 06: HUD-Lagerbelegung = Lagerpanel „Einheiten am Standort“ bei Ware in Anlage',{todo:'Befund QS-W0-06 (niedrig, A10), siehe docs/QS-0.9-W0.md'},async()=>{
+// Befund QS-W0-06 (niedrig, A10), behoben: HUD „Lager x/y“ und Panel Lager „Einheiten am Standort“ nutzen beide
+// siteLoad() → api.inventory.used/capacity (stock+inbound+quarantine); Ware in Anlagen zählt in beiden nicht.
+test('QS-W0 Befund 06: HUD-Lagerbelegung = Lagerpanel „Einheiten am Standort“ bei Ware in Anlage',async()=>{
  const ui=await boot();await ui.click('start');ui.click('starter');
  ui.run("sim.api.inventory.add({item:'housing',qty:3,site:'site-1',location:'machine'})");ui.run('render(true)');
  ui.run("openPanel('inventory')");const body=ui.nodes.get('#panelBody').innerHTML;const panelUsed=/<b>([\d.]+)<\/b><small>Einheiten am Standort/.exec(body)[1];
