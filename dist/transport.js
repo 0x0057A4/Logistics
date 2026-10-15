@@ -1,5 +1,6 @@
 import {committedQty} from './tours.js';
 import {VEHICLES,ITEMS} from './catalog.js';
+import {acquireForklift,releaseForklift,useForklift,forkliftKey,PALLET} from './yard.js';
 export function init(s){s.transfers??=[];}
 const fits=(v,item,qty)=>(!ITEMS[item].cold||VEHICLES[v.type].cold)&&qty*(ITEMS[item].volume||1)<=v.capacity&&qty*(ITEMS[item].weight||1)<=(VEHICLES[v.type].weightCapacity||VEHICLES[v.type].maxWeight||v.capacity*4);
 /** Höchste Stückzahl eines Artikels, die `fits` für dieses Fahrzeug zulässt (Volumen, Gewicht, Kühlung). Nur lesend. */
@@ -31,7 +32,7 @@ export function handle(s,c,api){
  }
  if(c.type==='cancelShipment'){
   const sh=s.shipments.find(x=>x.id===c.id);if(!sh||sh.status!=='loading')return {ok:false,message:'Nur noch nicht abgefahrene Lieferung kann storniert werden.'};
-  api.inventory.release(sh.id);api.workforce.release(`${sh.id}:warehouse`);api.workforce.release(`${sh.id}:driver`);sh.status='cancelled';const v=s.vehicles.find(x=>x.id===sh.vehicleId);v.status='idle';v.shipment=null;for(const b of s.buildings)if(b.task===sh.id)b.task=null;return {ok:true};
+  api.inventory.release(sh.id);api.workforce.release(`${sh.id}:warehouse`);api.workforce.release(`${sh.id}:driver`);releaseForklift(s,forkliftKey(sh.id));sh.status='cancelled';const v=s.vehicles.find(x=>x.id===sh.vehicleId);v.status='idle';v.shipment=null;for(const b of s.buildings)if(b.task===sh.id)b.task=null;return {ok:true};
  }
  if(c.type==='maintainVehicle'){
   const v=s.vehicles.find(x=>x.id===c.id);if(!v||v.status!=='idle')return {ok:false,message:'Nur freies Fahrzeug kann gewartet werden.'};
@@ -72,14 +73,18 @@ export function step(s,api){
    if(!dock)dock=s.buildings.find(b=>b.site===sh.site&&b.type==='dock'&&b.enabled&&b.condition>0&&!b.task);
    if(!dock){sh.blocked='Warteschlange: freie Laderampe fehlt';continue;}dock.task=sh.id;sh.dock=dock.id;
   }
-  const driver=api.workforce.acquire('driver',sh.site,`${sh.id}:driver`);if(!driver){sh.blocked='Fahrpersonal oder Schicht fehlt';continue;}sh.driver=driver.id;
+  const pallet=sh.status==='loading'&&o.item===PALLET;
+  const driver=api.workforce.acquire('driver',sh.site,`${sh.id}:driver`);if(!driver){sh.blocked='Fahrpersonal oder Schicht fehlt';if(pallet)releaseForklift(s,forkliftKey(sh.id));continue;}sh.driver=driver.id;
   if(sh.status==='loading'){
-   const worker=api.workforce.acquire('warehouse',sh.site,`${sh.id}:warehouse`);if(!worker){sh.blocked='Lagerpersonal für Beladung fehlt';continue;}sh.worker=worker.id;sh.blocked=null;
+   // Paletten (W2-S2): Stapler zuerst; ohne Stapler bleibt keine Lagerkraft gebunden, ohne Lagerkraft kein Stapler.
+   let fork=null;if(pallet){const f=acquireForklift(s,sh.site,forkliftKey(sh.id));if(!f.forklift){api.workforce.release(`${sh.id}:warehouse`);sh.worker=null;sh.blocked=f.reason;continue;}fork=f.forklift;}
+   const worker=api.workforce.acquire('warehouse',sh.site,`${sh.id}:warehouse`);if(!worker){sh.blocked='Lagerpersonal für Beladung fehlt';if(fork)releaseForklift(s,forkliftKey(sh.id));continue;}sh.worker=worker.id;sh.blocked=null;
+   if(fork)useForklift(s,fork);
    if(--sh.remaining>0)continue;
    const cost=Math.round(sh.distance*2*VEHICLES[v.type].runningCost*100)/100;
    if(s.money<cost){sh.remaining=1;sh.blocked='Betriebskosten können nicht bezahlt werden';continue;}
    const cargo=api.inventory.transfer(sh.id,'vehicle',sh.site);if(!cargo){sh.remaining=1;sh.blocked='Ladung nicht verfügbar';continue;}
-   sh.cargo=cargo.map(b=>b.id);sh.materialCost=o.kind==='logistics'?0:Math.round(cargo.reduce((n,b)=>n+b.qty*b.unitCost,0)*100)/100;sh.transportCost=cost;sh.tripCost=cost;const dock=s.buildings.find(b=>b.task===sh.id);if(dock)dock.task=null;api.book(`trip:${sh.id}`,-cost,'Transport',`Tour ${sh.id}`,[sh.id,v.id,o.id]);api.workforce.release(`${sh.id}:warehouse`);sh.worker=null;sh.status='transit';v.status='transit';sh.remaining=Math.ceil(sh.distance/VEHICLES[v.type].speed);sh.departedAt=s.t;
+   sh.cargo=cargo.map(b=>b.id);sh.materialCost=o.kind==='logistics'?0:Math.round(cargo.reduce((n,b)=>n+b.qty*b.unitCost,0)*100)/100;sh.transportCost=cost;sh.tripCost=cost;const dock=s.buildings.find(b=>b.task===sh.id);if(dock)dock.task=null;api.book(`trip:${sh.id}`,-cost,'Transport',`Tour ${sh.id}`,[sh.id,v.id,o.id]);api.workforce.release(`${sh.id}:warehouse`);if(pallet)releaseForklift(s,forkliftKey(sh.id));sh.worker=null;sh.status='transit';v.status='transit';sh.remaining=Math.ceil(sh.distance/VEHICLES[v.type].speed);sh.departedAt=s.t;
   }else{
    sh.blocked=null;if(--sh.remaining>0)continue;
    if(sh.status==='transit'){sh.status='unloading';v.status='unloading';sh.remaining=2+Math.ceil(sh.qty/10);}

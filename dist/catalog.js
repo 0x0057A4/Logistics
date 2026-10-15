@@ -54,3 +54,5 @@ Object.assign(BUILDINGS,{sorter:{name:'Sortierplatz',cost:8500,w:3,h:2,color:'#7
 // Welle 2a: Paletten und Stapler (A01-Gerüst, Werte vorläufig).
 Object.assign(ITEMS,{pallet:{name:'Palette',price:0,volume:1,weight:300}});
 Object.assign(BUILDINGS,{forklift:{name:'Staplerplatz',cost:6500,w:1,h:1,color:'#f0b84a',role:'warehouse',recipes:[],power:2}});
+// A01 Welle 2a: Lkw-Nutzlast für Paletten (300 kg je Palette → 20 je Fahrt); Volumen bleibt Grenze für Stückgut.
+VEHICLES.truck.weightCapacity=6000;

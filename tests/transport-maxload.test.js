@@ -11,7 +11,7 @@ const veh=type=>({type,capacity:VEHICLES[type].capacity});
 // B7: Höchstmenge folgt derselben Regel wie die Simulation (Volumen, Gewicht, Kühlung).
 test('maxLoad: Lieferwagen 160 Pakete (Gewicht), 20 Leuchten (Volumen), 16 Profilleuchten, kein Kühlgut',()=>{
  assert.equal(maxLoad(veh('van'),'parcel'),160);assert.equal(maxLoad(veh('van'),'lamp'),20);assert.equal(maxLoad(veh('van'),'lamp_pro'),16);
- assert.equal(maxLoad(veh('van'),'cold_module'),0);assert.equal(maxLoad(veh('refrigerated'),'cold_module'),50);assert.equal(maxLoad(veh('truck'),'parcel'),640);
+ assert.equal(maxLoad(veh('van'),'cold_module'),0);assert.equal(maxLoad(veh('refrigerated'),'cold_module'),50);assert.equal(maxLoad(veh('truck'),'parcel'),1600) /* A01: Volumen 80/0,05 begrenzt */;
  assert.equal(maxLoad(veh('van'),'unbekannt'),0);assert.equal(maxLoad({type:'x',capacity:20},'parcel'),0);
 });
 function parcelGame(){
