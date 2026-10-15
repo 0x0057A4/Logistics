@@ -2,12 +2,13 @@
 // Fremde Lkw durchlaufen approach→gate→queue→toDock→docking→unloading→exit→gone.
 // Dock-Regel wie transport.js/tours.js/service.js: Dock frei, wenn type 'dock', enabled, condition>0 und ohne b.task.
 // Belegung b.task=arrival.id von toDock bis Ende unloading. Eigene Abläufe prüfen ebenfalls !b.task → keine Doppelbelegung.
+import {workRate,UNLOAD_BASE,GATE_ROLE} from './workforce.js';
 export const PHASES=['approach','gate','queue','toDock','docking','unloading','exit','gone'];
 export const DURATION={approach:15,gate:2,toDock:2,docking:1,exit:3};
-export const UNLOAD_RATE=20;        // Pakete je Minute (vorläufig, A06 Welle 1b)
+export const UNLOAD_RATE=UNLOAD_BASE; // Pakete je Minute einer Standardkraft; tatsächlich workRate(Kraft) (A06 W1b)
 export const SORT_RATE=4;           // Pakete je Minute für die atRisk-Schätzung (Sortierplatz 240/h)
 export const KEEP_GONE=1440;        // abgefertigte Einträge bleiben einen Spieltag im Torbuch
-export const WAIT={dock:'Kein freies Dock',staff:'Keine Lagerkraft am Standort',full:'Lager voll',dockOff:'Dock außer Betrieb'};
+export const WAIT={gate:'Keine Torkontrolle',dock:'Kein freies Dock',staff:'Keine Lagerkraft am Standort',full:'Lager voll',dockOff:'Dock außer Betrieb'};
 const AT_DOCK=new Set(['toDock','docking','unloading']);
 const CARRIER_A=['Talgrund','Weidenstein','Ostheiden','Kranichmoor','Lerchental','Fuchsbrunn','Eschenfurt','Moorwiesen','Hohenkamp','Silberau'];
 const CARRIER_B=['Spedition','Logistik','Transporte','Frachtdienst','Güterverkehr'];
@@ -19,6 +20,12 @@ export function isFreeDock(b,site){return b.type==='dock'&&b.site===site&&b.enab
 export function freeDock(s,site){return s.buildings.find(b=>isFreeDock(b,site))||null;}
 
 export function init(s){s.yard??=[];}
+// Torkontrolle (A06 W1b): Phase gate braucht eine Lagerkraft (Schlüssel gateKey) für DURATION.gate Arbeitsminuten.
+// a.gateDone zählt geleistete Minuten (fehlend = 0, alte Stände starten die Kontrolle neu); ohne Kraft wartet der Lkw
+// mit WAIT.gate, phaseEnd zeigt dann das frühestmögliche Ende. Bindung nur während gate.
+export const gateKey=a=>`${a.id}:gate`;
+export const unloadKey=a=>`${a.id}:warehouse`;
+const heldRate=(s,key)=>{const w=s.workers.find(w=>w.task===key);return w?workRate(w,UNLOAD_BASE):UNLOAD_RATE;};
 
 const pick=(api,list)=>list[Math.floor(api.random()*list.length)%list.length];
 // Größte-Reste-Verteilung: ganzzahlig, Summe exakt total, Verhältnis nach weights.
@@ -80,7 +87,7 @@ function due(s,a){
 }
 // Einfache Prognose: Restzeit im Hof + Warteschlange + Entladen + Sortieren.
 function updateRisk(s,a){
- const unloadRest=Math.ceil((a.parcels-a.unloaded)/UNLOAD_RATE),t=s.t;let ready;
+ const unloadRest=Math.ceil((a.parcels-a.unloaded)/heldRate(s,unloadKey(a))),t=s.t;let ready;
  const ahead=a.phase==='queue'?queueOrder(s,a.site).indexOf(a):0;
  const queueWait=ahead*Math.ceil(a.parcels/UNLOAD_RATE);
  switch(a.phase){
@@ -109,8 +116,16 @@ export function handle(s,c,api){
 export function step(s,api){
  if(!s.yard?.length)return;const t=s.t;
  for(const a of s.yard){
-  if(a.phase==='approach'&&t>=a.phaseEnd){setPhase(a,'gate',t);a.gateAt=t;}
-  else if(a.phase==='gate'&&t>=a.phaseEnd){setPhase(a,'queue',t);}
+  if(a.phase==='approach'&&t>=a.phaseEnd){setPhase(a,'gate',t);a.gateAt=t;a.gateDone=0;}
+  else if(a.phase==='gate'){
+   const worker=api.workforce.acquire(GATE_ROLE,a.site,gateKey(a));
+   if(!worker){wait(a,WAIT.gate,t);a.phaseEnd=t+DURATION.gate-(a.gateDone||0);}
+   else{
+    worker.activity=`Torkontrolle ${a.plate}`;a.waitReason=null;a.waitSince=null;
+    a.gateDone=(a.gateDone||0)+1;
+    if(a.gateDone>=DURATION.gate){api.workforce.release(gateKey(a));delete a.gateDone;setPhase(a,'queue',t);}
+   }
+  }
   else if((a.phase==='toDock'||a.phase==='docking')){
    const b=dockOf(s,a);
    if(!usable(b)){releaseDock(s,a);setPhase(a,'queue',t);api.log('yard',`${a.plate}: Dock nicht verfügbar, zurück in die Warteschlange.`,[a.id]);}
@@ -124,7 +139,7 @@ export function step(s,api){
     if(!worker)wait(a,WAIT.staff,t);
     else{
      worker.activity=`Entlädt ${a.plate}`;
-     const r=unloadMinute(s,api,a,Math.min(UNLOAD_RATE,a.parcels-a.unloaded));
+     const r=unloadMinute(s,api,a,Math.min(workRate(worker,UNLOAD_BASE),a.parcels-a.unloaded));
      if(r.full){wait(a,WAIT.full,t);if(!r.added)api.workforce.release(`${a.id}:warehouse`);}
      else{a.waitReason=null;a.waitSince=null;}
     }
@@ -163,6 +178,7 @@ export function validate(s){
   if(a.waitReason!==null&&typeof a.waitReason!=='string')fail('Wartegrund');
   if(typeof a.atRisk!=='boolean'||typeof a.priority!=='boolean')fail('Gefährdung');
   if(a.phase!=='approach'&&!int(a.gateAt))fail('Torzeit');
+  if(a.gateDone!==undefined&&(a.phase!=='gate'||!int(a.gateDone)||a.gateDone>=DURATION.gate))fail('Torkontrolle');
   if(!Array.isArray(a.orderIds)||a.orderIds.some(id=>!s.orders.some(o=>o.id===id)))fail('Auftragsreferenz');
   if(!Array.isArray(a.split)||!a.split.length)fail('Verteilung');
   let done=0,target=0;for(const p of a.split){if(typeof p.owner!=='string'||!int(p.target)||!int(p.done)||p.done>p.target)fail('Verteilung');done+=p.done;target+=p.target;}

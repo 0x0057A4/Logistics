@@ -10,7 +10,7 @@
 // damit Spielstände ohne Hub-Betrieb bitgleich bleiben).
 import {BUILDINGS} from './catalog.js';
 import {siteItemBatches} from './inventory.js';
-import {onShift} from './workforce.js';
+import {onShift, workRate} from './workforce.js';
 
 export const ITEM = 'parcel';
 export const HAND_RATE = 2;
@@ -27,7 +27,7 @@ function inbound(s, site) {
   return out;
 }
 
-// Entladen hat Vorrang (A01): Fremd-Lkw in docking/unloading ohne gebundene Lagerkraft (yard-Schlüssel
+// Entladen und Torkontrolle haben Vorrang (A01/A06): Fremd-Lkw in gate ohne Torkraft bzw. docking/unloading ohne gebundene Lagerkraft (yard-Schlüssel
 // `${arrival.id}:warehouse`). So viele freie Lagerkräfte bleiben fürs Entladen reserviert; reicht das nicht, geben
 // Sortierbindungen ihre Person ab (zuerst Handsortierung, dann Sortierplätze von hinten). yard.step läuft vor
 // sorting.step und bindet die freigegebene Person in der nächsten Minute.
@@ -35,7 +35,10 @@ function unloadNeed(s, site) {
   if (!s.yard?.length) return 0;
   let n = 0;
   for (const a of s.yard) {
-    if (a.site !== site || (a.phase !== 'docking' && a.phase !== 'unloading') || a.unloaded >= a.parcels) continue;
+    if (a.site !== site) continue;
+    // Torkontrolle (A06 W1b, yard-Schlüssel `${arrival.id}:gate`) hat denselben Vorrang wie das Entladen.
+    if (a.phase === 'gate') { if (!s.workers.some(w => w.task === `${a.id}:gate`)) n++; continue; }
+    if ((a.phase !== 'docking' && a.phase !== 'unloading') || a.unloaded >= a.parcels) continue;
     const key = `${a.id}:warehouse`;
     if (!s.workers.some(w => w.task === key) && s.buildings.some(b => b.id === a.dock && b.enabled && b.condition > 0)) n++;
   }
@@ -127,7 +130,7 @@ export function step(s, api) {
     if (active || !cand.length || ci >= cand.length) { api.workforce.release(handKey(id)); st.hand = active ? 'off' : 'idle'; continue; }
     const w = grab(id, handKey(id));
     if (!w) { st.hand = 'staff'; continue; }
-    const moved = take(HAND_RATE);
+    const moved = take(workRate(w, HAND_RATE)); // Standardkraft = HAND_RATE, Erfahrung bis ×1,5 (A06 W1b)
     st.hand = blocked && !moved ? 'storage' : 'working';
     w.activity = 'Handsortierung';
   }
