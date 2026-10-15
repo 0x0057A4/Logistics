@@ -17,6 +17,8 @@ function hub({sorter = true, workers = 1, seed = 7} = {}) {
   // Echter Vertrag für Auftragsreferenzen (contracts.validate); sofort beendet, damit er keine eigenen Lkw schickt.
   const c = sim.state.contracts[0];
   ok(sim, {type:'acceptContract', id:c.id}); ok(sim, {type:'cancelContract', id:c.id});
+  // W2-S1: Als abgerechnet markieren, sonst gibt die Vertragsende-Abrechnung (Ende + 1440) die Testware an den Versender zurück.
+  c.settled = true;
   return sim;
 }
 function order(sim, qty, due) {

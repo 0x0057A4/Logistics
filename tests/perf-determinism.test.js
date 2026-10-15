@@ -33,27 +33,31 @@ const SCENARIOS={
 // die vorherigen Hashes exakt (4/4 grün). Node v22.22.0.
 // Welle 1c (A01-Entscheidung): erneut erzeugt für Preise 7–8,50 €/Paket (Startvertrag 8 €). Gegenprobe: contracts.js
 // aus 76498a8 (6 €) reproduziert dessen Hashes exakt (4/4 grün). Node v22.22.0.
+// Welle 2a (A08, W2-S1/unit): erneut erzeugt, weil Vertragsangebote die Felder unit, penaltyLate, penaltyOpen tragen und
+// ab Tag 3 Palettenangebote (gleiche Zahl Zufallszüge) entstehen. Gegenprobe: contracts.js ohne die drei Felder und mit
+// TERMS.pallet.fromDay=999 reproduziert die vorherigen Hashes exakt (4/4 grün); Seed/ID-Zähler nach 9000 min mit und
+// ohne Palettenangebote identisch. Node v22.22.0.
 const EXPECTED={
  klein:[
-  'f39bebc4fe2bc8cfbba941e9c7034ee28785aa82c1476647440c554fb0ff2b62',
-  '4c84733e0f63b7ec17e05111988a9ed76e369422f8998dae223a0e1d01f60c39',
-  '24980c2606aa147f698e2e0d6d7d17b52a849b8229052e94c64ea1b500fc3530',
-  '5e41eab909ed2793c081553e7ff760bb92aabeecf070faadb8ec85e316686565',
+  '425efaeefd2bc3e9b35d813aa9f359767c5c4b3f6fc2c88f2054538fdd134743',
+  'f7b7e2b58ff4d23f1e173f9c323482133c52f6598cc26ddf778542c4583b7608',
+  'e4f982f01cf2940af59b47aa73148b1f22357009cbb606a2ecce62c07fcebf25',
+  'edb4892046e34cffd054dada1e07961fc6c831359d9013dae9cdf5e30b3c1473',
  ],
  dienste:[
-  'b4354e7fa595c00fc3b219de051cdea8d7fa29e05dd804ecb3c1538107cbf889',
-  'cfbdda3f1519540003921ea469cd0eb3e48d70fa6c62014a96ce56efb48edf14',
-  '1ff934830ddecec53587e3370c5c0dff770d9a3dd2c5be6310766b1b6cc93a28',
-  '79c293bdce8183430d3f8d5e15cdfc29258bdfa45ad61247f28d1521a3924a5c',
+  'ef091065942dcb981998cfba63478af9192cad641cbdfcbc7e18a5e92a749cfe',
+  'a8ded180e6194cb19bfbd7bc90dec4286b994daf9eadbc7f3010b73f4ff67c27',
+  '8d03a8dada5e68c1e4ecedb07be0223502c1bc207bdee7f5d2e40fed4b836e6f',
+  '13c79d00e79e92f32b72d9350f589340010b5733800f120dea32f05a4fe022e6',
  ],
  gross:[
-  'b9fb80b9746e489a2fd38fdc49f7c1285aa0cfe99a527a89e5b766e5679086ae',
-  '90fce15386634cf62f0f537440fab8cbccbf62799a86d4d6d8dc573ebe31fd39',
-  '877ef7dd40fd236a6a418f4dc3cf04d8340d5b8151e621e08ab343256772ca1e',
-  'ad091d0fd65b6976fbcdd45ff393d47c83293987a17e8516b7845fb26d5a5578',
+  '23194178482a4ac1e1b5e0490f8416f00c26b9883f2c602e5b870e8ab3508aab',
+  '4be95899b85fd9890e8f7be1d06e94465a2ad2f572caf13093b37bd72e04764d',
+  '2670071dc8b5fcb30a21688bb83e04d293e9692cbe882a475c979bf76a3c6d2d',
+  '64bfa125be52e0b351a990d33ae7dc1c7e373a11c8fcff68d67abba42ef2de0b',
  ],
  prognose:[
-  '80b4ed120f458105c8c724523be5a20669fe46daa6e2068b3b66c3ab3e08fdf2',
+  '323ca3098ffa2233a86d19e71352f34dba44100f0c1d09042bb77804430c2127',
  ],
 };
 
