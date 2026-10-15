@@ -42,7 +42,7 @@ export class Scene {
   destroy(){this.dead=true;cancelAnimationFrame(this.frame);this.observer.disconnect();for(const [t,f,o]of this.listeners)this.canvas.removeEventListener(t,f,o);}
   resize(){this.dirty=true;const r=this.canvas.getBoundingClientRect();this.width=Math.max(1,r.width);this.height=Math.max(1,r.height);const dpr=Math.min(2,window.devicePixelRatio||1);this.canvas.width=Math.round(this.width*dpr);this.canvas.height=Math.round(this.height*dpr);this.ctx.setTransform(dpr,0,0,dpr,0,0);}
   local(e){const r=this.canvas.getBoundingClientRect();return {x:e.clientX-r.left,y:e.clientY-r.top};}
-  site(){return this.state?.sites?.find(s=>s.id===this.state.selectedSite)||this.state?.sites?.[0]||{id:'site-1',name:'Werk Morgenfeld',width:20,height:16};}
+  site(){return this.state?.sites?.find(s=>s.id===this.state.selectedSite)||this.state?.sites?.[0]||{id:'site-1',name:'Depot Morgenfeld',width:20,height:16};}
   unit(){const s=this.site(),span=s.width+s.height;return Math.min(Math.max(160,this.width-100)/(span+5),this.height/(span*.5+12),39)*this.scale;}
   orient(x,y){const s=this.site();let a=x-s.width/2,b=y-s.height/2;for(let i=0;i<this.angle;i++){const t=a;a=-b;b=t;}return {x:a,y:b};}
   project(x,y,z=0){const p=this.orient(x,y),u=this.unit();if(this.view==='flat')return{x:this.width/2+35+this.pan.x+p.x*u*1.38,y:this.height*.49+this.pan.y+p.y*u*1.38};return{x:this.width/2+35+this.pan.x+(p.x-p.y)*u,y:this.height*.49+this.pan.y+(p.x+p.y)*u*.5-z*u};}

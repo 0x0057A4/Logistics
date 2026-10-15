@@ -18,7 +18,7 @@ const OUT = ['transit', 'collecting', 'linehaul', 'outbound'], IN = ['returning'
 
 export function cellToWorld(x, y) { return { x: x + .5, z: y + .5 }; }
 export function worldToCell(x, z) { return { x: Math.floor(x), y: Math.floor(z) }; }
-export function defaultSite(state) { return state?.sites?.find(s => s.id === state.selectedSite) || state?.sites?.[0] || { id: 'site-1', name: 'Werk Morgenfeld', width: 20, height: 16 }; }
+export function defaultSite(state) { return state?.sites?.find(s => s.id === state.selectedSite) || state?.sites?.[0] || { id: 'site-1', name: 'Depot Morgenfeld', width: 20, height: 16 }; }
 /** Achsparalleler Quader einer Anlage in Weltkoordinaten (Rotation über footprint()). */
 export function buildingBox(b) { const f = footprint(b) || { w: 2, h: 2 }; return { x0: b.x, z0: b.y, x1: b.x + f.w, z1: b.y + f.h, y0: 0, y1: HEIGHT[b.type] || 1.2, w: f.w, h: f.h }; }
 /** Statusfarbe wie scene.js: aktiv grün, blockiert gelb, sonst grau. */

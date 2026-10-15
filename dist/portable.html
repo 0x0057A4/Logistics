@@ -1593,9 +1593,19 @@ function book(s,key,amount,category,note,refs=[]){
  if(match){s.accountingWatermarks??={};s.accountingWatermarks[match[1]]=watermark;}
  if(amount>0&&category==='Umsatz')s.stats.revenue=cents(s.stats.revenue+amount);else if(amount<0&&category!=='Tilgung')s.stats.costs=cents(s.stats.costs-amount);s.overdraft=Math.max(0,-s.money);return true;
 }
+/** Fertigungsanlage vorhanden: mindestens ein Gebäude mit Rezept (Montage, Prüfung, Verpackung) an irgendeinem Standort. */
+const hasManufacturing=s=>s.buildings.some(b=>BUILDINGS[b.type]?.recipes?.length>0);
+// Erste Fertigungsanfragen (früher Startaufträge in init). Nur einmal: Aufträge werden nie gelöscht, daher genügt
+// „noch nie ein Fertigungsauftrag“ als Bedingung; alte Stände besitzen ihre Startaufträge bereits.
+function startOffers(s,api){
+ const site=s.buildings.find(b=>BUILDINGS[b.type]?.recipes?.length>0).site;
+ for(const [i,qty,price,quality] of [[1,8,110,70],[2,20,117,75],[3,35,125,82]])s.orders.push({id:`order-${s.seq++}`,kind:'manufacturing',customer:['Lichtbogen Bürobedarf','Morgenrot Werkstätten','Hafenblick Handel'][i-1],item:'lamp',qty,price,due:s.t+1440*i,quality,site,status:'offer',delivered:0,paid:0});
+ api.log('order','Erste Fertigungsanfragen für Arbeitsleuchten eingegangen (Mehrwertdienste).',s.orders.slice(-3).map(o=>o.id));
+}
 function init(s){
  s.loanBalance??=0;s.overdraft??=Math.max(0,-s.money);
- if(!s.orders.length) for(const [i,qty,price,quality] of [[1,8,110,70],[2,20,117,75],[3,35,125,82]])s.orders.push({id:`order-${s.seq++}`,kind:'manufacturing',customer:['Lichtbogen Bürobedarf','Morgenrot Werkstätten','Hafenblick Handel'][i-1],item:'lamp',qty,price,due:s.t+1440*i,quality,site:'site-1',status:'offer',delivered:0,paid:0});
+ // Neue Spiele sind Logistikunternehmen (A01 W1c, Befund B5): keine Leuchten-Startaufträge bei Gründung. Die drei
+ // Fertigungsanfragen kommen erst mit der ersten Fertigungsanlage (step → startOffers). init läuft nur bei Neugründung.
  if(!s.orders.some(o=>o.kind==='logistics'))s.orders.push({id:`order-${s.seq++}`,kind:'logistics',customer:'Westbogen Versand',item:'lamp',qty:12,price:18,due:s.t+1800,quality:70,site:'site-1',status:'offer',delivered:0,paid:0});
 }
 function handle(s,c,api){
@@ -1662,8 +1672,11 @@ function step(s,api){
   else if(s.ledger.some(x=>x.key===`payment:${sh.id}`))sh.paid=true;
  }
  for(const o of s.orders){if(o.status==='active'&&s.t>o.due&&!o.late){o.late=true;s.reputation=Math.max(0,s.reputation-4);api.log('warning',`Lieferfrist überschritten: ${o.customer}.`,[o.id]);}}
- // New fictional tenders keep a completed company playable.
- if(s.t%720===0&&s.orders.filter(o=>o.status==='offer').length<5){const n=api.id('order'),products=Object.keys(ITEMS).filter(k=>ITEMS[k].sellable||k==='lamp'),item=products[Math.floor(api.random()*products.length)];s.orders.push({id:n,kind:api.random()<.25?'logistics':'manufacturing',customer:`Werkverbund ${s.seq}`,item,qty:12+Math.floor(api.random()*30),price:Math.round(ITEMS[item].price*(1.12+api.random()*.15)),due:s.t+2160,quality:75,site:s.selectedSite,status:'offer',delivered:0,paid:0});const offer=s.orders.at(-1);if(offer.kind==='logistics')offer.price=Math.round(12+api.random()*12);}
+ if(hasManufacturing(s)&&!s.orders.some(o=>o.kind==='manufacturing'))startOffers(s,api);
+ // New fictional tenders keep a completed company playable. Ohne Fertigungsanlage nur Fremdlogistik (A01 W1c).
+ // Zufallszüge bleiben gleich: gezogene Fremdlogistik zieht wie bisher ihren Preis nach, umgewandelte Angebote
+ // nutzen den schon gezogenen Preiszufall (gleiche Verteilung 12–24 €), damit Vertrags- und Störungszufall gleich bleiben.
+ if(s.t%720===0&&s.orders.filter(o=>o.status==='offer').length<5){const n=api.id('order'),products=Object.keys(ITEMS).filter(k=>ITEMS[k].sellable||k==='lamp'),item=products[Math.floor(api.random()*products.length)],drawn=api.random()<.25,qty=12+Math.floor(api.random()*30),r=api.random(),kind=drawn||!hasManufacturing(s)?'logistics':'manufacturing';s.orders.push({id:n,kind,customer:`Werkverbund ${s.seq}`,item,qty,price:Math.round(ITEMS[item].price*(1.12+r*.15)),due:s.t+2160,quality:75,site:s.selectedSite,status:'offer',delivered:0,paid:0});const offer=s.orders.at(-1);if(drawn)offer.price=Math.round(12+api.random()*12);else if(kind==='logistics')offer.price=Math.round(12+r*12);}
 }
 function validate(s){
  const bad=m=>{throw new Error('Spielstand ungültig: '+m);};
@@ -1674,7 +1687,7 @@ function validate(s){
  }
 }
 
-return Object.freeze(Object.defineProperties({}, {"book":{enumerable:true,get:()=>book},"init":{enumerable:true,get:()=>init},"handle":{enumerable:true,get:()=>handle},"step":{enumerable:true,get:()=>step},"validate":{enumerable:true,get:()=>validate}}));
+return Object.freeze(Object.defineProperties({}, {"book":{enumerable:true,get:()=>book},"hasManufacturing":{enumerable:true,get:()=>hasManufacturing},"init":{enumerable:true,get:()=>init},"handle":{enumerable:true,get:()=>handle},"step":{enumerable:true,get:()=>step},"validate":{enumerable:true,get:()=>validate}}));
 })();
 // transport.js
 __modules[12]=(()=>{
@@ -2509,7 +2522,9 @@ const {onShift, workRate}=__modules[4];
 
 
 const ITEM = 'parcel';
-const HAND_RATE = 2;
+// 3 Pakete/min Grundleistung vor workRate (A01 W1c, vorher 2): eine Lagerkraft sortiert eine Startanlieferung
+// (100–130 Pakete) in 35–45 statt 50–65 Minuten; der Sortierplatz (4/min) bleibt schneller und damit ein Ausbau.
+const HAND_RATE = 3;
 const HAND_STATES = new Set(['idle', 'working', 'staff', 'storage', 'off']);
 const handKey = site => `${site}:handsort`;
 const sorterKey = b => `${b.id}:sort`;
@@ -2537,6 +2552,25 @@ function unloadNeed(s, site) {
     if ((a.phase !== 'docking' && a.phase !== 'unloading') || a.unloaded >= a.parcels) continue;
     const key = `${a.id}:warehouse`;
     if (!s.workers.some(w => w.task === key) && s.buildings.some(b => b.id === a.dock && b.enabled && b.condition > 0)) n++;
+  }
+  return n;
+}
+// Beladen eigener Fahrzeuge hat denselben Vorrang (A01 W1c, Befund B1): Lieferung (transport.js, status loading),
+// Sammeltour (tours.js, loading bzw. returnUnloading) und Standorttransfer (loading am Start, unloading am Ziel), die
+// Rampe und Fahrpersonal schon gebunden haben, aber keine Lagerkraft `${id}:warehouse`. transport/tours laufen vor
+// sorting.step und binden die freigegebene Person in der nächsten Minute. So wartet kein Fahrzeug dauerhaft aufs Sortieren.
+let loadPriority = true; // nur für Gegenprobe-Tests abschaltbar
+function setLoadPriority(on) { loadPriority = !!on; }
+function loadNeed(s, site) {
+  if (!loadPriority) return 0;
+  let n = 0;
+  const waits = (id, at) => !s.workers.some(w => w.task === `${id}:warehouse`) && s.workers.some(w => w.task === `${id}:driver`)
+    && s.buildings.some(b => b.task === id && b.type === 'dock' && b.site === at && b.enabled && b.condition > 0);
+  for (const sh of s.shipments || []) if (sh.status === 'loading' && sh.site === site && waits(sh.id, site)) n++;
+  for (const t of s.tours || []) if ((t.status === 'loading' || t.status === 'returnUnloading') && t.site === site && waits(t.id, site)) n++;
+  for (const tr of s.transfers || []) {
+    const at = tr.status === 'loading' ? tr.site : tr.status === 'unloading' ? tr.toSite : null;
+    if (at === site && waits(tr.id, site)) n++;
   }
   return n;
 }
@@ -2587,8 +2621,8 @@ function step(s, api) {
       st.today += moved; st.total += moved;
       return moved;
     };
-    // Personalvergabe mit Vorrang fürs Entladen (s. unloadNeed).
-    const need = unloadNeed(s, id), yielded = new Set();
+    // Personalvergabe mit Vorrang fürs Entladen und Beladen (s. unloadNeed, loadNeed).
+    const need = unloadNeed(s, id) + loadNeed(s, id), yielded = new Set();
     let spare = Infinity;
     if (need) {
       spare = freeWarehouse(s, id) - need;
@@ -2653,7 +2687,7 @@ function validate(s) {
   for (const [id, v] of Object.entries(x.sites)) if (!sites.has(id) || !v || !HAND_STATES.has(v.hand) || !finite(v.today, 0, Infinity) || !finite(v.total, v.today - 1e-6, Infinity)) fail('Standortwerte');
 }
 
-return Object.freeze(Object.defineProperties({}, {"ITEM":{enumerable:true,get:()=>ITEM},"HAND_RATE":{enumerable:true,get:()=>HAND_RATE},"handKey":{enumerable:true,get:()=>handKey},"sorterKey":{enumerable:true,get:()=>sorterKey},"handle":{enumerable:true,get:()=>handle},"step":{enumerable:true,get:()=>step},"summary":{enumerable:true,get:()=>summary},"validate":{enumerable:true,get:()=>validate}}));
+return Object.freeze(Object.defineProperties({}, {"ITEM":{enumerable:true,get:()=>ITEM},"HAND_RATE":{enumerable:true,get:()=>HAND_RATE},"handKey":{enumerable:true,get:()=>handKey},"sorterKey":{enumerable:true,get:()=>sorterKey},"handle":{enumerable:true,get:()=>handle},"setLoadPriority":{enumerable:true,get:()=>setLoadPriority},"step":{enumerable:true,get:()=>step},"summary":{enumerable:true,get:()=>summary},"validate":{enumerable:true,get:()=>validate}}));
 })();
 // world.js
 __modules[21]=(()=>{
@@ -2792,7 +2826,7 @@ function validateState(s){
 class Simulation{
  constructor({mode='guided',seed=123}={}){
  if(!['guided','economy','sandbox'].includes(mode))throw new Error('Unbekannter Spielmodus.');
- this.state={schema:1,mode,seed:Number(seed)>>>0,t:480,seq:2,money:mode==='sandbox'?500000:85000,reputation:50,selectedSite:'site-1',sites:[{id:'site-1',name:'Werk Morgenfeld',x:0,y:0,width:20,height:16,energy:30}],buildings:[],workers:[],batches:[],reservations:[],jobs:[],purchases:[],orders:[],vehicles:[],shipments:[],ledger:[],events:[],research:[],rules:[],returns:[],stats:{produced:0,delivered:0,revenue:0,costs:0},settings:{incidents:true},milestones:[]};
+ this.state={schema:1,mode,seed:Number(seed)>>>0,t:480,seq:2,money:mode==='sandbox'?500000:85000,reputation:50,selectedSite:'site-1',sites:[{id:'site-1',name:'Depot Morgenfeld',x:0,y:0,width:20,height:16,energy:30}],buildings:[],workers:[],batches:[],reservations:[],jobs:[],purchases:[],orders:[],vehicles:[],shipments:[],ledger:[],events:[],research:[],rules:[],returns:[],stats:{produced:0,delivered:0,revenue:0,costs:0},settings:{incidents:true},milestones:[]};
  this.makeAPI();for(const mod of MODULES)mod.init?.(this.state,this.api);this.api.log('system','Unternehmen gegründet. Halle bereit.');
  }
  makeAPI(){const s=this.state;const api={command:c=>this.command(c),id:prefix=>`${prefix}-${s.seq++}`,random:()=>{s.seed=(Math.imul(s.seed,1664525)+1013904223)>>>0;return s.seed/4294967296;},log:(kind,text,refs=[])=>{s.events.push({id:api.id('event'),t:s.t,kind,text,refs});if(s.events.length>3000)s.events.splice(0,s.events.length-3000);},book:(...args)=>economy.book(s,...args),distance:b=>reachable(s,b.site).distances?.[b.id]??0,reachable:site=>reachable(s,site)};
@@ -2878,7 +2912,7 @@ class Scene {
   destroy(){this.dead=true;cancelAnimationFrame(this.frame);this.observer.disconnect();for(const [t,f,o]of this.listeners)this.canvas.removeEventListener(t,f,o);}
   resize(){this.dirty=true;const r=this.canvas.getBoundingClientRect();this.width=Math.max(1,r.width);this.height=Math.max(1,r.height);const dpr=Math.min(2,window.devicePixelRatio||1);this.canvas.width=Math.round(this.width*dpr);this.canvas.height=Math.round(this.height*dpr);this.ctx.setTransform(dpr,0,0,dpr,0,0);}
   local(e){const r=this.canvas.getBoundingClientRect();return {x:e.clientX-r.left,y:e.clientY-r.top};}
-  site(){return this.state?.sites?.find(s=>s.id===this.state.selectedSite)||this.state?.sites?.[0]||{id:'site-1',name:'Werk Morgenfeld',width:20,height:16};}
+  site(){return this.state?.sites?.find(s=>s.id===this.state.selectedSite)||this.state?.sites?.[0]||{id:'site-1',name:'Depot Morgenfeld',width:20,height:16};}
   unit(){const s=this.site(),span=s.width+s.height;return Math.min(Math.max(160,this.width-100)/(span+5),this.height/(span*.5+12),39)*this.scale;}
   orient(x,y){const s=this.site();let a=x-s.width/2,b=y-s.height/2;for(let i=0;i<this.angle;i++){const t=a;a=-b;b=t;}return {x:a,y:b};}
   project(x,y,z=0){const p=this.orient(x,y),u=this.unit();if(this.view==='flat')return{x:this.width/2+35+this.pan.x+p.x*u*1.38,y:this.height*.49+this.pan.y+p.y*u*1.38};return{x:this.width/2+35+this.pan.x+(p.x-p.y)*u,y:this.height*.49+this.pan.y+(p.x+p.y)*u*.5-z*u};}
@@ -2973,7 +3007,7 @@ const OUT = ['transit', 'collecting', 'linehaul', 'outbound'], IN = ['returning'
 
 function cellToWorld(x, y) { return { x: x + .5, z: y + .5 }; }
 function worldToCell(x, z) { return { x: Math.floor(x), y: Math.floor(z) }; }
-function defaultSite(state) { return state?.sites?.find(s => s.id === state.selectedSite) || state?.sites?.[0] || { id: 'site-1', name: 'Werk Morgenfeld', width: 20, height: 16 }; }
+function defaultSite(state) { return state?.sites?.find(s => s.id === state.selectedSite) || state?.sites?.[0] || { id: 'site-1', name: 'Depot Morgenfeld', width: 20, height: 16 }; }
 /** Achsparalleler Quader einer Anlage in Weltkoordinaten (Rotation über footprint()). */
 function buildingBox(b) { const f = footprint(b) || { w: 2, h: 2 }; return { x0: b.x, z0: b.y, x1: b.x + f.w, z1: b.y + f.h, y0: 0, y1: HEIGHT[b.type] || 1.2, w: f.w, h: f.h }; }
 /** Statusfarbe wie scene.js: aktiv grün, blockiert gelb, sonst grau. */
