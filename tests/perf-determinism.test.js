@@ -20,27 +20,29 @@ const SCENARIOS={
  gross:()=>{const sc=P.large(4242,{warmup:300,history:3000});return [hash(sc.sim.serialize()),...trace(sc,300,100)];},
  prognose:()=>{const sc=P.services();P.run(sc,120);const before=sc.sim.serialize();const f=sc.sim.forecast(240);assert.equal(sc.sim.serialize(),before);return [hash(JSON.stringify(f))];},
 };
+// Welle 1a (A08): Hashes neu erzeugt, weil contracts.js ab Spielbeginn ein Vertragsangebot anlegt und periodisch
+// neue Angebote über api.random/api.id erzeugt (Seed und ID-Zähler verschieben sich). Ursache geklärt; Node v22.22.0.
 const EXPECTED={
  klein:[
-  'a88e598afb2a11a5328ed4f9f57f05f11137de3d7abb5871a0564b851b10aa37',
-  '35e3e904db9a44841c6eb187383e9bc866bba6f29e6829c068f9de96a4f97137',
-  'b88c6e358ae3123dc083408ebbb48e7f3a82ede189f7e87a29441918d03d2411',
-  'a9aa2302779118c7168b0496b3d8b258519dcb2a309e2be35e5802fb10ef2147',
+  'ca72b0342d8a71c481f935a2ec626afb5ff62a9058be48fdc9c9e716de9956c1',
+  'ee9bac774c372fc22abf0fbf1af5d5c5fab5b89aaa8e4a9bed094480d4623f36',
+  'ffb02e12f4a86f2716bc2f76f81e023cc9ee68d069ec093f9728b4310895591e',
+  '4fc8f96cd8dbe80597806a7df395fc99d6e7e60a9c2281e290e28bfba6351c38',
  ],
  dienste:[
-  'f89da88922e33ca1731723c2e93cca4d6fd4bfb96b5cef3cbf5d41fdf9e6bb6a',
-  'e1ecd3c71a0e4787b70d6cddc317564502b342fa71f85097debc784ef902eda5',
-  'ec197c183fbb6e618b501c011b905b92d2d664830a930a8537aafe6e9c582a97',
-  'da48ad68fb978466a49830f2b3e6fd178ae63e97acce73dd09eade8f8d884d7a',
+  'f2ba8f97e62b42329b7347cb9915b066392609e45b06be69abd5faaf2e1f98bc',
+  '5f1e3829fdaf7558245756f572af1efec9ea0ccad93f13400986f5475107eb52',
+  '6152afd1d382dcf1782b4882dce4a4468c5bbfd4684f1e2911e2e60c8113ef2a',
+  'c984ca060a77359c38385d4101f90cae1aeffdab503ae942417e1595d06ee298',
  ],
  gross:[
-  'd4e3319439348c779ee64404eff0b4c5f3055b10c64b8d7af7a783e97089cfa3',
-  'b73a00da53b8d21859f0e9c46f13d832b813463e91c8fc5443afa7a281118a23',
-  'ae5ae23a0b972472f8e9cdf87c9071badede5552378008c11638308905fbb45d',
-  'e140f5b704c1c95a3e427111479a4712e26a0c0da4d05b94c0ff795b77ca5dac',
+  '7ac8fb93db940e15019a43ae9791953aac5f01c468aa0e538e9206903bcb5973',
+  'e7b3bea4f65ed2452eb32724b4dbeda9f585b3d1d88afff02daedd2cdf964f80',
+  '527c00a77c2e7db14b284736051eb3b0a72dd82ddfb5e4ec4a25cef6c8eb9119',
+  'cd082af9d90ecf9a2b6b199e456562124bda28ff2173db51f0b7b82c235d7560',
  ],
  prognose:[
-  'a412fc720b7d0a4a33103d707ae954455d0793ea5bcebb8d0a29ac8b4989f183',
+  'a96e5f28d7de2b7dc432fe73cb3ad7a552c293fa0de0b4112d02b46a57494cb6',
  ],
 };
 
