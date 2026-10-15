@@ -6,14 +6,14 @@ Stand: 15.10.2026. Grundlage: abgenommenes `docs/KONZEPT-LOGISTIKHUB.md`.
 
 Der Nutzer hat am 15.10.2026 das Konzept abgenommen. Die Vorschläge aus Abschnitt 8 gelten:
 
-| Punkt | Entscheidung |
+| Punkt | Entscheidung (Nutzer, 15.10.2026) |
 |---|---|
-| Fertigung | Bleibt; wird später zum Geschäftsfeld Mehrwertdienste |
+| Fertigung | Bleibt; wird Geschäftsfeld „Mehrwertdienste/Kontraktlogistik“ |
 | three.js | Lokal: `dist/vendor/three.module.min.js` (r170, MIT, Lizenz in `dist/vendor/THREE-LICENSE.txt`). Kein CDN. |
-| NuriTrack-Schnappschuss | Aus dem Repository entfernt |
-| Version | 0.9 = Fundament + erster Hub-Kreislauf |
-| Referenzhardware | Noch nicht benannt. Arbeitsannahme: Notebook mit integrierter GPU, 1080p, aktuelles Chromium |
-| Name | „Industrie & Logistik“ bleibt vorerst |
+| NuriTrack-Schnappschuss | Entfernen nach Abschluss der Analyse, sofern nicht mehr benötigt. Analyse abgeschlossen (KONZEPT 2.1–2.7), Datei entfernt; bei Bedarf aus Git-Historie (Commit f986e5d) wiederherstellbar, nicht veröffentlichen. |
+| Version | 0.9 = Hub-Umbau; Ergebnisrechnung und Abschreibung danach |
+| Referenzhardware 60 FPS | Notebook, Intel Core i5-1335U (13. Gen), 16 GB RAM, integrierte Grafik (Intel Iris Xe). Browser nicht genannt → Annahme aktuelles Chrome/Edge. |
+| Name | „Industrie & Logistik“ vorerst; Umbenennung später |
 
 ## Unveränderliche Annahmen
 
