@@ -68,13 +68,14 @@ try{
  await page.click('[data-speed="0"]');
  // Spiel verlassen (Verlassen speichert „guided“ samt Einstellungen), dann auf neutraler Seite desselben Ursprungs einspielen.
  await page.goto(url+'dist/styles.css');
- const stored=await page.evaluate(({k,raw})=>{try{localStorage.setItem(k+'-sandbox',raw);localStorage.removeItem(k+'-sandbox-backup');localStorage.setItem(k+'-prefs',JSON.stringify({mode:'sandbox'}));return true;}catch(e){return String(e);}},{k:STORE,raw:big});
- if(stored!==true)throw Error('Großer Stand passt nicht in localStorage: '+stored);
+ // W1b: Spielstände liegen in IndexedDB (dist/storage.js: Datenbank = Präfix, Objektspeicher saves, Datensatz {value,at}).
+ const stored=await page.evaluate(({k,raw})=>new Promise(resolve=>{try{localStorage.setItem(k+'-prefs',JSON.stringify({mode:'sandbox'}));const r=indexedDB.open(k);r.onerror=()=>resolve(String(r.error));r.onsuccess=()=>{const db=r.result,tx=db.transaction('saves','readwrite'),os=tx.objectStore('saves');os.put({value:raw,at:Date.now()},k+'-sandbox');os.delete(k+'-sandbox-backup');tx.oncomplete=()=>{db.close();resolve(true);};tx.onerror=tx.onabort=()=>{db.close();resolve(String(tx.error));};};}catch(e){resolve(String(e));}}),{k:STORE,raw:big});
+ if(stored!==true)throw Error('Großer Stand nicht in IndexedDB geschrieben: '+stored);
  await page.goto(url+'index.html'+query);
  await page.waitForFunction(()=>/Tag [2-9]/.test(document.querySelector('#clock').textContent),null,{timeout:30000}).catch(async e=>{throw Error(e.message+' · Uhr: '+await page.locator('#clock').textContent()+' · Toast: '+await page.locator('#toast').textContent());});
  await page.click('[data-speed="12"]');await page.waitForTimeout(1000);
  result.scenarios.gross={stateMB:+(big.length/1e6).toFixed(2),...await record(page,Math.max(seconds,25)*1000)};
- result.scenarios.gross.backupWritten=await page.evaluate(k=>!!localStorage.getItem(k+'-sandbox-backup'),STORE);
+ result.scenarios.gross.backupWritten=await page.evaluate(k=>new Promise(resolve=>{const r=indexedDB.open(k);r.onsuccess=()=>{const db=r.result,g=db.transaction('saves').objectStore('saves').get(k+'-sandbox-backup');g.onsuccess=()=>{db.close();resolve(!!g.result);};g.onerror=()=>{db.close();resolve(false);};};r.onerror=()=>resolve(false);}),STORE);
  result.errors=errors;
 }catch(e){result.error=String(e.stack||e);result.errors=errors;}
 finally{await browser.close();server.kill();cleanup();}

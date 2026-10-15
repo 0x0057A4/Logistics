@@ -17,6 +17,14 @@ import * as sorting from './sorting.js';
 import { BUILDINGS, ITEMS, RECIPES, VEHICLES, ROLES } from './catalog.js';
 import { reachable, footprint } from './world.js';
 const MODULES=[inventory,workforce,economy,transport,production,management,service,network,tours,special,multimodal,rental,customerService,contracts,yard,sorting];
+/** Ladegrenzen (A12, W1b). Text: 30 Mio. Zeichen. Listen: 100.000, `batches` 1.000.000 – Chargen wachsen im großen
+ * Szenario um ≈ 650–1.770 je Spieltag und erreichten 100.000 nach ≈ 55 Tagen (PERF-SIM-0.9). Bei ≈ 210 Zeichen je Charge
+ * greift für batches praktisch zuerst die Textgrenze (≈ 140.000 Chargen); die App warnt ab 60 % und speichert nichts,
+ * was nicht mehr ladbar wäre. Dauerhafte Abhilfe: Kompaktierung alter Nullchargen (A05/A03). */
+export const SAVE_LIMITS=Object.freeze({chars:30000000,list:100000,lists:Object.freeze({batches:1000000})});
+const listLimit=k=>SAVE_LIMITS.lists[k]??SAVE_LIMITS.list;
+/** Höchste Auslastung einer Ladegrenze (0…1+) für Größenwarnung und Speicherverweigerung. */
+export function saveHeadroom(state,chars=0){let ratio=chars/SAVE_LIMITS.chars,limit='chars';for(const k of ARRAYS){const r=(state?.[k]?.length||0)/listLimit(k);if(r>ratio){ratio=r;limit=k;}}return {ratio,limit};}
 const ARRAYS=['sites','buildings','workers','batches','reservations','jobs','purchases','orders','vehicles','shipments','ledger','events','research','rules','returns','milestones','transfers','tours','freights','tickets','contracts','yard'];
 const clone=x=>JSON.parse(JSON.stringify(x));
 const fail=m=>{throw new Error('Spielstand ungültig: '+m);};
@@ -46,7 +54,7 @@ export function validateState(s){
  if(!s||typeof s!=='object'||Array.isArray(s))fail('Zustand fehlt.');
  if(s.schema!==1)fail('Speicherformat nicht unterstützt.');
  if(!['guided','economy','sandbox'].includes(s.mode))fail('Spielmodus fehlt.');
- for(const k of ARRAYS)if(!Array.isArray(s[k])||s[k].length>100000)fail(k+' fehlt oder zu groß.');
+ for(const k of ARRAYS)if(!Array.isArray(s[k])||s[k].length>listLimit(k))fail(k+' fehlt oder zu groß.');
  if(!Number.isSafeInteger(s.t)||s.t<480||!Number.isSafeInteger(s.seq)||s.seq<1||!Number.isSafeInteger(s.seed)||s.seed<0||s.seed>4294967295||!finite(s.money)||!finite(s.reputation,0,100))fail('Grundwerte beschädigt.');
  if(!s.settings||typeof s.settings.incidents!=='boolean'||!s.stats||!['produced','delivered','revenue','costs'].every(k=>finite(s.stats[k],0)))fail('Einstellungen oder Statistik beschädigt.');
  // Reject non-finite values and prototype-shaped keys anywhere, including extensions.
@@ -113,8 +121,10 @@ export class Simulation{
  }
  step(minutes=1){if(!Number.isInteger(minutes)||minutes<0||minutes>100000)throw new Error('Spielschritte müssen ganze Minuten sein.');for(let n=0;n<minutes;n++){this.state.t++;for(const mod of MODULES)mod.step?.(this.state,this.api);}return this.state;}
  serialize(){return JSON.stringify(this.state);}
- static fromJSON(text){if(typeof text!=='string'||text.length>30000000)throw new Error('Spielstand fehlt oder zu groß.');let state;try{state=JSON.parse(text);}catch{throw new Error('Spielstand enthält ungültiges JSON.');}migrate(state);validateState(state);const sim=Object.create(Simulation.prototype);sim.state=state;sim.makeAPI();lastValidText=text;return sim;}
+ static fromJSON(text){if(typeof text!=='string'||text.length>SAVE_LIMITS.chars)throw new Error('Spielstand fehlt oder zu groß.');let state;try{state=JSON.parse(text);}catch{throw new Error('Spielstand enthält ungültiges JSON.');}migrate(state);validateState(state);const sim=Object.create(Simulation.prototype);sim.state=state;sim.makeAPI();lastValidText=text;return sim;}
  /** true, wenn genau dieser Text zuletzt fehlerfrei durch fromJSON geladen wurde. Spart der Speicherroutine eine erneute Vollvalidierung. */
+ static get LIMITS(){return SAVE_LIMITS;}
+ static headroom(state,chars){return saveHeadroom(state,chars);}
  static wasValidated(text){return typeof text==='string'&&text===lastValidText;}
  forecast(minutes,commands=[]){const sim=Simulation.fromJSON(this.serialize());for(const c of commands){const r=sim.command(clone(c));if(!r.ok)throw new Error(r.message);}sim.step(minutes);return sim.state;}
 }
