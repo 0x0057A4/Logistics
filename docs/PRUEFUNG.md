@@ -114,3 +114,6 @@ Integrierter Stand erneut mit `node --test tests/*.test.js` geprüft: **137 best
 ## Version 0.7 – Abschlussprüfung 14.10.2026
 
 161 Tests bestanden, 0 fehlgeschlagen. Unabhängige QS der Miet-Rückladetouren, Tagesgrenzen, Spielstandreferenzen und Speicher-Wiederaufnahme: siehe QS-0.7.md. JSON enthält keine Laufzeitsperre. Browser-/Touch-/Layoutprüfung weiterhin offen.
+
+## 0.7.1 – HTML-Speicherung
+15.10.2026: 171 Tests bestanden, null fehlgeschlagen. Acht unabhängige HTML-Prüfungen inklusive tatsächlicher Ausführung des vollständigen Bundles mit echter Scene und DOM-/Canvas-Stubs. Netzwerk und lokaler Speicher dabei verboten. Browserprüfung bleibt offen. Details: QS-HTML-SPEICHERN.md.

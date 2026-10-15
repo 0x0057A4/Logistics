@@ -1,4 +1,4 @@
-# Übergabestand 0.7 – 14.10.2026
+# Übergabestand 0.7.1 – 15.10.2026
 
 AGENTS.md, Spielkonzept, UMSETZUNGSPLAN.md und FUNKTIONSSTATUS.md bleiben verbindlich. Deutsch, knapp (Caveman). Parallelrollen und unabhängige QS gemäß AGENTS.md.
 
@@ -23,3 +23,7 @@ Ziel GitHub: 0x0057A4/Logistics. Bestehende Site: https://industrie-logistik.cal
 - 1.0: verbleibende Konzeptfunktionen und Gesamtabnahme; kein zugesicherter Vollumfang allein durch Versionsnummer.
 
 Nutzer autorisiert sämtliche zugehörigen Projektunterlagen/Ergebnisse auf GitHub, auch Dateiersetzung. Keine Zugangsschlüssel oder fachfremden Privatdaten aufnehmen. Vollkonzept weiterhin nicht vollständig umgesetzt.
+
+## HTML-Speicherung 0.7.1
+
+Nutzer hat vollständige HTML-Datei samt eingebettetem Spielstand ausdrücklich bestätigt. Funktion in Einstellungen → Spiel als HTML speichern. Offline-Datei öffnet denselben validierten Stand pausiert; Start mit 1×. Weitere Änderungen erneut herunterladen. Kein automatisches Überschreiben der Originaldatei. CSS/JS vollständig eingebettet, kein Server erforderlich. Website und GitHub bleiben mit root index.html. scripts/package.py erzeugt zusätzlich dist/portable.html. docs/QS-HTML-SPEICHERN.md dokumentiert unabhängige Prüfung; Browserprüfung bleibt offen.

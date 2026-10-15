@@ -1,7 +1,9 @@
 """Erzeugt das herunterladbare Quellpaket ohne Git-, Hosting- oder Zugangsdaten."""
 from pathlib import Path
+import runpy
 from zipfile import ZipFile, ZIP_DEFLATED
 root = Path(__file__).resolve().parent.parent
+runpy.run_path(str(root / 'scripts/build-portable.py'), run_name='__main__')
 (root / 'index.html').write_text((root / 'dist/index.html').read_text().replace('<head>', '<head><base href="./dist/">', 1))
 (root / '.nojekyll').write_text('')
 files = [root / name for name in ['index.html','.nojekyll','AGENTS.md','CONTRACT.md','CHANGELOG.md','README.md','package.json']]

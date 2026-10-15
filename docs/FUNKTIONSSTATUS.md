@@ -31,3 +31,6 @@ Der Spielstand umfasst Funktionskerne aus allen vier Phasen. Die vollständige K
 - Automatische Sicherung und Backup verwenden Browserlokalspeicher. Kein geräteübergreifender Cloud-Spielstand.
 - Spieler kann durch falsche Schichten, gesperrte Fracht oder fehlende Ressourcen in einen Wartezustand geraten. Gründe erscheinen in Fachfenstern. Kein automatischer Sanierungsberater.
 - Schreibschutz über Web Locks ab Version 0.5: Ein schreibender Tab je Modus. Bereits geöffnete ältere Fassungen schließen; diese beachten Sperren nicht. Ohne Web Locks oder lokalen Speicher bleibt regulärer Betrieb schreibgeschützt; ausdrücklich bestätigter temporärer Betrieb ermöglicht Spielen mit JSON-Export ohne lokale Speicherung. Browserabnahme bleibt offen.
+
+## Ergänzung 0.7.1
+Spiel und aktueller Spielstand als eigenständige HTML exportierbar. Offline-Öffnen, pausierter Start, erneuter Export und eingebettete Darstellungseinstellungen. Kein automatisches Überschreiben von Dateien; Website-Browserspeicherung bleibt zusätzlich erhalten.

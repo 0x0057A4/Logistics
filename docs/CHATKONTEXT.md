@@ -41,3 +41,6 @@ Ergänzung Nutzer 14.10.2026: `index.html` für GitHub Pages direkt im Hauptordn
 
 ## Abschlussauftrag 0.7
 Nutzer fordert Abschluss 0.7 und Behebung des als JSON-Schreibschutz bezeichneten Speicherfehlers. GitHub-Upload aller Projektunterlagen weiterhin autorisiert, index.html im Hauptordner. Mietflotte und Speicherzugriffsbehandlung integriert; Originalpatches archiviert. Preview 0.8–1.0 sind Planungsziele laut FORTSETZUNG.md.
+
+## Folgeauftrag HTML-Speicherung
+Nutzer möchte Speicherung in HTML. Bestätigte Variante: vollständiges Spiel samt aktuellem Stand als herunterladbare HTML; Öffnen setzt Stand fort. Am 15.10.2026 fortgesetzt nach Unterbrechung. Dateimodus verändert keine gespeicherten Browserunternehmen. Weiteren Fortschritt durch erneuten Download sichern.

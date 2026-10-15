@@ -23,8 +23,8 @@
     },
     {
       "path": "CHANGELOG.md",
-      "bytes": 2579,
-      "sha256": "53398e8ec2eaa13c3f17b842c182fa57dfccd8bb187b40fe1b0fdeb0c8d6b0b5"
+      "bytes": 2980,
+      "sha256": "c9b72925873f3e0a399749a8e0b23cfe2f0435657fa7f2e4894fb84d3972ace6"
     },
     {
       "path": "CONTRACT.md",
@@ -33,8 +33,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 10673,
-      "sha256": "d6a66d2613f457dc3c186e4ec3eb78e6640289899b0e8a480e26ddcfbb396824"
+      "bytes": 11209,
+      "sha256": "49598a7debfa1dcf2d5db7a3e96a70959deac0d0b4f8309650e9d310afee5a25"
     },
     {
       "path": "dist/accounting.js",
@@ -43,8 +43,8 @@
     },
     {
       "path": "dist/app.js",
-      "bytes": 68143,
-      "sha256": "86c42d8459ab1cafaab6ba69561f1d328a2d4d67055923a4789022edb5cef3ba"
+      "bytes": 71050,
+      "sha256": "907de41da8a5a25cb790c24177cf7438a7d8fe586d7524879293a260e6e8380b"
     },
     {
       "path": "dist/catalog.js",
@@ -63,8 +63,8 @@
     },
     {
       "path": "dist/index.html",
-      "bytes": 7813,
-      "sha256": "85294167b928171e742a7cf10592f79b9db59e33e24de6a3231b3353cbb36c4f"
+      "bytes": 7835,
+      "sha256": "e62680738f08bdf0bdf5214135f2249203372f46a6b414d83dadb06cdb59eb8d"
     },
     {
       "path": "dist/inventory.js",
@@ -85,6 +85,16 @@
       "path": "dist/network.js",
       "bytes": 1712,
       "sha256": "2a17b2d849225c5dfa7300ddf1a4e87728d4f0e3e9e19f80e5019ee8e4444c3e"
+    },
+    {
+      "path": "dist/portable-save.js",
+      "bytes": 835,
+      "sha256": "62c9d1450b7965e4eb5db5446eaeee22643ef7d499c1f5ee63968b493afe1c2f"
+    },
+    {
+      "path": "dist/portable.html",
+      "bytes": 255442,
+      "sha256": "0140d3425e8c5ba22a79caa7ddd8677be0ab30f85d9518474c7e7b6a161b8c3b"
     },
     {
       "path": "dist/production.js",
@@ -148,18 +158,18 @@
     },
     {
       "path": "docs/CHATKONTEXT.md",
-      "bytes": 4287,
-      "sha256": "ae7b26548ca2bf2df6a9fdb1f736a286626dcfa33f01356615f1293bb0d77086"
+      "bytes": 4635,
+      "sha256": "48d7cc4bf8d9744dd7d327a622f30eff19ea720e0a3f7231fe7cd850dfd7a1a8"
     },
     {
       "path": "docs/FORTSETZUNG.md",
-      "bytes": 1976,
-      "sha256": "cb6503359a089f13fa5063bb74ab7fadd2a55ffbe929b857cbf41240d296d587"
+      "bytes": 2582,
+      "sha256": "16db81990634bf1120a4f43e84f366a5633c274aad0cff271b402b9f521a55ff"
     },
     {
       "path": "docs/FUNKTIONSSTATUS.md",
-      "bytes": 5627,
-      "sha256": "9e8af69d349a2886bf1f94db8b52a55030f612c9c2562baffc6f8db0186938e6"
+      "bytes": 5915,
+      "sha256": "d3d9a4e20c8ccc7b8f1b7958a063d105e0a22c628ac7f0df0fffd529e0379b0f"
     },
     {
       "path": "docs/Logistik-Spielkonzept-und-Masterprompt.md",
@@ -168,13 +178,18 @@
     },
     {
       "path": "docs/PRUEFUNG.md",
-      "bytes": 13320,
-      "sha256": "e29215e8bb6d471135474e250ab140f1c1867131aeeb91d647e6eecc9b768691"
+      "bytes": 13650,
+      "sha256": "b233df765bc51f80a4888c4a197ebdc1c82eec01e4c1dcda45e66e946c499ed5"
     },
     {
       "path": "docs/QS-0.7.md",
       "bytes": 3047,
       "sha256": "d81fd21efad24b2ce49eeb0c901effb080fa802adca50b52370d8cb369bf7ee9"
+    },
+    {
+      "path": "docs/QS-HTML-SPEICHERN.md",
+      "bytes": 1755,
+      "sha256": "d17a96ed5c9771cba4241dd23cf37d04ca4d1ba8c2d05fd268f270f9e007619c"
     },
     {
       "path": "docs/QUELLCODE-HISTORIE.txt",
@@ -190,6 +205,11 @@
       "path": "docs/TESTERGEBNIS-0.6.txt",
       "bytes": 11801,
       "sha256": "9f5127255387e5b18d4e819b57c540a76392ed545ee349d05f5c3400c8cac0d8"
+    },
+    {
+      "path": "docs/TESTERGEBNIS-0.7.1.txt",
+      "bytes": 15314,
+      "sha256": "47de0864d6500013ad7d6562308cc0c96675002d31f88d6a871ec8dd3ca04e3d"
     },
     {
       "path": "docs/TESTERGEBNIS-0.7.txt",
@@ -228,8 +248,8 @@
     },
     {
       "path": "index.html",
-      "bytes": 7834,
-      "sha256": "b49b0e2f0de38c3d8d9d7d594352913cbb323a747ba1c4ce15ea0e540c386002"
+      "bytes": 7856,
+      "sha256": "aa925761405362292c800cd999cc75b5fa065493fc3afed055779cb1529a93c4"
     },
     {
       "path": "package.json",
@@ -237,9 +257,14 @@
       "sha256": "43420dae31916d476ab4dcde36442d93651149838eba6352341800660abca626"
     },
     {
+      "path": "scripts/build-portable.py",
+      "bytes": 3644,
+      "sha256": "69f21704adf6bdb9d7fbe588ef035ffa1c3420691addc583a2d9444ca703c315"
+    },
+    {
       "path": "scripts/package.py",
-      "bytes": 882,
-      "sha256": "310450e7a5c78c0893d8bcac5e8ed7fb2ef822601bdd69e55bc9bac982e836e5"
+      "bytes": 972,
+      "sha256": "6a9e201f331358b51b763a5a175f9c7d6866897d893bdae6335c023113a723ec"
     },
     {
       "path": "tests/accounting-own.test.js",
@@ -292,9 +317,19 @@
       "sha256": "49b9fd51baea9ba45ff025601103bd63aa4f01f43325653915612fa8a1cef5e7"
     },
     {
+      "path": "tests/portable-build.test.js",
+      "bytes": 2217,
+      "sha256": "968037437f1141a28e08f1e67ef193ef0c3f4ca656a37440381ce73f67c390e1"
+    },
+    {
       "path": "tests/production-own.test.js",
       "bytes": 6524,
       "sha256": "326393e3f785c25714bc495c9a4954dac681d96540708a0d1d9b53f61c56c583"
+    },
+    {
+      "path": "tests/qa-html-save.test.js",
+      "bytes": 7731,
+      "sha256": "e103b1468593a30c4af1e98d77a20dcd74cfe1127246492909fc4659d2f791aa"
     },
     {
       "path": "tests/qa-release.test.js",
@@ -358,8 +393,8 @@
     },
     {
       "path": "tests/ui-harness.js",
-      "bytes": 3087,
-      "sha256": "6551d1c39a44fcee687c937857338ef290c3e6ac2c6e1e5b2315f0b3055c0f48"
+      "bytes": 3615,
+      "sha256": "84f9785cd7e375604037f750b36d9641e27c9c8b0382cb432b975802ebd241a7"
     },
     {
       "path": "tests/ui-regression.test.js",

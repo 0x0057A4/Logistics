@@ -1,8 +1,8 @@
 # Industrie & Logistik
 
-**Projektübergabe:** [Aktueller Kontext und nächster Schritt](docs/FORTSETZUNG.md). [Projektentscheidungen](docs/CHATKONTEXT.md). Vorbereitete Änderungen liegen in `pending/`.
+**Projektübergabe:** [Aktueller Kontext und nächster Schritt](docs/FORTSETZUNG.md). [Projektentscheidungen](docs/CHATKONTEXT.md). Integrierte Originalpatches liegen in `docs/archiv/integriert-0.7/`.
 
-Version 0.7 · Entwicklungsfassung · 14. Oktober 2026
+Version 0.7.1 · Entwicklungsfassung · 15. Oktober 2026
 
 Eigenständige, deutschsprachige Unternehmenssimulation für PC-Browser. Vom leeren Werk über Arbeitsleuchtenfertigung bis zu mehreren Standorten, Sammeltouren und temperaturgeführter Fremdfracht. Alle Unternehmen, Personen und Wirtschaftswerte sind fiktiv.
 
@@ -106,3 +106,7 @@ Transport: Lieferwagen 180 €, Lkw 520 €, Kühlfahrzeug 680 € je angefangen
 ### Speicher blockiert oder voll
 
 Die Meldung betrifft den Browser-Speicher, nicht eine Sperre in der JSON-Datei. „Speicher erneut prüfen“ versucht normalen Betrieb wiederherzustellen. Alternativ „Temporär spielen“ bewusst bestätigen: keine lokale Sicherung, Fortschritt vor Schließen als JSON exportieren. JSON lässt sich später wieder importieren. Vorhandene lokale Spielstände werden nicht still überschrieben; Mehrfach-Tab-Schutz bleibt aktiv. Browser-Speicherrechte lassen sich durch das Spiel nicht erzwingen.
+
+## Spiel und Spielstand als HTML
+
+Einstellungen → **Spiel als HTML speichern**. Die heruntergeladene HTML enthält Spielcode, Darstellung, aktuellen Spielstand und Darstellungseinstellungen. Datei im Browser öffnen, mit **1×** fortsetzen. Funktioniert ohne Internet und ohne lokalen Browserspeicher. Weitere Änderungen durch erneuten HTML-Download sichern; die ursprüngliche Datei wird nicht automatisch überschrieben. Die Website behält zusätzlich ihre bisherige Browserspeicherung und JSON-Funktion.

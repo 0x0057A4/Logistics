@@ -1,5 +1,9 @@
 # Änderungen
 
+## 0.7.1 – 15.10.2026
+
+Eigenständiger HTML-Download mit Spiel und Spielstand. CSS und Spielmodule vollständig eingebettet. Öffnen setzt eingebetteten Stand pausiert fort; lokaler Browserspeicher wird im Dateimodus nicht verändert. Erneuter HTML-Download sichert weitere Fortschritte. JSON-Daten gegen Script-Injection maskiert. Versionsanzeigen vereinheitlicht. Browserabnahme weiterhin offen.
+
 ## 0.7 – 14.10.2026
 
 Mietfahrzeuge mit laufenden Tageskosten und sicherer Rückgabe integriert. Mietverträge bleiben gespeichert; doppelte Fahrzeugzuordnung beim Import abgewiesen. Rückladungen und Fahrerprognose aus 0.6 enthalten. Speicherfehler werden abgefangen; expliziter temporärer Betrieb, JSON-Export/Import und Speicher-Retry ergänzen den regulären Tab-Schreibschutz. Browserabnahme bleibt offen.
