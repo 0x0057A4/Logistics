@@ -12,8 +12,8 @@ export class SaveGuard {
     this.defaultStorage = options.storage === undefined;
     try { this.storage = options.storage === undefined ? globalThis.localStorage : options.storage; } catch { this.storage = null; }
     this.now = options.now ?? Date.now;
-    this.setInterval = options.setInterval ?? globalThis.setInterval;
-    this.clearInterval = options.clearInterval ?? globalThis.clearInterval;
+    this.setInterval = options.setInterval ?? ((fn, ms) => globalThis.setInterval(fn, ms));
+    this.clearInterval = options.clearInterval ?? (id => globalThis.clearInterval(id));
     this.leaseMs = options.leaseMs ?? 15000;
     this.onLost = options.onLost ?? (() => {});
     this.owner = options.owner ?? globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
