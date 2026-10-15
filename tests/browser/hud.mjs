@@ -107,10 +107,14 @@ for(const [width,height] of [[1920,1080],[1280,800]]){
   await page.click('.rail [data-panel="yard"]');await page.waitForSelector('#panelBody .yard-table');
   check(await page.locator('#panelBody .yard-table tbody tr').count()===1&&await page.locator('#panelBody .dock-row').count()===2,`${label}: Torbuch und Dock-Belegung`);
   await overlapCheck(page,label+' Hof & Docks',true);
+  if(json===unloading)check(/· \d+ Pakete\/min/.test(await page.textContent('#panelBody .yard-table')),`${label}: Torbuch zeigt Entladetempo der gebundenen Kraft`);
   if(json===queued){await page.click('#panelBody [data-action="prioritizeArrival"]');check(await page.locator('#panelBody [data-action="prioritizeArrival"]').count()===0&&/vorgezogen/.test(await page.textContent('#panelBody')),`${label}: Vorziehen über echten Befehl`);
    await page.click('#bellBtn');check(/wartet seit \d+ Min\./.test(await page.textContent('#bellList')),`${label}: Glocke meldet wartenden Lkw`);await page.keyboard.press('Escape');}
   if(shot){fs.mkdirSync(outDir,{recursive:true});await page.screenshot({path:path.join(outDir,shot)});}
   await page.click('.rail [data-panel="contracts"]');check(/Ankunftsplan heute und morgen/.test(await page.textContent('#panelBody')),`${label}: Vertragsfenster mit Ankunftsplan`);await overlapCheck(page,label+' Verträge',true);
+  // Personal W1c: Tätigkeit aus describeAssignment mit Klick auf den Bezug (Lkw → Hof & Docks).
+  if(json===unloading){await page.click('.rail [data-panel="staff"]');check(/Entlädt [A-Z]{3}-/.test(await page.textContent('#panelBody'))&&/Sortierplatz/.test(await page.textContent('#panelBody')),`${label}: Personalfenster zeigt Entladen und Sortierplatz`);
+   await overlapCheck(page,label+' Personal',true);await page.click('#panelBody button.ref-link[data-arrival]');check(await page.textContent('#panelTitle')==='Hof & Docks'&&await page.locator('#panelBody tr.selected').count()===1,`${label}: Klick auf Bezug öffnet Hof & Docks mit Lkw`);}
   check(!errors.length,`${label}: keine Konsolenfehler${errors.length?' – '+errors.join(' | '):''}`);
   await context.close();
  }

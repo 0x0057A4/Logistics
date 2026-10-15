@@ -311,3 +311,8 @@ tr.selected td{background:#eef6e4}
 .yard-table td{vertical-align:top}
 .dock-row strong .chip{margin-left:6px;font-weight:500}
 @media(max-width:1500px){body.panel-open .kpi-opt{display:none}}
+/* Personal W1c (A10): Bezug der Tätigkeit als kompakter Textlink. */
+button.ref-link{border:0;background:none;padding:0 0 0 4px;color:#3f6d34;text-decoration:underline;font:inherit;font-weight:600}
+button.ref-link:hover{background:none;color:var(--ink)}
+.kv b{text-align:right}
+.yard-table small.crew{white-space:nowrap}
