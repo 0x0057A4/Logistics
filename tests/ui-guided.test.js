@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {boot} from './ui-harness.js';
+import {VEHICLES,ITEMS} from '../dist/catalog.js';
 // A02 W1b: Geführter Einstieg Logistik. Reihenfolge der Missionen folgt dem ersten Hub-Kreislauf; jeder Schritt wird
 // über reguläre Befehle erfüllt (kein Eingriff in den Zustand). Fertigung ist nicht Teil des Einstiegs.
 const text=(ui,id)=>ui.nodes.get('#'+id).textContent;
@@ -31,7 +32,8 @@ test('Geführter Einstieg: Dock → Lagerkraft → Vertrag → Entladen → Fahr
  // Erster vollständig sortierter Vertragsauftrag wird mit dem Lieferwagen zugestellt.
  const ready="sim.state.orders.find(o=>o.source==='hub'&&o.status==='active'&&sim.state.batches.filter(b=>b.item==='parcel'&&b.location==='stock'&&b.owner===o.id).reduce((n,b)=>n+b.qty-b.reserved,0)>=o.qty)";
  until(ui,`!!${ready}`);
- const o=ui.run(`${ready}.id`),qty=ui.run(`${ready}.qty`);
+ // Startvertrag ab W1c 200–250 Pakete: ein Gebiet kann mehr Pakete haben, als der Lieferwagen fasst (160 nach Gewicht) → Teilmenge.
+ const o=ui.run(`${ready}.id`),qty=Math.min(ui.run(`${ready}.qty`),Math.floor(VEHICLES.van.weightCapacity/ITEMS.parcel.weight));
  send(ui,{type:'dispatch',orderId:o,vehicleId:ui.run('sim.state.vehicles[0].id'),qty});
  m=mission(ui);assert.equal(m.title,'Zahlung erhalten');assert.equal(m.panel,'finance');
  until(ui,`sim.state.orders.find(x=>x.id==='${o}').paid>0`);

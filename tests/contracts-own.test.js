@@ -12,7 +12,7 @@ const clone=x=>JSON.parse(JSON.stringify(x));
 test('Neues Spiel bietet genau einen kleinen gültigen Vertrag an',()=>{
  const s=new Simulation(),k=s.state.contracts;
  assert.equal(k.length,1);assert.equal(k[0].status,'offer');
- // Spannen aus TERMS (Balancing A02 W1b, docs/BALANCING-0.9-W1.md): Startvertrag 100–130 Pakete, 1 Ankunft am Vormittag.
+ // Spannen aus TERMS (Balancing A02 W1b/W1c, docs/BALANCING-0.9-W1.md): Startvertrag 200–250 Pakete, 1 Ankunft am Vormittag.
  assert.equal(k[0].arrivals.length,1);assert.ok(k[0].arrivals[0].parcels>=TERMS.start.parcels[0]*10&&k[0].arrivals[0].parcels<=TERMS.start.parcels[1]*10);
  assert.ok(TERMS.start.minutes.includes(k[0].arrivals[0].minute));assert.equal(k[0].pricePerParcel,TERMS.start.price);
  assert.ok(k[0].lanes.length>=1&&k[0].lanes.length<=2);
