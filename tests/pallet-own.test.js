@@ -114,7 +114,7 @@ test('Speichern/Laden mitten im Entladen: identischer Fortlauf',()=>{
 
 test('maxLoad: Lieferwagen 0 Paletten, Lkw nach Gewicht; Lieferwagen-Versand abgelehnt',()=>{
  const van={type:'van',capacity:20},truck={type:'truck',capacity:80};
- assert.equal(maxLoad(van,'pallet'),0);assert.equal(maxLoad(truck,'pallet'),Math.floor(320/300));
+ assert.equal(maxLoad(van,'pallet'),0);assert.equal(maxLoad(truck,'pallet'),20 /* A01: Nutzlast 6000 kg */);
  const {sim,s}=setup({drivers:1});const a=arrive(sim,[2],485);runUntil(sim,()=>a.phase==='exit');
  assert.equal(sim.command({type:'buyVehicle',vehicleType:'van'}).ok,true);
  const r=sim.command({type:'dispatch',vehicleId:s.vehicles[0].id,orderId:a.orderIds[0],qty:1});assert.equal(r.ok,false);
