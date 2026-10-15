@@ -14,12 +14,12 @@ const SHIPPERS=['Kranichfeld Versandhaus','Lindenstein Online-Handel','Talbrück
 const LANES=['Nordviertel','Altstadt Süd','Am Kanal','Hügelfeld','Westring','Bachgrund','Ostpark','Lerchenhöhe','Fischerdorf','Industriegebiet Nord'];
 // Depot-Stufe (A02 W1b): Ankünfte 08:30–12:00, damit Tagschicht (08–16 Uhr) sortieren und zustellen kann.
 const ARRIVAL_MINUTES=[510,540,570,600,630,660,690,720];
-/** Spielwerte Depot-Stufe (A02 W1b, Preis/Volumen W1c: 5–6,50 €/Paket, Volumen füllt 1 Lagerkraft + 1 Lieferwagen;
+/** Spielwerte Depot-Stufe (A02 W1b, Preis/Volumen W1c: 7–8,50 €/Paket (A01), Volumen füllt 1 Lagerkraft + 1 Lieferwagen;
  *  docs/BALANCING-0.9-W1.md Abschnitt 9). start = Startangebot, offer = Folgeangebote.
  *  parcels: Spanne in Zehnern je Ankunft; price (offer): [Basis €, Schritt €, Schritte]; sla: start in Minuten, offer in Stunden; days: Laufzeit in Tagen. */
 export const TERMS={
- start:{minutes:[540,570],parcels:[20,25],price:6,sla:360,days:7},
- offer:{parcels:[6,11],price:[5,0.25,6],sla:[5,8],days:[5,10]}
+ start:{minutes:[540,570],parcels:[20,25],price:8,sla:360,days:7},
+ offer:{parcels:[6,11],price:[7,0.25,6],sla:[5,8],days:[5,10]}
 };
 const STATUSES=['offer','active','ended'];
 

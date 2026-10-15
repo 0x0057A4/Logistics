@@ -31,27 +31,29 @@ const SCENARIOS={
 // Welle 1c (A02): erneut erzeugt, weil Vertragswerte (TERMS: 5–6,50 €/Paket, Startvertrag 200–250 Pakete, Folgeangebote
 // 60–110 je Ankunft) im Zustand stehen. Gleiche Anzahl Zufallszüge. Gegenprobe: contracts.js aus bb15c66 reproduziert
 // die vorherigen Hashes exakt (4/4 grün). Node v22.22.0.
+// Welle 1c (A01-Entscheidung): erneut erzeugt für Preise 7–8,50 €/Paket (Startvertrag 8 €). Gegenprobe: contracts.js
+// aus 76498a8 (6 €) reproduziert dessen Hashes exakt (4/4 grün). Node v22.22.0.
 const EXPECTED={
  klein:[
-  '089707cb22d04cddd00dfd37690a44df646647e734805d20deab00090af42d1f',
-  '2de1b4ba06baae9e5b60abfffb662e72d37fe8659c2dea862e78d49794fa9cee',
-  '3bcdcf7e184bf5fa178fd864b6ec9b00dddb3507492e0d3c7b1a1f4f841d3922',
-  'a1d1458c8eac09b0638e3a8fb07af97a30e95ca3c7720dc15acdc4aea62861d7',
+  'f39bebc4fe2bc8cfbba941e9c7034ee28785aa82c1476647440c554fb0ff2b62',
+  '4c84733e0f63b7ec17e05111988a9ed76e369422f8998dae223a0e1d01f60c39',
+  '24980c2606aa147f698e2e0d6d7d17b52a849b8229052e94c64ea1b500fc3530',
+  '5e41eab909ed2793c081553e7ff760bb92aabeecf070faadb8ec85e316686565',
  ],
  dienste:[
-  'f9d32ce7a4b77578eee750550ce3113d3a1e5c19c6bb135418f8524b317ad921',
-  '43c2e6f85d6c1b2bac7162f2110ce3e38b5458393149924581e81bba96195c74',
-  '20f76ca77d6d09586dd8a261a1b6e93042063da735f4acb49b9cc4ec8664470e',
-  '5a59c626ee23a8064f5dad9f6938908b76dce30245c6aa3243b559f2302b594d',
+  'b4354e7fa595c00fc3b219de051cdea8d7fa29e05dd804ecb3c1538107cbf889',
+  'cfbdda3f1519540003921ea469cd0eb3e48d70fa6c62014a96ce56efb48edf14',
+  '1ff934830ddecec53587e3370c5c0dff770d9a3dd2c5be6310766b1b6cc93a28',
+  '79c293bdce8183430d3f8d5e15cdfc29258bdfa45ad61247f28d1521a3924a5c',
  ],
  gross:[
-  '9e86bc1f0c78a7191dc44c4def987862a5be684effd0d52766fc0a890cbe6925',
-  'ffc66a5627860a3c5a6a2c22cc014b773d7096a6e0ffb4854b13e77e1434c779',
-  '0d15b52d80dba8e043840ad71641cfb4384127ec10d81c45d370647ad5d1ff77',
-  '820b4541d68ef6e027d0269bbc8925538376b3747aab13cf71a1060f2d7b9d05',
+  'b9fb80b9746e489a2fd38fdc49f7c1285aa0cfe99a527a89e5b766e5679086ae',
+  '90fce15386634cf62f0f537440fab8cbccbf62799a86d4d6d8dc573ebe31fd39',
+  '877ef7dd40fd236a6a418f4dc3cf04d8340d5b8151e621e08ab343256772ca1e',
+  'ad091d0fd65b6976fbcdd45ff393d47c83293987a17e8516b7845fb26d5a5578',
  ],
  prognose:[
-  'cc84f5ea685c874d9e83ad4af165bf6bbd593fd0490c2831d65ba2a6ef47c297',
+  '80b4ed120f458105c8c724523be5a20669fe46daa6e2068b3b66c3ab3e08fdf2',
  ],
 };
 

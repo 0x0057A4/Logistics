@@ -1,6 +1,6 @@
 # Balancing Depot-Stufe – Welle 1b/1c (A02)
 
-> **Welle 1c:** Preise und Volumen neu (Abschnitt 9). Die Werte in Abschnitt 3 und 5 sind der Stand Welle 1b.
+> **Welle 1c:** Preise und Volumen neu (Abschnitt 9; gültig ist 9.6: 7–8,50 €/Paket). Die Werte in Abschnitt 3 und 5 sind der Stand Welle 1b.
 
 Stand 15.10.2026. Grundlage: `docs/KONZEPT-LOGISTIKHUB.md` 3.2 (Stufe 1 Depot), `docs/SCHNITTSTELLEN-0.9-W1.md`.
 Messung: `node tests/balance-hub.mjs` (deterministisch, Seeds 1–5, Modus „Wirtschaftsbetrieb“, 85.000 € Startkapital, 5 Spieltage; Amortisation wird bis 15 Tage weitergerechnet). `--json` gibt alle Rohwerte aus.
@@ -220,3 +220,39 @@ Transport −100 bis −235 €.
 - **B8 (A02/A07):** Die Tagesleistung des Lieferwagens ist der eigentliche Hebel der Depot-Wirtschaft. Sie wird
   von der festen Fahrzeit je Tour bestimmt: 60 min hin und zurück, 20 min je weiterem Stopp. Zuladung und
   Ladegeschwindigkeit wirken dagegen kaum (9.1).
+
+### 9.6 Entscheidung A01: Preis 7–8,50 €, Ziel Amortisation 6–8 Tage (gültiger Stand)
+
+A01 hat den Zielkonflikt aus 9.4 entschieden. Startvertrag **8,00 €**, Folgeangebote **7,00–8,50 €** (Schritt 0,25 €),
+Volumen wie in 9.2. Neues Ziel: Amortisation bei gutem Betrieb in 6–8 Spieltagen. Der Stand mit 6 € (9.3/9.4) ist damit
+überholt. Determinismus-Hashes erneut erzeugt. Gegenprobe: `contracts.js` mit den 6-€-Werten (Commit 76498a8)
+reproduziert dessen Hashes exakt.
+
+Mittel Seeds 1–5, 5 Spieltage, gleiche Spalten wie 9.3:
+
+| Szenario | Stand | Ergebnis 5 T | Betriebsergebnis 5 T | Umsatz | Pakete zugestellt | Überschuss/Tag | Pünktlich | Abschlag | Amortisation (Tage, Seeds 1–5) |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---|
+| start | 6 € | −9.582 € | +4.918 € | 6.720 € | 1.120 | +984 € | 100 % | 0 € | >15 (alle) |
+| start | **8 €** | −7.342 € | **+7.158 €** | 8.960 € | 1.120 | +1.432 € | 100 % | 0 € | 12,3 / 9,2 / 12,2 / >15 / >15 |
+| gut | 6 € | −7.331 € | +7.169 € | 9.049 € | 1.529 | +1.604 € | 93 % | 67 € | 10,1 / 9,1 / 9,3 / 10,2 / 9,2 |
+| gut | **8 €** | −4.297 € | **+10.203 €** | 12.083 € | 1.529 | **+2.272 €** | 93 % | 91 € | **6,3 / 6,2 / 6,3 / 7,2 / 6,2** |
+| ausbau | 6 € | −15.239 € | +7.761 € | 9.766 € | 1.724 | +1.770 € | 59 % | 413 € | >15 (alle) |
+| ausbau | **8 €** | −11.932 € | +11.068 € | 13.073 € | 1.724 | +2.511 € | 59 % | 553 € | 8,2 / >15 / >15 / 9,3 / >15 |
+| ueberlast | 6 € | −6.898 € | +7.602 € | 9.516 € | 1.687 | +1.746 € | 54 % | 454 € | 8,1 / 10,1 / 9,3 / 8,3 / 9,3 |
+| ueberlast | **8 €** | −3.680 € | +10.820 € | 12.734 € | 1.687 | +2.471 € | 54 % | 610 € | 5,3 / 7,1 / 6,3 / 6,2 / 6,2 |
+| traege | 6 € | −11.384 € | +3.116 € | 4.907 € | 897 | +641 € | 12 % | 439 € | >15 (alle) |
+| traege | **8 €** | −9.737 € | **+4.763 €** | 6.555 € | 897 | +978 € | 12 % | 586 € | 11,3 / >15 / >15 / >15 / >15 |
+| schlecht | 6 € / 8 € | −14.904 € | **−854 €** | 0 € | 0 | −171 € | – | 0 € | nie |
+
+Bewertung (Stand 8 €):
+- **Amortisation gut:** 6,2–7,2 Spieltage, Median 6,3. Liegt im neuen Ziel von 6–8 Tagen.
+- **Startvertrag allein:** ≈ +1.430 €/Tag Betriebsergebnis. Er trägt sich, amortisiert aber erst nach 9 bis über 15 Tagen.
+  Der zweite Vertrag bleibt damit der erste lohnende Schritt.
+- **Verspätung spürbar:** Bei träger Disposition liegt das Betriebsergebnis 53 % unter gut (+4.763 € statt
+  +10.203 €). Pünktlich sind 12 %, das Ansehen fällt auf 0–28.
+- **Schlecht:** −854 € Betriebsergebnis, kein Umsatz.
+- **Überlast:** +6 % Geld gegenüber gut, aber 54 % pünktlich und Ansehen 0–29 statt 80–96. Kaum lohnend, aber nicht
+  verlustbringend. Dafür bleibt B3 (Vertragsstrafe, Welle 2) nötig.
+- **Ausbau** (Sortierplatz ohne zweites Fahrzeug): amortisiert in 8 bis über 15 Tagen, schlechter als gut. Das
+  bestätigt B2.
+- Die Befunde B6–B8 gelten unverändert.
