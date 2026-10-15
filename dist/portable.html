@@ -3000,9 +3000,49 @@ function slotPose(layout, k, len = 4.2, dockX = null) {
     const x = dockX != null ? Math.max(1, Math.min(layout.W - 1, dockX)) : layout.bays[k];
     return { x, z: layout.bayZ + len / 2, heading: Math.PI / 2 };
   }
-  const i = k - layout.bays.length, col = i % 3, row = Math.floor(i / 3) % 3;
-  return { x: -15 + col * 4.4, z: layout.H + 1.6 + row * 1.9, heading: 0 };
+  return fleetParkPose(layout, k - layout.bays.length, len);
 }
+// Eigene Flotte und Fremd-Lkw teilen keine Fläche: Fremd-Lkw nur an Dockplätzen, Tor, gelber Wartefläche;
+// eigene Fahrzeuge am belegten Dock, sonst an freien Stellplätzen der Andockreihe (nicht vor Docks), sonst Fuhrpark östlich.
+const DOCK_GAP = 1.7;               // Mindestabstand der Fahrzeugmitten an der Andockreihe
+const PARK_GAP = 2.9;               // Stellplatz der eigenen Flotte: Seitenabstand zum nächsten Dockplatz (sichtbare Lücke auch in Schrägsicht)
+const FLEET_PARK = 8;               // Stellplätze im Fuhrpark östlich der Andockreihe
+/** Fuhrpark-Stellplatz i (östlich der Halle, südlich des Mitarbeiterparkplatzes); Heck zur Hallenwand. */
+function fleetParkPose(L, i, len = 4.2) { return { x: L.W + 2.2 + (Math.max(0, i) % FLEET_PARK) * 1.9, z: L.H + .6 + len / 2, heading: Math.PI / 2 }; }
+/** Andockplatz je Dock an der Südwand: Mitte der Dockspalte (Rotation über footprint). Docks in derselben Spalte rücken um DOCK_GAP nach Osten. */
+function dockSlots(L, buildings) {
+  const docks = (buildings || []).filter(b => b.type === 'dock').map(b => { const box = buildingBox(b); return { id: b.id, x: (box.x0 + box.x1) / 2 }; });
+  docks.sort((a, b) => a.x - b.x || String(a.id).localeCompare(String(b.id)));
+  const out = new Map(); let last = -Infinity;
+  for (const d of docks) { const x = Math.min(L.W - 1, Math.max(1, d.x, last + DOCK_GAP)); out.set(d.id, x); last = x; }
+  return out;
+}
+/** Stellplätze der Andockreihe, die vor keinem Dock liegen (Abstand ≥ PARK_GAP zu jedem Andockplatz). */
+function freeBays(L, slots) { const xs = [...(slots?.values?.() || [])]; return L.bays.filter(x => xs.every(d => Math.abs(d - x) >= PARK_GAP)); }
+/** Stellplatz des eigenen Fahrzeugs k ohne Dock: freie Andockreihe, dann Fuhrpark. Nie Wartefläche, nie vor einem Dock. */
+function parkPose(L, free, k, len = 4.2) {
+  if (k < free.length) return { x: free[k], z: L.bayZ + len / 2, heading: Math.PI / 2 };
+  return fleetParkPose(L, k - free.length, len);
+}
+/**
+ * Eigene (und durchfahrende) Fahrzeuge am Standort: am tatsächlich belegten Dock (b.task = Sendungs-/Tour-ID), sonst Stellplatz k
+ * (stabil nach Reihenfolge der Heimatflotte). Reine Ableitung aus dem Zustand, ohne Seiteneffekte.
+ */
+function fleetPlans(state, siteId, buildings, L) {
+  const vehicles = state?.vehicles || [], home = vehicles.filter(v => v.site === siteId), slots = dockSlots(L, buildings), free = freeBays(L, slots), out = [];
+  let foreign = home.length;
+  for (const v of vehicles) {
+    if (v.status === 'rentalReturned') continue;
+    const plan = vehiclePlan(state, v, siteId); if (plan.mode === 'away') continue;
+    const k = v.site === siteId ? home.indexOf(v) : foreign++;
+    const id = plan.task?.id, dock = plan.mode === 'site' && id ? buildings.find(b => b.type === 'dock' && b.task === id) : null;
+    const len = VEH_LEN[v.type] || 4.2, pose = dock ? dockSlotPose(L, slots.get(dock.id), len) : parkPose(L, free, k, len);
+    out.push({ v, plan, pose, len, dock: dock?.id || null });
+  }
+  return out;
+}
+/** Pose am Andockplatz (Heck an der Rampe). */
+function dockSlotPose(L, x, len = 4.2) { return { x, z: L.bayZ + len / 2, heading: Math.PI / 2 }; }
 /** Fahrweg Stellplatz → Straße (out) bzw. Straße → Stellplatz (in). */
 function vehiclePath(layout, pose, dir) {
   const L = layout;
@@ -3157,7 +3197,7 @@ function gatePose(L, len = FOREIGN_LEN) { return { x: L.exitX, z: L.yardGateZ + 
 /** Dockposition des zugeteilten Docks (Heck an der Rampe), sonst null. */
 function dockPoseFor(L, buildings, dockId, len = FOREIGN_LEN) {
   const b = dockId != null && (buildings || []).find(o => o.id === dockId); if (!b) return null;
-  const box = buildingBox(b); return slotPose(L, 0, len, (box.x0 + box.x1) / 2);
+  return dockSlotPose(L, dockSlots(L, buildings).get(b.id), len);
 }
 /** Polygonzug mit abgerundeten Ecken (quadratische Bézier) und Rückwärtskennung r je Segmentende. Spitzkehren (Wechsel vor/zurück) bleiben Ecke. */
 function makePath(pts, radius = YARD_TURN, steps = 6) {
@@ -3587,7 +3627,12 @@ class Scene3D {
     P.quad(-75, L.roadOutZ - 1.1, W + 150, 3.6, -.005, '#7b8c8e'); for (let x = -74; x < W + 74; x += 3) P.quad(x, L.roadOutZ + .62, 1.4, .1, .002, '#e5e8dc');
     P.quad(-75, L.roadOutZ - 1.25, W + 150, .15, -.004, '#d3d9cc'); P.quad(-75, L.roadInZ + 1.15, W + 150, .15, -.004, '#d3d9cc');
     P.quad(-17, H, W + 18, L.roadOutZ - 1.1 - H, -.01, '#a3b0b0'); P.quad(-6, 9.6, 5.8, H - 9.6, -.012, '#b3bdb9');
-    for (const x of L.bays) { P.quad(x - 1.55, H + .05, .08, 5, .003, '#f4f5ec'); P.quad(x + 1.47, H + .05, .08, 5, .003, '#f4f5ec'); }
+    // Andockreihe: Dockplätze (Mitte je Dock) und freie Stellplätze; Fuhrpark der eigenen Flotte östlich davon.
+    const slots = dockSlots(L, (this.state?.buildings || []).filter(b => b.site === s.id));
+    for (const x of [...slots.values(), ...freeBays(L, slots)]) { P.quad(x - .95, H + .05, .07, 5, .003, '#f4f5ec'); P.quad(x + .88, H + .05, .07, 5, .003, '#f4f5ec'); }
+    for (const x of slots.values()) P.quad(x - .7, H + .25, 1.4, .12, .004, '#f2c363');
+    P.quad(W + 1, H, FLEET_PARK * 1.9 + 1.2, L.roadOutZ - 1.1 - H, -.01, '#a3b0b0');
+    for (let i = 0; i <= FLEET_PARK; i++) P.quad(W + 1.2 + i * 1.9, H + .6, .07, 4.6, .003, '#f4f5ec');
     P.quad(-16.6, H + .6, 13.4, .1, .003, '#f2c363'); P.quad(-16.6, H + 6, 13.4, .1, .003, '#f2c363'); P.quad(-16.6, H + .6, .1, 5.5, .003, '#f2c363'); P.quad(-3.3, H + .6, .1, 5.5, .003, '#f2c363');
     for (let i = 0; i < 3; i++) P.quad(-16.2 + i * 4.4, H + 3.2, 3.6, .06, .003, '#e7d9a4');
     P.quad(L.entryX - 1.2, L.laneZ + 2.2, .1, 2.3, .003, '#f4f5ec');
@@ -3664,16 +3709,8 @@ class Scene3D {
     for (let i = 0; i < cars; i++) this.setInst(car, i, L.W + 3.4 + (i % 2) * 5.2, 0, 2.1 + Math.floor(i / 2) * 1.8, 0, 1, 1, 1, ['#d9dfe2', '#7c96a8', '#c9b28a', '#a7b9a1', '#e6e2d7'][i % 5]);
     this.finish(car, cars);
     // Fahrzeugpläne; Positionen folgen pro Frame
-    const vehicles = st?.vehicles || [], home = vehicles.filter(v => v.site === s.id), plans = [];
-    let foreign = home.length;
-    for (const v of vehicles) {
-      if (v.status === 'rentalReturned') continue;
-      const plan = vehiclePlan(st, v, s.id); if (plan.mode === 'away') continue;
-      const k = v.site === s.id ? home.indexOf(v) : foreign++;
-      const dock = plan.mode === 'site' && plan.task ? buildings.find(b => b.type === 'dock' && b.task && b.task === plan.task.id) : null;
-      const len = VEH_LEN[v.type] || 4.2, pose = slotPose(L, k, len, dock ? (buildingBox(dock).x0 + buildingBox(dock).x1) / 2 : null);
-      plans.push({ v, plan, pose, len, path: plan.mode === 'site' ? null : vehiclePath(L, pose, plan.mode), x: pose.x, z: pose.z, heading: pose.heading, shown: false, label: `${vehicleTag(v)} · ${this.statusLabel(plan.status)}` });
-    }
+    const plans = fleetPlans(st, s.id, buildings, L);
+    for (const p of plans) Object.assign(p, { path: p.plan.mode === 'site' ? null : vehiclePath(L, p.pose, p.plan.mode), x: p.pose.x, z: p.pose.z, heading: p.pose.heading, shown: false, label: `${vehicleTag(p.v)} · ${this.statusLabel(p.plan.status)}` });
     this.fleet = plans; this.ensure('vbox', plans.length); this.ensure('vcab', plans.length); this.ensure('vbase', plans.length);
     for (const p of plans) { p.hit = { id: p.v.id, box: { x0: 0, x1: 0, y0: 0, y1: 1.9, z0: 0, z1: 0 }, fleet: p }; this.boxes.push(p.hit); }
     // Fremd-Lkw aus s.yard (W1-S4); Positionen folgen pro Frame. Phasenwechsel übernehmen die zuletzt gezeigte Pose (nur Darstellung).
@@ -3815,7 +3852,7 @@ class Scene3D {
   }
 }
 
-return Object.freeze(Object.defineProperties({}, {"VIEWS":{enumerable:true,get:()=>VIEWS},"LABEL_MODES":{enumerable:true,get:()=>LABEL_MODES},"MAX_LABELS":{enumerable:true,get:()=>MAX_LABELS},"cellToWorld":{enumerable:true,get:()=>cellToWorld},"worldToCell":{enumerable:true,get:()=>worldToCell},"defaultSite":{enumerable:true,get:()=>defaultSite},"buildingBox":{enumerable:true,get:()=>buildingBox},"buildingTone":{enumerable:true,get:()=>buildingTone},"sceneSignature":{enumerable:true,get:()=>sceneSignature},"yardLayout":{enumerable:true,get:()=>yardLayout},"slotPose":{enumerable:true,get:()=>slotPose},"vehiclePath":{enumerable:true,get:()=>vehiclePath},"pointOnPath":{enumerable:true,get:()=>pointOnPath},"phaseDuration":{enumerable:true,get:()=>phaseDuration},"phaseProgress":{enumerable:true,get:()=>phaseProgress},"vehicleTag":{enumerable:true,get:()=>vehicleTag},"vehiclePlan":{enumerable:true,get:()=>vehiclePlan},"vehicleT":{enumerable:true,get:()=>vehicleT},"rackPallets":{enumerable:true,get:()=>rackPallets},"workerSpots":{enumerable:true,get:()=>workerSpots},"selectLabels":{enumerable:true,get:()=>selectLabels},"adaptResolution":{enumerable:true,get:()=>adaptResolution},"rayBox":{enumerable:true,get:()=>rayBox},"rayGround":{enumerable:true,get:()=>rayGround},"networkLayout":{enumerable:true,get:()=>networkLayout},"FOREIGN_LEN":{enumerable:true,get:()=>FOREIGN_LEN},"YARD_TURN":{enumerable:true,get:()=>YARD_TURN},"QUEUE_PLACES":{enumerable:true,get:()=>QUEUE_PLACES},"QUEUE_DRIVE":{enumerable:true,get:()=>QUEUE_DRIVE},"PHASE_LABEL":{enumerable:true,get:()=>PHASE_LABEL},"queueOrder":{enumerable:true,get:()=>queueOrder},"queuePlace":{enumerable:true,get:()=>queuePlace},"gatePose":{enumerable:true,get:()=>gatePose},"dockPoseFor":{enumerable:true,get:()=>dockPoseFor},"makePath":{enumerable:true,get:()=>makePath},"pathPose":{enumerable:true,get:()=>pathPose},"approachPath":{enumerable:true,get:()=>approachPath},"queueEntryPath":{enumerable:true,get:()=>queueEntryPath},"toDockPath":{enumerable:true,get:()=>toDockPath},"dockingPath":{enumerable:true,get:()=>dockingPath},"exitPath":{enumerable:true,get:()=>exitPath},"arrivalTone":{enumerable:true,get:()=>arrivalTone},"arrivalLabel":{enumerable:true,get:()=>arrivalLabel},"carrierColor":{enumerable:true,get:()=>carrierColor},"arrivalPlan":{enumerable:true,get:()=>arrivalPlan},"arrivalPose":{enumerable:true,get:()=>arrivalPose},"arrivalMoving":{enumerable:true,get:()=>arrivalMoving},"PARCELS_PER_CAGE":{enumerable:true,get:()=>PARCELS_PER_CAGE},"parcelLoads":{enumerable:true,get:()=>parcelLoads},"Scene3D":{enumerable:true,get:()=>Scene3D}}));
+return Object.freeze(Object.defineProperties({}, {"VIEWS":{enumerable:true,get:()=>VIEWS},"LABEL_MODES":{enumerable:true,get:()=>LABEL_MODES},"MAX_LABELS":{enumerable:true,get:()=>MAX_LABELS},"cellToWorld":{enumerable:true,get:()=>cellToWorld},"worldToCell":{enumerable:true,get:()=>worldToCell},"defaultSite":{enumerable:true,get:()=>defaultSite},"buildingBox":{enumerable:true,get:()=>buildingBox},"buildingTone":{enumerable:true,get:()=>buildingTone},"sceneSignature":{enumerable:true,get:()=>sceneSignature},"yardLayout":{enumerable:true,get:()=>yardLayout},"slotPose":{enumerable:true,get:()=>slotPose},"DOCK_GAP":{enumerable:true,get:()=>DOCK_GAP},"PARK_GAP":{enumerable:true,get:()=>PARK_GAP},"FLEET_PARK":{enumerable:true,get:()=>FLEET_PARK},"fleetParkPose":{enumerable:true,get:()=>fleetParkPose},"dockSlots":{enumerable:true,get:()=>dockSlots},"freeBays":{enumerable:true,get:()=>freeBays},"parkPose":{enumerable:true,get:()=>parkPose},"fleetPlans":{enumerable:true,get:()=>fleetPlans},"dockSlotPose":{enumerable:true,get:()=>dockSlotPose},"vehiclePath":{enumerable:true,get:()=>vehiclePath},"pointOnPath":{enumerable:true,get:()=>pointOnPath},"phaseDuration":{enumerable:true,get:()=>phaseDuration},"phaseProgress":{enumerable:true,get:()=>phaseProgress},"vehicleTag":{enumerable:true,get:()=>vehicleTag},"vehiclePlan":{enumerable:true,get:()=>vehiclePlan},"vehicleT":{enumerable:true,get:()=>vehicleT},"rackPallets":{enumerable:true,get:()=>rackPallets},"workerSpots":{enumerable:true,get:()=>workerSpots},"selectLabels":{enumerable:true,get:()=>selectLabels},"adaptResolution":{enumerable:true,get:()=>adaptResolution},"rayBox":{enumerable:true,get:()=>rayBox},"rayGround":{enumerable:true,get:()=>rayGround},"networkLayout":{enumerable:true,get:()=>networkLayout},"FOREIGN_LEN":{enumerable:true,get:()=>FOREIGN_LEN},"YARD_TURN":{enumerable:true,get:()=>YARD_TURN},"QUEUE_PLACES":{enumerable:true,get:()=>QUEUE_PLACES},"QUEUE_DRIVE":{enumerable:true,get:()=>QUEUE_DRIVE},"PHASE_LABEL":{enumerable:true,get:()=>PHASE_LABEL},"queueOrder":{enumerable:true,get:()=>queueOrder},"queuePlace":{enumerable:true,get:()=>queuePlace},"gatePose":{enumerable:true,get:()=>gatePose},"dockPoseFor":{enumerable:true,get:()=>dockPoseFor},"makePath":{enumerable:true,get:()=>makePath},"pathPose":{enumerable:true,get:()=>pathPose},"approachPath":{enumerable:true,get:()=>approachPath},"queueEntryPath":{enumerable:true,get:()=>queueEntryPath},"toDockPath":{enumerable:true,get:()=>toDockPath},"dockingPath":{enumerable:true,get:()=>dockingPath},"exitPath":{enumerable:true,get:()=>exitPath},"arrivalTone":{enumerable:true,get:()=>arrivalTone},"arrivalLabel":{enumerable:true,get:()=>arrivalLabel},"carrierColor":{enumerable:true,get:()=>carrierColor},"arrivalPlan":{enumerable:true,get:()=>arrivalPlan},"arrivalPose":{enumerable:true,get:()=>arrivalPose},"arrivalMoving":{enumerable:true,get:()=>arrivalMoving},"PARCELS_PER_CAGE":{enumerable:true,get:()=>PARCELS_PER_CAGE},"parcelLoads":{enumerable:true,get:()=>parcelLoads},"VEH_LEN":{enumerable:true,get:()=>VEH_LEN},"Scene3D":{enumerable:true,get:()=>Scene3D}}));
 })();
 // scene-select.js
 __modules[26]=(()=>{
