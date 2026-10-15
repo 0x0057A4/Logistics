@@ -48,9 +48,10 @@ arrival = {id, site, contractId, orderIds:[…], carrier, plate,
 phase: 'approach'→'gate'→'queue'→'toDock'→'docking'→'unloading'→'exit'→'gone'
 ```
 
+- Torkontrolle (A06, W1b): 2 Arbeitsminuten mit Lagerkraft (`${arrival.id}:gate`), ohne Kraft Wartegrund „Keine Torkontrolle“.
 - Feste Dauern (vorläufig): gate 2, toDock 2, docking 1, exit 3 Minuten. `phaseStart`/`phaseEnd` sind absolute Spielminuten. Bei offenen Phasen (`queue`, `unloading`) gilt `phaseEnd=null`; A09 interpoliert nur, wenn `phaseEnd` gesetzt ist.
 - Dock-Zuteilung: freies Dock-Gebäude (`dock`, enabled, nicht von eigener Lieferung belegt, `b.task`-Regel wie transport.js) in FIFO-Reihenfolge nach Ankunft am Tor. Belegung `b.task = arrival.id`.
-- Entladen: braucht eine Lagerkraft am Standort (`api.workforce.acquire`, Schlüssel `${arrival.id}:warehouse`). Rate vorläufig 20 Pakete/Minute; Rate und Personal gibt A06 in Welle 1b vor.
+- Entladen: braucht eine Lagerkraft am Standort (`api.workforce.acquire`, Schlüssel `${arrival.id}:warehouse`). Rate = `workRate(kraft, 20)` aus workforce.js (A06, W1b): Erfahrung bis ×1,5, Müdigkeit über 50 bremst.
   - Jede Minute wandert die entladene Menge per `api.inventory.add('parcel', qty, site, {location:'inbound', owner:orderId, …})` auf die Aufträge, anteilig nach laneShare und vollständig erhalten.
   - Kein Platz im Lager oder kein Personal → Phase bleibt `unloading`, `waitReason` gesetzt.
 - Befehle: `prioritizeArrival{id}`. `assignDock{id, dock}` ist optional.
