@@ -1,3 +1,22 @@
+# Übergabestand 0.9 – 15.10.2026
+
+Spiel umgebaut zum Logistikunternehmen (Hub). Verbindlich: AGENTS.md, docs/KONZEPT-LOGISTIKHUB.md (abgenommen), docs/SCHNITTSTELLEN-0.9.md (Nutzerentscheidungen), docs/SCHNITTSTELLEN-0.9-W1.md. Deutsch, Caveman-Stil. Parallelrollen + unabhängige QS (A11).
+
+## Stand
+
+- Welle 0 (Fundament: WebGL, HUD, Indexe, Speichern) freigegeben (docs/QS-0.9-W0.md).
+- Welle 1 (Hub-Kreislauf) integriert; Abnahme docs/QS-0.9-W1.md.
+- Nutzerentscheidungen: Fertigung → später „Mehrwertdienste“; three.js lokal; NuriTrack-Dateien nur zur Ablaufanalyse, nicht veröffentlichen; 0.9 vor GuV/Abschreibung; Referenzgerät i5-1335U/16 GB/Iris Xe; Name vorerst „Industrie & Logistik“.
+- Warenarten: Welle 1 nur Paket; Welle 2 Palette/Kühlware/Sperrgut + Kundensortiment/Mehrwertdienste; Welle 3 Container/Luft/Gefahrgut.
+
+## Nächste Ziele
+
+- Welle 2: Vertragsstrafen, Warenarten, Stapler, zweites Fahrzeug/Ausbaupakete, GuV/Abschreibung, Mehrwertdienste.
+- Welle 3: Hauptläufe zwischen Standorten, Containerhof, Luft/See, Assistent, Replay, Wetter.
+- 60-FPS-Messung durch Nutzer (?perf=1) auswerten.
+
+---
+
 # Übergabestand 0.8 – 15.10.2026
 
 AGENTS.md, Spielkonzept, UMSETZUNGSPLAN.md und FUNKTIONSSTATUS.md bleiben verbindlich. Deutsch, knapp (Caveman). Parallelrollen und unabhängige QS gemäß AGENTS.md.

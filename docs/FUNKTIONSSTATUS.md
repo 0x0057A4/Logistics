@@ -1,4 +1,8 @@
-# Funktionsstatus 0.8
+# Funktionsstatus 0.9
+
+**0.9 (Hub-Umbau):** Erster Hub-Kreislauf implementiert und integriert getestet: Frachtverträge (contracts.js), Hof/Tor/Docks (yard.js), Sortierung (sorting.js), 3D-Szene (scene3d.js, WebGL), Leitstand-HUD, IndexedDB-Speicher, Messanzeige. Offen: Paletten/Kühlware/Sperrgut-Warenarten, Stapler, Vertragsstrafen, GuV/Abschreibung, Containerhof/Luft/See im Hub, Replay, Assistent, 60-FPS-Nachweis auf Referenzgerät. Details: CHANGELOG 0.9, docs/QS-0.9-W1.md.
+
+## Stand 0.8 (unverändert gültig für Fertigungs- und Transportkapitel)
 
 Stand: 15.10.2026. „Implementiert“ bedeutet vorhandene fachliche Funktion und Bedienung, nicht vollständige Abnahme sämtlicher Ausprägungen des ursprünglichen Konzepts. Kapitel sind bewusst nicht pauschal als fertig markiert.
 

@@ -2,25 +2,26 @@
 
 **Projektübergabe:** [Aktueller Kontext und nächster Schritt](docs/FORTSETZUNG.md). [Projektentscheidungen](docs/CHATKONTEXT.md). Integrierte Originalpatches liegen in `docs/archiv/integriert-0.7/`.
 
-Version 0.8 · Entwicklungsfassung · 15. Oktober 2026
+Version 0.9 · Entwicklungsfassung · 15. Oktober 2026
 
 Eigenständige, deutschsprachige Unternehmenssimulation für PC-Browser. Vom leeren Werk über Arbeitsleuchtenfertigung bis zu mehreren Standorten, Sammeltouren und temperaturgeführter Fremdfracht. Alle Unternehmen, Personen und Wirtschaftswerte sind fiktiv.
 
 **Diese Fassung ist spielbar, aber keine vollständige Abnahme aller Details des großen Projektkonzepts.** Der tatsächliche Status steht in `docs/FUNKTIONSSTATUS.md`. Fachlogik und Oberfläche verwenden denselben Zustand. Es gibt keine simulierten Dashboardzahlen ohne fachlichen Ursprung.
 
-## Start
+## Start (0.9: Logistikunternehmen)
 
-Die veröffentlichte Website öffnen. „Geführter Einstieg“ wählen. Neue und bewusst geladene Unternehmen starten pausiert; mit 1× fortsetzen. In der Zentrale kann „Startbetrieb einrichten“ Anlagen, Personal und Fahrzeug durch reguläre, kostenpflichtige Spielbefehle aufbauen. Alternativ jede Anlage selbst platzieren.
+Website öffnen, „Geführter Einstieg“ wählen. Neue Unternehmen starten pausiert; mit 1× fortsetzen. „Startbetrieb einrichten“ kauft Laderampe, Regal, Lagerkraft, Fahrer und Lieferwagen (ca. 14.500 €) über reguläre Spielbefehle.
 
-1. Montageplatz, Prüfstation, Packstation, Lagerregal und Laderampe bauen.
-2. Drei Fertigungskräfte, eine Lagerkraft und eine Fahrperson einstellen.
-3. Je zwölf Gehäuse, LED-Platinen und Kartons bestellen.
-4. Ersten Kundenauftrag über acht Leuchten annehmen.
-5. Lieferwagen kaufen. Produktion läuft automatisch bei passenden Voraussetzungen.
-6. Bei acht verpackten Leuchten im Auftragsfenster Lieferung starten.
-7. Nach Zustellung entsteht eine Forderung; Zahlung folgt 60 Spielminuten später.
+1. Laderampe bauen, Lagerkraft einstellen.
+2. Fenster „Verträge“: ersten Frachtvertrag annehmen.
+3. Der Lkw des Versenders kommt zur angegebenen Uhrzeit: Torkontrolle, Dock, Entladen („Hof & Docks“).
+4. Pakete werden sortiert – von Hand oder am Sortierplatz.
+5. Fahrer und Lieferwagen: Zustellung je Zustellgebiet starten (Menge wird nach Fahrzeugkapazität vorgeschlagen).
+6. Nach Zustellung entsteht eine Forderung; Zahlung folgt 60 Spielminuten später. Verspätung kostet Abschlag und Ansehen.
 
-Ein Spielminute dauert bei 1× eine Echtzeitsekunde. Tagschicht läuft von 08:00 bis 16:00. Nachtschicht und vereinfachter durchgehender Betrieb sind einstellbar. Hintergrund-Tab und geschlossene Anwendung erzeugen keinen Fortschritt.
+Eine Spielminute dauert bei 1× eine Echtzeitsekunde. Tagschicht 08:00–16:00. Hintergrund-Tab und geschlossene Anwendung erzeugen keinen Fortschritt. Messanzeige für Bildrate: `?perf=1` an die Adresse hängen (docs/MESSUNG-60FPS.md).
+
+Die bisherige Leuchtenfertigung bleibt verfügbar und wird später Geschäftsfeld „Mehrwertdienste“.
 
 ## Steuerung
 

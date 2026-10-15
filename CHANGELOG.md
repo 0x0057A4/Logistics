@@ -1,5 +1,22 @@
 # Änderungen
 
+## 0.9 – 15.10.2026 · Hub-Umbau (Entwicklungsfassung)
+
+Spiel wird eigenes Logistikunternehmen. Grundlage: abgenommenes `docs/KONZEPT-LOGISTIKHUB.md`, Schnittstellen `docs/SCHNITTSTELLEN-0.9*.md`.
+
+- 3D-Spielwelt mit WebGL (three.js r170 lokal, kein CDN); ohne WebGL 2D-Rückfall. Fremd-Lkw mit Torkontrolle, Warteschlange, Rückwärts-Andocken, Labels.
+- Erster Hub-Kreislauf: Frachtvertrag → Lkw am Tor → Dock → Entladen → Sortieren (Sortierplatz oder von Hand) → Zustellung → Zahlung. Pakete bleiben Eigentum des Versenders.
+- Leitstand-HUD: Suche „/“, Kennzahlen, Standortfluss, Meldungsglocke, Fahrzeugleiste; Fenster „Verträge“ und „Hof & Docks“.
+- Personal: Torkontrolle braucht Lagerkraft; Entladetempo nach Erfahrung/Müdigkeit; Entladen und Beladen vor Sortieren.
+- Geführter Einstieg als Depot; Startbetrieb ca. 14.500 €; Paketpreise 7–8,50 €; Amortisation guter Betrieb ca. 6–7 Spieltage (Simulation, docs/BALANCING-0.9-W1.md).
+- Versandmenge nach echter Fahrzeugkapazität (Lieferwagen ≈ 160 Pakete); externe Fahrzeugwartung.
+- Speichern in IndexedDB (vorher ~2,7 MB Grenze), Übernahme alter Stände, eigener Platz für vorheriges Unternehmen; kein Speicher-Ruckler mehr.
+- Fix: Tab-Sperre warf im echten Browser „Illegal invocation“ – 0.8 konnte dort nicht dauerhaft speichern.
+- Leistung: Simulationsindexe (lange Stände ~80× schneller), HUD 4 Hz, Messanzeige `?perf=1` (docs/MESSUNG-60FPS.md).
+- Erstmals echte Browserprüfungen (Chromium headless, Software-Rendering). 60-FPS-Nachweis auf Referenzgerät (i5-1335U, Iris Xe) steht aus.
+
+Fertigung bleibt ladbar, wird später Geschäftsfeld „Mehrwertdienste“. Speicherformat weiter Schema 1, keine Migration nötig.
+
 ## 0.8 – 15.10.2026
 
 Kundendiensttickets für Lieferstatus, Terminänderung und Beschwerden. Bearbeitung belegt Kundendienstpersonal mit Schichten und Pausen. Einmalige Terminverlängerung greift erst nach Bearbeitung; Kosten und Kulanz eindeutig gebucht. Automatische Beschwerde bei überfälligem aktivem Auftrag. Ticketverlauf, Wartegründe und kostenpflichtige Bestätigung in Serviceoberfläche. HTML-Speicherung und bisherige Retouren bleiben erhalten. Adresskorrektur und individuelle Kundennachrichten weiterhin offen.
