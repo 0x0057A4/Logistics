@@ -240,3 +240,77 @@ test('W1b Stellplätze: nie vor einem Dock, Docks in gleicher Spalte getrennt, �
  for(let i=0;i<poses.length;i++)for(let j=i+1;j<poses.length;j++)assert.ok(!hits(rect(poses[i],4.2),rect(poses[j],4.2)),'Stellplätze überlappen nicht');
  for(let k=0;k<6;k++){const q=rect(queuePlace(L,k),FOREIGN_LEN);for(const p of poses)assert.ok(!hits(q,rect(p,4.2)),'Warteplatz frei von eigener Flotte');}
 });
+
+// ---------- Welle 2b (A09): Staplerplatz, Stapler, Paletten (W2-S2), nur lesend ----------
+import {forkliftCharge,chargeColor,forkliftLabel,forkliftTarget,forkliftPlans,forkliftPose,trailerPallets,palletLoads,FORK_MIN,FORK_CYCLE,PALLETS_PER_TRAILER,PALLET_LEVELS,MAX_PALLET_STACKS} from '../dist/scene3d.js';
+import * as yardMod from '../dist/yard.js';
+function forkFixture(){
+ const s=fixture();s.yard=[];
+ s.buildings.push({id:'d1',type:'dock',site:'a',x:2,y:13,rotation:0,enabled:true,condition:100,task:'arrival-1'},{id:'d2',type:'dock',site:'a',x:10,y:13,rotation:0,enabled:true,condition:100,task:'sh1'},
+  {id:'r1',type:'rack',site:'a',x:2,y:5,rotation:0},{id:'r2',type:'rack',site:'a',x:10,y:5,rotation:0},
+  {id:'f1',type:'forklift',site:'a',x:15,y:3,rotation:0,enabled:true,condition:100,charge:54,task:'arrival-1:forklift'},{id:'f2',type:'forklift',site:'a',x:17,y:3,rotation:0,enabled:true,condition:100,charge:8,task:null},{id:'f3',type:'forklift',site:'a',x:15,y:6,rotation:90,enabled:true,condition:100,task:'sh1:forklift'});
+ s.yard.push({id:'arrival-1',site:'a',phase:'unloading',dock:'d1',item:'pallet',parcels:12,unloaded:4,carrier:'Talgrund Spedition',plate:'TGD-AB 100',phaseStart:600,phaseEnd:null,waitReason:null});
+ s.shipments.push({id:'sh1',status:'loading'});
+ return s;
+}
+test('W2b Akku: Anzeige 0–100 (fehlend 100), Farbe grün/gelb/rot ab 50/10 %, Label „Stapler · 54 %“',()=>{
+ assert.equal(forkliftCharge({}),100);assert.equal(forkliftCharge({charge:54}),54);assert.equal(forkliftCharge({charge:140}),100);assert.equal(forkliftCharge({charge:-3}),0);
+ assert.equal(forkliftLabel({charge:54}),'Stapler · 54 %');assert.equal(forkliftLabel({}),'Stapler · 100 %');assert.equal(forkliftLabel({charge:9.5}),'Stapler · 10 %');
+ assert.equal(chargeColor(100),'#3cbb8e');assert.equal(chargeColor(50),'#3cbb8e');assert.equal(chargeColor(49.5),'#e4ab4b');assert.equal(chargeColor(FORK_MIN),'#e4ab4b');assert.equal(chargeColor(FORK_MIN-.5),'#cb675d');
+});
+test('W2b Staplerbindung: Fremd-Lkw-Dock (a.dock), eigenes Fahrzeug-Dock (b.task), sonst frei',()=>{
+ const s=frozen(forkFixture()),by=id=>s.buildings.find(b=>b.id===id);
+ const t1=forkliftTarget(s,by('f1'));assert.equal(t1.dock.id,'d1');assert.equal(t1.inbound,true);
+ const t3=forkliftTarget(s,by('f3'));assert.equal(t3.dock.id,'d2');assert.equal(t3.inbound,false);
+ assert.equal(forkliftTarget(s,by('f2')),null);assert.equal(forkliftTarget(s,{...by('f1'),task:'arrival-9:forklift'}),null,'unbekannter Vorgang → parkt');
+ assert.equal(forkliftTarget(s,{...by('f1'),task:'arrival-1'}),null,'nur Staplerschlüssel');
+});
+test('W2b Stapler pendelt deterministisch zwischen Dock und nächstem Regal, ungebunden parkt er an der Ladesäule',()=>{
+ const s=forkFixture(),before=JSON.stringify(s);frozen(s);
+ const plans=forkliftPlans(s,'a'),by=id=>plans.find(p=>p.id===id);assert.equal(plans.length,3);
+ const f1=by('f1'),f2=by('f2'),f3=by('f3');
+ assert.equal(f1.dock,'d1');assert.equal(f1.rack,'r1','nächstes Regal zum Dock');assert.equal(f1.carry,'out');assert.equal(f3.dock,'d2');assert.equal(f3.rack,'r2');assert.equal(f3.carry,'in');
+ assert.equal(f2.path,null);assert.equal(f2.dock,null);assert.equal(f2.ready,false,'unter 10 % nicht einsatzbereit');assert.equal(f2.color,'#cb675d');assert.equal(f1.color,'#3cbb8e');assert.equal(f1.label,'Stapler · 54 %');
+ // Parkpose liegt im Staplerplatz (1×1), Ladesäule an der Rückseite.
+ assert.ok(f2.park.x>17&&f2.park.x<18&&f2.park.z>3&&f2.park.z<4);assert.ok(f2.charger.z<f2.park.z);
+ for(const c of [600,600.2,612.7])assert.deepEqual(forkliftPose(f2,c,{}),{x:f2.park.x,z:f2.park.z,heading:f2.park.heading,loaded:false},'ungebunden stationär');
+ // Deterministisch aus der Uhr, periodisch, bewegt sich, bleibt in der Halle.
+ const p=c=>forkliftPose(f1,c,{});assert.deepEqual(p(600.3),p(600.3));const a=p(600.3+FORK_CYCLE),b=p(600.3);assert.ok(Math.abs(a.x-b.x)<1e-9&&Math.abs(a.z-b.z)<1e-9,'Periode FORK_CYCLE');
+ const xs=new Set();for(let k=0;k<20;k++){const q=p(600+k*.05);xs.add(`${q.x.toFixed(2)},${q.z.toFixed(2)}`);assert.ok(q.x>0&&q.x<20&&q.z>0&&q.z<16,'in der Halle');}
+ assert.ok(xs.size>5,'Pendelbewegung sichtbar');
+ // Enden: Dockseite (Nordkante Dock d1) und Regalseite; Hinweg Dock→Regal beladen (entladen Fremd-Lkw), Rückweg leer.
+ const at=(f,u)=>forkliftPose(f,((u-f.phase)%1+1)%1,{});
+ const atDock=at(f1,.02),atRack=at(f1,.47);assert.ok(Math.abs(atDock.x-3.5)<1e-6&&Math.abs(atDock.z-(13-.45))<1e-6,JSON.stringify(atDock));assert.ok(Math.abs(atRack.x-3)<1e-6&&Math.abs(atRack.z-(6+.5))<1e-6,JSON.stringify(atRack));
+ assert.equal(at(f1,.25).loaded,true);assert.equal(at(f1,.75).loaded,false);
+ assert.equal(at(f3,.25).loaded,false);assert.equal(at(f3,.75).loaded,true,'Beladen eigenes Fahrzeug: Regal→Dock beladen');
+ assert.equal(JSON.stringify(s),before,'Zustand unverändert');
+});
+test('W2b Paletten: Auflieger zeigt Restpaletten (nur item pallet), Lagerpaletten als Stapel an Regalen, gedeckelt; Kartons/Regale unberührt',()=>{
+ assert.equal(trailerPallets({parcels:120,unloaded:0}),0,'Paketankunft ohne Paletten');assert.equal(trailerPallets({item:'pallet',parcels:12,unloaded:0}),PALLETS_PER_TRAILER);
+ assert.equal(trailerPallets({item:'pallet',parcels:12,unloaded:6}),4);assert.equal(trailerPallets({item:'pallet',parcels:12,unloaded:11}),1);assert.equal(trailerPallets({item:'pallet',parcels:12,unloaded:12}),0);
+ const L=yardLayout({width:20,height:16}),plan=arrivalPlan(L,arr('arrival-1','unloading',{item:'pallet',parcels:10,unloaded:5}),{});assert.equal(plan.pallet,true);assert.equal(plan.pallets,4);
+ assert.equal(arrivalPlan(L,arr('arrival-2','queue'),{rank:0}).pallet,false);
+ const s=forkFixture();s.batches.push({id:'p1',item:'pallet',site:'a',qty:7,location:'stock',owner:'order-1'},{id:'p2',item:'pallet',site:'b',qty:30,location:'stock'},{id:'k1',item:'parcel',site:'a',qty:40,location:'stock'});
+ frozen(s);const l=palletLoads(s,'a');assert.equal(l.stock,7);assert.equal(l.places,Math.ceil(7/PALLET_LEVELS));assert.equal(l.pallets.length,7);
+ assert.ok(l.pallets.every(p=>p.level<PALLET_LEVELS));assert.ok(l.pallets.every(p=>['r1','r2'].includes(p.anchor)));assert.ok(l.pallets.every(p=>p.z<5),'Nordseite des Regals (Kartons liegen südlich)');
+ assert.equal(rackPallets(s,s.buildings.find(b=>b.id==='r1')).length,0,'Paletten füllen keine Materialregale');assert.equal(parcelLoads(s,'a').stock,40,'Kartons unverändert');
+ const big=forkFixture();big.batches.push({id:'p1',item:'pallet',site:'a',qty:5000,location:'stock'});const lb=palletLoads(big,'a');assert.ok(lb.places<=MAX_PALLET_STACKS);assert.equal(lb.places,8,'2 Regale × 2 Plätze × 2 Reihen');assert.equal(lb.pallets.length,8*PALLET_LEVELS);
+ const none=fixture();none.batches.push({id:'p1',item:'pallet',site:'a',qty:5,location:'stock'});assert.equal(palletLoads(none,'a').pallets.length,0,'ohne Anker keine Stapel');
+});
+test('W2b Echter Ablauf: Palettenankunft entlädt mit Stapler, Szene zeigt Pendelfahrt, Restladung, Lagerstapel; nach Laden gleich',()=>{
+ const sim=new Simulation({mode:'sandbox'}),s=sim.state;
+ for(const [type,x,y] of [['dock',2,10],['rack',2,2],['rack',5,2],['forklift',12,2]])assert.equal(sim.command({type:'build',buildingType:type,x,y}).ok,true,type);
+ assert.equal(sim.command({type:'hire',role:'warehouse'}).ok,true);
+ const c=s.contracts[0];sim.command({type:'acceptContract',id:c.id});sim.command({type:'cancelContract',id:c.id});
+ const oid=sim.api.id('order');s.orders.push({id:oid,kind:'logistics',source:'hub',lane:'lane-0',customer:'Gebiet 1 (Testversand)',item:'pallet',qty:8,price:40,due:s.t+600,quality:0,site:s.selectedSite,status:'active',delivered:0,paid:0});
+ const a=yardMod.schedule(s,sim.api,{contractId:c.id,site:s.selectedSite,parcels:8,eta:s.t+20,orderIds:[oid]});assert.equal(a.item,'pallet');
+ let i=0;while(!(a.phase==='unloading'&&a.unloaded>=2)&&i++<400)sim.step(1);
+ const fork=s.buildings.find(b=>b.type==='forklift');assert.equal(fork.task,`${a.id}:forklift`,'Stapler gebunden');
+ const site=s.selectedSite,L=yardLayout(s.sites.find(x=>x.id===site)),bs=s.buildings.filter(b=>b.site===site);
+ const fp=forkliftPlans(s,site);assert.equal(fp.length,1);assert.equal(fp[0].dock,a.dock);assert.ok(fp[0].path,'Pendelweg');assert.match(fp[0].label,/^Stapler · \d+ %$/);
+ const plan=arrivalPlan(L,a,{dock:dockPoseFor(L,bs,a.dock)});assert.equal(plan.pallet,true);assert.equal(plan.pallets,trailerPallets(a));assert.ok(plan.pallets>0&&plan.pallets<PALLETS_PER_TRAILER);
+ const pl=palletLoads(s,site);assert.equal(pl.stock,a.unloaded,'entladene Paletten im Lager');assert.equal(pl.pallets.length,a.unloaded);
+ const st=Simulation.fromJSON(sim.serialize()).state,fp2=forkliftPlans(st,site);
+ assert.deepEqual(fp2.map(p=>[p.dock,p.label,p.carry]),fp.map(p=>[p.dock,p.label,p.carry]));assert.deepEqual(forkliftPose(fp2[0],st.t+.3,{}),forkliftPose(fp[0],s.t+.3,{}),'nach Laden gleiche Pose');
+ assert.deepEqual(palletLoads(st,site).pallets,pl.pallets);
+});

@@ -11,7 +11,7 @@ import { Scene, vehicleActivity, vehicleAtSite, coldWarnings } from './scene.js'
 export const VIEWS = ['hall', 'site', 'network', 'flat'];
 export const LABEL_MODES = ['fleet', 'infra', 'all', 'none'];
 export const MAX_LABELS = 40;
-const HEIGHT = { assembly: 1.5, testing: 1.45, packing: 1.2, rack: 1.75, dock: 2.3, power: 1.4, workshop: 1.25, research: 1.6, coldstore: 1.6, terminal: 1.45, sorter: 1.35 };
+const HEIGHT = { assembly: 1.5, testing: 1.45, packing: 1.2, rack: 1.75, dock: 2.3, power: 1.4, workshop: 1.25, research: 1.6, coldstore: 1.6, terminal: 1.45, sorter: 1.35, forklift: 1.3 };
 const ACTIVE = ['working', 'running', 'producing', 'active'];
 const BLOCKED = /wait|blocked|paused|material|staff|off|broken|power|storage/;
 const OUT = ['transit', 'collecting', 'linehaul', 'outbound'], IN = ['returning', 'inbound'];
@@ -149,8 +149,8 @@ export function vehicleT(plan, v, clock, stateT, visibleMinutes = 8) {
 /** Paletten je Regal wie in scene.js: Füllung aus Standortbestand, 3 Ebenen × Fachbreite. */
 export function rackPallets(state, rack) {
   const racks = (state?.buildings || []).filter(a => a.site === rack.site && /rack|shelf|regal/.test(a.type));
-  // Pakete (Fremdware, W1) erscheinen als Kartonstapel (parcelLoads), nicht als Paletten.
-  let qty = 0; for (const a of state?.batches || []) if (a.site === rack.site && a.location === 'stock' && a.item !== 'parcel') qty += a.qty;
+  // Pakete (Fremdware, W1) erscheinen als Kartonstapel (parcelLoads), Ladeeinheit Palette (W2) als Palettenstapel (palletLoads).
+  let qty = 0; for (const a of state?.batches || []) if (a.site === rack.site && a.location === 'stock' && a.item !== 'parcel' && a.item !== 'pallet') qty += a.qty;
   qty -= Math.max(0, racks.findIndex(a => a.id === rack.id)) * 80;
   const width = Math.max(1, Math.floor(BUILDINGS[rack.type]?.w || 2)), slots = [];
   for (let k = 0; k < 3; k++) for (let j = 0; j < width; j++) if (qty > k * 25 + j * 12) slots.push({ level: k, cell: j });
@@ -310,7 +310,7 @@ export function carrierColor(carrier) { let h = 0; for (const ch of String(carri
 export function arrivalPlan(L, a, ctx = {}) {
   if (!a || !PHASE_LABEL[a.phase]) return null;
   const g = gatePose(L), dock = ctx.dock || null, timed = Number.isFinite(a.phaseStart) && Number.isFinite(a.phaseEnd);
-  const plan = { id: a.id, phase: a.phase, path: null, t0: timed ? a.phaseStart : null, t1: timed ? a.phaseEnd : null, pose: g, fixedHeading: null, tone: arrivalTone(a), label: arrivalLabel(a), color: carrierColor(a.carrier), x: g.x, z: g.z, heading: g.heading };
+  const plan = { id: a.id, phase: a.phase, path: null, t0: timed ? a.phaseStart : null, t1: timed ? a.phaseEnd : null, pose: g, fixedHeading: null, tone: arrivalTone(a), label: arrivalLabel(a), color: carrierColor(a.carrier), x: g.x, z: g.z, heading: g.heading, pallet: a.item === 'pallet', pallets: trailerPallets(a) };
   switch (a.phase) {
     case 'approach': plan.path = approachPath(L); break;
     case 'gate': break;
@@ -369,6 +369,72 @@ export function parcelLoads(state, siteId, buildings = (state?.buildings || []).
     stacks.push(toWorld(b, lx, lz, { anchor: b.id, sy: .35 + .65 * fill }));
   }
   return { inbound, stock, cages, stacks };
+}
+
+// ---------- Stapler und Paletten (W2-S2), nur lesend ----------
+// Staplerplatz b (type 'forklift', 1×1): b.charge 0–100 (fehlend = 100), Bindung b.task = '<Vorgang>:forklift' (yard.js).
+// Vorgang = Fremd-Lkw in s.yard (Phase unloading, Dock a.dock) oder eigene Sendung/Tour (Dock mit b.task = Vorgangs-ID).
+// Fahrt Dock ↔ Regal rein optisch aus der Anzeigeuhr (deterministisch, keine Buchung).
+export const FORK_MIN = 10;                 // wie yard.js FORKLIFT.min: darunter nicht einsatzbereit
+export const FORK_CYCLE = 1;                // Spielminuten je Pendelrunde (≈ 1 Palette/min einer Standardkraft)
+export const PALLETS_PER_TRAILER = 8, PALLET_LEVELS = 3, MAX_PALLET_STACKS = 32;
+const RACK = /rack|shelf|regal/;
+/** Akkustand 0–100 (fehlend = 100). */
+export function forkliftCharge(b) { return Number.isFinite(b?.charge) ? Math.max(0, Math.min(100, b.charge)) : 100; }
+/** Farbe der Akkuanzeige: grün ≥ 50 %, gelb ≥ 10 %, rot darunter (nicht einsatzbereit). */
+export function chargeColor(c) { return c >= 50 ? '#3cbb8e' : c >= FORK_MIN ? '#e4ab4b' : '#cb675d'; }
+export function forkliftLabel(b) { return `Stapler · ${Math.round(forkliftCharge(b))} %`; }
+/** Ziel der Staplerbindung: {dock, inbound, key} oder null (frei, unbekannt, ohne Dock). */
+export function forkliftTarget(state, b, buildings = state?.buildings || []) {
+  const key = typeof b?.task === 'string' && b.task.endsWith(':forklift') ? b.task.slice(0, -':forklift'.length) : null; if (!key) return null;
+  const a = (state?.yard || []).find(y => y.id === key && y.site === b.site && y.phase === 'unloading');
+  const dock = a ? buildings.find(o => o.id === a.dock && o.type === 'dock') : buildings.find(o => o.type === 'dock' && o.site === b.site && o.task === key);
+  return dock ? { dock, inbound: !!a, key } : null;
+}
+/** Anfahrpunkt einer Anlage auf der Seite zur Hallenmitte (Weltkoordinaten). */
+function sidePoint(b, siteH, gap = .45) { const box = buildingBox(b), cx = (box.x0 + box.x1) / 2; return (box.z0 + box.z1) / 2 > siteH / 2 ? { x: cx, z: box.z0 - gap } : { x: cx, z: box.z1 + gap }; }
+/**
+ * Stapler je Staplerplatz am Standort: Parkpose vor der Ladesäule, Akku, Label, bei Bindung Pendelweg Dock ↔ nächstes Regal.
+ * carry: 'out' Ware fährt Dock → Regal (Fremd-Lkw entladen), 'in' Regal → Dock (eigenes Fahrzeug beladen).
+ */
+export function forkliftPlans(state, siteId, buildings = (state?.buildings || []).filter(b => b.site === siteId)) {
+  const site = state?.sites?.find(x => x.id === siteId) || defaultSite(state), H = site.height || 16, racks = buildings.filter(b => RACK.test(b.type)), out = [];
+  buildings.filter(b => b.type === 'forklift').forEach((b, i) => {
+    const park = toWorld(b, 0, .12, {}), charger = toWorld(b, 0, -.36, {}); park.heading = Math.atan2(Math.cos(park.rot), Math.sin(park.rot));
+    const charge = forkliftCharge(b), target = forkliftTarget(state, b, buildings);
+    const plan = { id: b.id, park, charger, charge, color: chargeColor(charge), label: forkliftLabel(b), ready: b.enabled !== false && charge >= FORK_MIN, dock: target?.dock.id || null, rack: null, carry: null, path: null, phase: (i * .37) % 1, x: park.x, z: park.z, heading: park.heading, loaded: false };
+    if (target) {
+      const d = sidePoint(target.dock, H), dc = buildingBox(target.dock);
+      let rack = null, best = Infinity; for (const r of racks) { const rb = buildingBox(r), dist = Math.hypot((rb.x0 + rb.x1 - dc.x0 - dc.x1) / 2, (rb.z0 + rb.z1 - dc.z0 - dc.z1) / 2); if (dist < best) { best = dist; rack = r; } }
+      const r = rack ? sidePoint(rack, H, .5) : { x: park.x, z: park.z }, mz = (d.z + r.z) / 2;
+      plan.path = makePath([pt(d.x, d.z), pt(d.x, mz), pt(r.x, mz), pt(r.x, r.z)], .6, 4);
+      plan.carry = target.inbound ? 'out' : 'in'; plan.rack = rack?.id || null;
+    }
+    forkliftPose(plan, state?.t ?? 0, plan); out.push(plan);
+  });
+  return out;
+}
+/** Pose zur Anzeigezeit clock: ungebunden an der Ladesäule; gebunden Hinweg (u < ½) Dock → Regal, Rückweg Regal → Dock, Gabeln voran. */
+export function forkliftPose(plan, clock, out = {}) {
+  if (!plan.path) { out.x = plan.park.x; out.z = plan.park.z; out.heading = plan.park.heading; out.loaded = false; return out; }
+  const c = Number.isFinite(clock) ? clock : 0, u = (((c / FORK_CYCLE + plan.phase) % 1) + 1) % 1, back = u >= .5, t = Math.max(0, Math.min(1, ((back ? u - .5 : u) - .05) / .4));
+  pathPose(plan.path, back ? 1 - t : t, out); if (back) out.heading += Math.PI;
+  out.loaded = plan.carry === 'out' ? !back : back; return out;
+}
+/** Paletten auf dem Auflieger eines Fremd-Lkw (nur a.item 'pallet'): Anteil der noch nicht entladenen, höchstens 8 Plätze. */
+export function trailerPallets(a) {
+  if (a?.item !== 'pallet' || !(a.parcels > 0)) return 0;
+  return Math.max(0, Math.min(PALLETS_PER_TRAILER, Math.ceil(PALLETS_PER_TRAILER * (a.parcels - (a.unloaded || 0)) / a.parcels)));
+}
+/** Palettenstapel (item 'pallet', location stock) an der Regalnordseite: je Platz bis 3 Ebenen, gedeckelt auf MAX_PALLET_STACKS Plätze. */
+export function palletLoads(state, siteId, buildings = (state?.buildings || []).filter(b => b.site === siteId)) {
+  let stock = 0; for (const a of state?.batches || []) if (a.site === siteId && a.item === 'pallet' && a.location === 'stock' && a.qty > 0) stock += a.qty;
+  let anchors = buildings.filter(b => RACK.test(b.type)); if (!anchors.length) anchors = buildings.filter(b => b.type === 'forklift' || b.type === 'dock');
+  const slots = [];
+  for (const b of anchors) { const d = BUILDINGS[b.type] || { w: 2, h: 2 }, cols = Math.max(1, Math.floor(d.w / .9)); for (let row = 0; row < 2; row++) for (let col = 0; col < cols; col++) slots.push([b, -(cols - 1) * .45 + col * .9, -d.h / 2 - .5 - row * .9]); }
+  const places = Math.min(MAX_PALLET_STACKS, slots.length, Math.ceil(stock / PALLET_LEVELS)), pallets = [];
+  for (let i = 0; i < places; i++) { const [b, lx, lz] = slots[i], n = Math.min(PALLET_LEVELS, stock - i * PALLET_LEVELS); for (let k = 0; k < n; k++) pallets.push(toWorld(b, lx, lz, { anchor: b.id, level: k })); }
+  return { stock, places, pallets };
 }
 
 // ---------- Geometrie-Werkzeuge ----------
@@ -466,6 +532,14 @@ function buildingModel(P, type, d) {
       P.box(hw - .5, .12, -hh + .12, .38, .9, .3, '#d3dadb'); P.cyl(hw - .31, 1.02, -hh + .27, .04, .2, '#5d6d70'); P.cyl(hw - .31, 1.22, -hh + .27, .07, .1, '#3cbb8e'); P.cyl(hw - .31, 1.32, -hh + .27, .07, .1, '#e4ab4b'); P.cyl(hw - .31, 1.42, -hh + .27, .07, .1, '#cb675d');
       break;
     }
+    case 'forklift':
+      // Staplerplatz 1×1: Bodenmarkierung, Ladesäule an der Rückseite (−z) mit Anzeigefeld (Akkubalken dynamisch), Ladekabel.
+      P.box(-hw + .04, 0, -hh + .04, d.w - .08, .02, d.h - .08, '#c3cbc6');
+      for (let i = 0; i < 4; i++) P.box(-hw + .06 + i * .24, .02, hh - .12, .12, .006, .06, i % 2 ? '#3f4f50' : '#f2c363');
+      P.box(-hw + .04, .02, -hh + .04, .04, .006, d.h - .08, '#f2c363'); P.box(hw - .08, .02, -hh + .04, .04, .006, d.h - .08, '#f2c363');
+      P.box(-.2, 0, -hh + .04, .4, .1, .26, '#788f96'); P.box(-.16, .1, -hh + .08, .32, 1.05, .18, '#d3dadb'); P.box(-.18, 1.15, -hh + .06, .36, .06, .22, tint);
+      P.box(-.13, .3, -hh + .26, .26, .7, .012, '#2e3a3c'); P.box(.12, .55, -hh + .26, .05, .05, .2, '#5d6d70'); P.box(.15, .2, -hh + .44, .03, .37, .03, '#2e3a3c');
+      break;
     default:
       plinth(); P.box(-hw + .2, .12, -hh + .2, d.w - .4, .8, d.h - .4, tint);
   }
@@ -644,6 +718,19 @@ export class Scene3D {
       // Rollcontainer (inbound) und Kartonstapel (stock), instanziert.
       cage: inst(mergedGeo(P => { P.box(-.22, .03, -.24, .44, .04, .48, '#7d8a8e'); for (const x of [-.22, .2]) for (const z of [-.24, .22]) P.box(x, .07, z, .02, .8, .02, '#a9b6ba'); P.box(-.22, .45, -.24, .44, .015, .48, '#a9b6ba'); P.box(-.18, .07, -.2, .36, .3, .4, '#d9b37a'); P.box(-.16, .47, -.18, .32, .28, .36, '#e3c08a'); P.box(-.21, .07, -.235, .42, .78, .005, '#c7d0d3'); }), this.mat.inst, 16),
       stack: inst(mergedGeo(P => { P.box(-.26, 0, -.26, .52, .08, .52, '#c9a26a'); P.box(-.24, .08, -.24, .23, .2, .23, '#d9b37a'); P.box(.01, .08, -.24, .23, .2, .23, '#e3c08a'); P.box(-.24, .08, .01, .23, .2, .23, '#e3c08a'); P.box(.01, .08, .01, .23, .2, .23, '#d9b37a'); P.box(-.22, .28, -.22, .44, .22, .44, '#e8cf9f'); P.box(-.18, .5, -.18, .36, .2, .36, '#d9b37a'); }), this.mat.inst, 16),
+      // W2-S2: Palettenauflieger (Pritsche, Bug +x), Ladung darauf, Palettenstapel im Lager, Stapler (Gabeln +x), mitgeführte Palette, Akkubalken.
+      fflat: inst(mergedGeo(P => { P.box(-2.5, .5, -.63, 3.55, .12, 1.26, '#b9c0bd'); P.box(-2.52, .5, -.645, 3.59, .14, .03, '#5f7478'); P.box(-2.52, .5, .615, 3.59, .14, .03, '#5f7478'); P.box(.9, .62, -.63, .1, .95, 1.26, '#c8ccc4'); P.box(-2.4, .3, -.5, 3.3, .2, 1.0, '#3c4a4d'); for (const x of [-2.05, -1.6, -1.15]) for (const z of [-.66, .52]) { const r = new THREE.Matrix4().makeRotationX(Math.PI / 2).multiply(new THREE.Matrix4().makeScale(.56, .14, .56)).setPosition(x, .28, z); P.add(prims().cyl10, r, '#2f3a3d'); } }), this.mat.inst, 4),
+      tload: inst(pallet, this.mat.inst, 16), pstack: inst(pallet, this.mat.inst, 32), fload: inst(pallet, this.mat.inst, 4),
+      fork: inst(mergedGeo(P => {
+        P.box(-.42, .08, -.24, .62, .22, .48, '#f0b84a'); P.box(-.5, .08, -.25, .14, .36, .5, '#3c4a4d'); P.box(-.22, .3, -.13, .18, .14, .26, '#2e3a3c'); P.box(-.32, .44, -.13, .06, .2, .26, '#2e3a3c');
+        for (const x of [-.4, .1]) for (const z of [-.21, .17]) P.box(x, .3, z, .04, .58, .04, '#3c4a4d');
+        P.box(-.42, .88, -.23, .58, .04, .46, '#3c4a4d');
+        for (const z of [-.19, .14]) P.box(.2, .06, z, .05, 1.02, .05, '#5d6d70'); P.box(.2, .95, -.19, .05, .06, .38, '#5d6d70'); P.box(.25, .08, -.17, .04, .32, .34, '#5d6d70');
+        for (const z of [-.15, .08]) P.box(.27, .06, z, .5, .03, .07, '#7b8b8e');
+        for (const [x, z] of [[-.3, -.27], [-.3, .21], [.1, -.27], [.1, .21]]) { const r = new THREE.Matrix4().makeRotationX(Math.PI / 2).multiply(new THREE.Matrix4().makeScale(.2, .06, .2)).setPosition(x, .1, z); P.add(prims().cyl10, r, '#2f3a3d'); }
+        P.box(-.05, .93, -.03, .06, .05, .06, '#f2c363');
+      }), this.mat.inst, 4),
+      charge: inst(prims().box, this.mat.lamp, 4),
       car: inst(mergedGeo(P => { P.box(-.9, .15, -.42, 1.8, .42, .84, '#ffffff'); P.box(-.5, .57, -.38, .95, .32, .76, '#ffffff'); P.box(-.48, .6, -.39, .9, .24, .78, '#3c5560'); }), this.mat.inst, 16)
     };
     for (const m of Object.values(this.inst)) g.add(m);
@@ -735,7 +822,8 @@ export class Scene3D {
     for (const b of buildings) {
       const box = buildingBox(b), tone = buildingTone(b), cx = (box.x0 + box.x1) / 2, cz = (box.z0 + box.z1) / 2, warn = b.type === 'coldstore' && coldWarnings(st, b.site).length;
       this.boxes.push({ id: b.id, box });
-      this.infra.push({ id: b.id, x: cx, y: box.y1 + .75, z: cz, text: `${BUILDINGS[b.type]?.name || b.type} · ${this.buildingStatus(b)}`, tone: tone === 'blocked' || warn ? 'wait' : 'infra', prio: warn || tone === 'blocked' || (b.type === 'terminal' && b.freightTask) ? 1 : 3 });
+      if (b.type === 'forklift') { const low = forkliftCharge(b) < FORK_MIN; this.infra.push({ id: b.id, x: cx, y: box.y1 + .75, z: cz, text: forkliftLabel(b), tone: low || tone === 'blocked' ? 'wait' : 'infra', prio: low || tone === 'blocked' ? 1 : 3 }); }
+      else this.infra.push({ id: b.id, x: cx, y: box.y1 + .75, z: cz, text: `${BUILDINGS[b.type]?.name || b.type} · ${this.buildingStatus(b)}`, tone: tone === 'blocked' || warn ? 'wait' : 'infra', prio: warn || tone === 'blocked' || (b.type === 'terminal' && b.freightTask) ? 1 : 3 });
       this.setInst(lamp, n, cx, box.y1 + .32, cz, 0, 1, 1, 1, warn ? TONE_HEX.blocked : TONE_HEX[tone]);
       this.setInst(plate, n, cx, .07, cz, 0, box.w + .12, 1, box.h + .12, tone === 'active' ? '#7fd9b4' : tone === 'blocked' || warn ? '#f3c674' : '#d7dfdb'); n++;
       if (/rack|shelf|regal/.test(b.type)) {
@@ -777,6 +865,14 @@ export class Scene3D {
     const loads = parcelLoads(st, s.id, buildings), cage = this.ensure('cage', loads.cages.length), stack = this.ensure('stack', loads.stacks.length);
     loads.cages.forEach((c, i) => this.setInst(cage, i, c.x, .56, c.z, c.rot, 1, 1, 1)); this.finish(cage, loads.cages.length);
     loads.stacks.forEach((c, i) => this.setInst(stack, i, c.x, .065, c.z, c.rot, 1, c.sy, 1)); this.finish(stack, loads.stacks.length);
+    // Paletten (W2-S2): Palettenstapel im Lager (gedeckelt), Ladung der Palettenauflieger, Stapler mit Akkubalken.
+    const pl = palletLoads(st, s.id, buildings), ps = this.ensure('pstack', pl.pallets.length);
+    pl.pallets.forEach((c, i) => this.setInst(ps, i, c.x, .065 + c.level * .47, c.z, c.rot, 1, 1, 1)); this.finish(ps, pl.pallets.length);
+    this.ensure('fflat', yplans.length); this.ensure('tload', yplans.reduce((n, p) => n + p.pallets, 0));
+    const forks = this.forks = forkliftPlans(st, s.id, buildings), bar = this.ensure('charge', forks.length); this.ensure('fork', forks.length); this.ensure('fload', forks.length);
+    forks.forEach((f, i) => { const c = f.charger; this.setInst(bar, i, c.x + Math.sin(c.rot) * .14, .4, c.z + Math.cos(c.rot) * .14, c.rot, .18, .02 + .56 * f.charge / 100, .02, f.color); });
+    this.finish(bar, forks.length);
+    for (const f of forks) { f.infra = this.infra.find(e => e.id === f.id); f.shown = true; f.hit = { id: f.id, box: { x0: 0, x1: 0, y0: 0, y1: 1, z0: 0, z1: 0 }, fleet: f }; this.boxes.push(f.hit); }
     // Auswahlrahmen und Baugeist
     const sel = buildings.find(b => b.id === this.selected);
     if (sel && this.view !== 'network') { const b = buildingBox(sel); this.selectBox.scale.set(b.w + .16, b.y1 + .1, b.h + .16); this.selectBox.position.set(b.x0 - .08, .02, b.z0 - .08); this.selectBox.visible = true; } else this.selectBox.visible = false;
@@ -825,7 +921,7 @@ export class Scene3D {
     for (const key of CAM_KEYS) { const d = g[key] - c[key]; if (Math.abs(d) > (key === 'yaw' ? 1e-4 : 1e-3)) { c[key] += dt ? d * k : 0; moving = true; } else c[key] = g[key]; }
     if (moving || this.needs) this.applyCamera();
     const net = this.view === 'network'; this.siteGroup.visible = !net; this.netGroup.visible = net;
-    const clock = this.displayClock(now), animated = net ? this.placeTransfers(clock) : !!(this.placeVehicles(clock) | this.placeYard(clock));
+    const clock = this.displayClock(now), animated = net ? this.placeTransfers(clock) : !!(this.placeVehicles(clock) | this.placeYard(clock) | this.placeForklifts(clock));
     const render = moving || this.needs || animated || this.pointer?.moved;
     if (render) { this.renderer.render(this.scene, this.camera()); this.updateLabels(); this.needs = false; }
     this.renderedLast = render;
@@ -844,13 +940,30 @@ export class Scene3D {
     this.finish(box, n); this.finish(cab, n); this.finish(base, n); return animated;
   }
   placeYard(clock) {
-    const tr = this.inst.ftrailer, cab = this.inst.fcab; let n = 0, animated = false;
+    const tr = this.inst.ftrailer, cab = this.inst.fcab, flat = this.inst.fflat, load = this.inst.tload; let n = 0, nf = 0, nl = 0, animated = false;
     for (const p of this.yardFleet) {
       arrivalPose(p, clock, p); if (arrivalMoving(p, clock)) animated = true;
-      const rot = -p.heading; this.setInst(tr, n, p.x, 0, p.z, rot, 1, 1, 1, '#e3e6ea'); this.setInst(cab, n, p.x, 0, p.z, rot, 1, 1, 1, p.color); n++;
+      const rot = -p.heading; this.setInst(cab, n, p.x, 0, p.z, rot, 1, 1, 1, p.color); n++;
+      if (p.pallet) {
+        // Palettenauflieger: Ladung von vorn (Stirnwand) nach hinten, hintere Plätze leeren sich beim Entladen zuerst.
+        this.setInst(flat, nf++, p.x, 0, p.z, rot, 1, 1, 1, '#e3e6ea'); const c = Math.cos(p.heading), sn = Math.sin(p.heading);
+        for (let i = 0; i < p.pallets; i++) { const lx = .4 - Math.floor(i / 2) * .85, lz = i % 2 ? .3 : -.3; this.setInst(load, nl++, p.x + lx * c - lz * sn, .62, p.z + lx * sn + lz * c, rot, .75, .9, .75); }
+      } else this.setInst(tr, n - 1 - nf, p.x, 0, p.z, rot, 1, 1, 1, '#e3e6ea');
       const r = FOREIGN_LEN / 2, hb = p.hit.box; hb.x0 = p.x - r; hb.x1 = p.x + r; hb.z0 = p.z - r; hb.z1 = p.z + r;
     }
-    this.finish(tr, n); this.finish(cab, n); return animated;
+    this.finish(tr, n - nf); this.finish(cab, n); this.finish(flat, nf); this.finish(load, nl); return animated;
+  }
+  /** Stapler: Pose aus der Anzeigeuhr (rein optisch), mitgeführte Palette, Label folgt dem Fahrzeug. */
+  placeForklifts(clock) {
+    const m = this.inst.fork, load = this.inst.fload; let n = 0, nl = 0, animated = false;
+    for (const f of this.forks || []) {
+      forkliftPose(f, clock, f); if (f.path) animated = true;
+      const rot = -f.heading; this.setInst(m, n++, f.x, .06, f.z, rot, 1, 1, 1, '#ffffff');
+      if (f.loaded) this.setInst(load, nl++, f.x + Math.cos(f.heading) * .52, .1, f.z + Math.sin(f.heading) * .52, rot, .62, .8, .62);
+      if (f.infra) { f.infra.x = f.x; f.infra.z = f.z; f.infra.y = 1.7; }
+      const hb = f.hit.box; hb.x0 = f.x - .45; hb.x1 = f.x + .45; hb.z0 = f.z - .45; hb.z1 = f.z + .45;
+    }
+    this.finish(m, n); this.finish(load, nl); return animated;
   }
   placeTransfers(clock) {
     const m = this.inst.marker, st = this.state; let n = 0, animated = false;
