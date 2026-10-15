@@ -84,11 +84,11 @@ for(const [width,height] of [[1920,1080],[1280,800]]){
  check(!errors.length,`${label}: keine Konsolenfehler${errors.length?' – '+errors.join(' | '):''}`);
  await context.close();
 }
-// Hub W1-S4: Probe-Zustand (echte Verträge/Hof, Ersatz-Sortierzähler) über den echten Importweg laden; Hof & Docks und Verträge.
+// Hub W1-S4: Probe-Zustand (echte Verträge, Hof und Sortierung; Platzhalter-Dockbelegung) über den echten Importweg laden; Hof & Docks und Verträge.
 {
  const {Simulation}=await import(pathToFileURL(path.join(root,'dist/core.js')).href);
  const {hubProbe}=await import(pathToFileURL(path.join(root,'tests/ui-hub-probe.js')).href);
- const queued=hubProbe(Simulation,{blockDocks:true,sortedCounter:true}).sim.serialize(),unloading=hubProbe(Simulation,{sortedCounter:true}).sim.serialize();
+ const queued=hubProbe(Simulation,{blockDocks:true}).sim.serialize(),unloading=hubProbe(Simulation).sim.serialize();
  for(const [width,height,json,shot] of [[1920,1080,unloading,'hof-ui-0.9.png'],[1280,800,queued,null]]){
   const label=`Hub ${width}×${height}`;const context=await browser.newContext({viewport:{width,height},deviceScaleFactor:1});const page=await context.newPage();
   const errors=[];page.on('console',m=>{if(m.type()==='error'&&!/favicon\.ico/.test(m.location()?.url||''))errors.push(m.text());});page.on('pageerror',e=>errors.push(String(e)));

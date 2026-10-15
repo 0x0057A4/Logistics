@@ -41,9 +41,10 @@ test('Hof & Docks: Torbuch, Dock-Belegung, Standortfluss und Fremd-Lkw in der Fa
  assert.match(body,/Dock 1 <span class="chip tone-move">Fremd-Lkw<\/span>/);assert.match(body,/Dock 2 <span class="chip tone-move">Eigene Ladung<\/span>/);
  const inbound=ui.run("sim.state.batches.filter(b=>b.item==='parcel'&&b.location==='inbound').reduce((n,b)=>n+b.qty,0)");
  assert.equal(text(ui,'st-gate-n'),'1');assert.equal(text(ui,'st-gate-sub'),'1 am Dock');assert.equal(text(ui,'st-unload-n'),'2/2');assert.equal(text(ui,'st-unload-sub'),'1 Lkw entladen · 1 eigene Ladung');
- assert.equal(text(ui,'st-sort-n'),String(inbound));assert.match(text(ui,'st-sort-sub'),/^\d+\/1 Sortierplätze arbeitend/);
+ assert.equal(text(ui,'st-sort-n'),String(inbound));assert.equal(text(ui,'st-sort-sub'),'1/1 Sortierplätze arbeitend');assert.match(ui.nodes.get('#st-sort').className,/tone-move/);
  const lane=ui.run(`(()=>{const o=sim.state.orders.find(o=>o.id==='${ids.orders[0]}'),c=sim.state.contracts.find(c=>c.id===o.contractId);return c.lanes.find(l=>l.id===o.lane).name;})()`);
- assert.equal(text(ui,'st-out-n'),'6');assert.equal(text(ui,'st-out-sub'),`${lane} 6`);
+ const out=ui.run(`sim.state.batches.filter(b=>b.item==='parcel'&&b.location==='stock'&&b.owner==='${ids.orders[0]}').reduce((n,b)=>n+b.qty,0)`),outAll=ui.run("sim.state.batches.filter(b=>b.item==='parcel'&&b.location==='stock').reduce((n,b)=>n+b.qty,0)");
+ assert.ok(out>0);assert.equal(text(ui,'st-out-n'),String(outAll));assert.ok(text(ui,'st-out-sub').includes(`${lane} ${out}`),text(ui,'st-out-sub'));
  assert.equal(text(ui,'st-delivery-n'),'2');assert.match(text(ui,'st-delivery-sub'),/Pakete offen/);
  for(const id of ['inbound','production','quality','service'])assert.equal(ui.nodes.get('#stl-'+id).hidden,true,id+' ohne Fertigungsanlagen ausgeblendet');
  const row=ui.nodes.get('#vbarList').children.find(r=>r.dataset.arrival===a.id);assert.ok(row,'Fremd-Lkw in Fahrzeugleiste');
@@ -75,11 +76,13 @@ test('Glocke: verspätete Vertragsaufträge gebündelt je Vertrag statt je Auftr
 });
 
 test('KPI „Verarbeitet heute“ nur mit Sortierzähler; Build-Tray-Icon Sortierplatz; Anzeige verändert keinen Zustand',async()=>{
- let {ui}=await probe();assert.equal(ui.nodes.get('#kpiSortedBox').hidden,true,'ohne Zähler kein KPI');
+ let ui=await boot();await ui.click('start');assert.equal(ui.run('sim.state.sorting'),undefined);assert.equal(ui.nodes.get('#kpiSortedBox').hidden,true,'ohne Zähler kein KPI');
+ ({ui}=await probe());
  const before=ui.run('sim.serialize()');for(const p of ['contracts','yard'])press(ui,{panel:p});ui.run('render(true)');assert.equal(ui.run('sim.serialize()'),before);
  ui.click('build','sorter');assert.equal(ui.run('build'),'sorter');assert.match(ui.nodes.get('#buildItems').innerHTML,/data-build="sorter" class="active"><i>⇶<\/i><b>Sortierplatz/);
- ({ui}=await probe({sortedCounter:true}));assert.equal(ui.nodes.get('#kpiSortedBox').hidden,false);assert.equal(text(ui,'kpiSorted'),'6');assert.equal(text(ui,'kpiSortedSub'),'Pakete · gesamt 6');
- ui.run('sim.state.stats.sortedDay.day-=1');ui.run('render(true)');assert.equal(text(ui,'kpiSorted'),'0','Vortag zählt nicht als heute');
+ const sorted=ui.run("sim.state.sorting.sites['site-1'].today");assert.ok(sorted>0);assert.equal(ui.run("sim.state.sorting.day"),ui.run('Math.floor(sim.state.t/1440)'));
+ assert.equal(ui.nodes.get('#kpiSortedBox').hidden,false);assert.equal(text(ui,'kpiSorted'),String(sorted));assert.equal(text(ui,'kpiSortedSub'),`Pakete · gesamt ${sorted}`);
+ ui.run('sim.state.sorting.day-=1');ui.run('render(true)');assert.equal(text(ui,'kpiSorted'),'0','Vortag zählt nicht als heute');
 });
 
 test('Phasenlabels deutsch (W1-S4); Sendungs-Entladung bleibt „Entladung“',async()=>{

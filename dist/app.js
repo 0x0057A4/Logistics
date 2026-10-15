@@ -445,13 +445,14 @@ function collectHub(s,h,{alert,orders,siteName,lateByContract}){
  for(const b of s.batches){if(b.item!=='parcel'||!(b.qty>0)||b.site!==site)continue;
   if(b.location==='inbound')u.inbound+=b.qty;
   else if(b.location==='stock'){const o=orders.get(b.owner),lane=laneName(contracts.get(o?.contractId),o);u.out.set(lane,(u.out.get(lane)||0)+b.qty);u.outTotal+=b.qty;}}
- // KPI „Verarbeitet heute“ nur mit Zähler der Sortierung (bei A05 beantragt: s.stats.sortedDay={day,qty}, s.stats.sorted).
- const sd=s.stats?.sortedDay;if(sd&&typeof sd==='object'&&Number.isFinite(sd.qty)){h.sorted=sd.day===h.day?sd.qty:0;h.sortedTotal=Number.isFinite(s.stats.sorted)?s.stats.sorted:null;}
+ // KPI „Verarbeitet heute“ aus dem Zähler der Sortierung (sorting.js: s.sorting={day,sites:{[site]:{hand,today,total}}}),
+ // alle Standorte wie „Ausgeliefert heute“. Ohne Zähler (noch kein Sortierbedarf) bleibt die Kennzahl ausgeblendet.
+ const so=s.sorting;if(so&&typeof so==='object'&&so.sites){let today=0,total=0;for(const x of Object.values(so.sites)){if(so.day===h.day)today+=Number(x.today)||0;total+=Number(x.total)||0;}h.sorted=today;h.sortedTotal=total;u.hand=so.sites[site]?.hand||null;}
 }
 function renderHubStations(h){const u=h.hub;
  station('gate',fmt(u.onSite),parts([[u.approach,'in Anfahrt'],[u.queue,'warten auf Dock'],[u.atDock,'am Dock'],[u.blocked,'mit Wartegrund']])||(u.onSite?'Torkontrolle / Ausfahrt':'Kein Lkw am Hof'),u.queue||u.blocked?'wait':u.onSite||u.approach?'move':'neutral');
  station('unload',`${h.busy}/${h.docks}`,!h.docks?'Kein Dock gebaut':parts([[u.unloading,'Lkw entladen'],[u.atDock-u.unloading,'Lkw am Dock'],[Math.max(0,h.busy-u.atDock),'eigene Ladung'],[u.unloadWait,'wartet']])||(h.busy?'Docks belegt':'Alle Docks frei'),u.unloadWait?'wait':h.busy?'move':'neutral');
- station('sort',fmt(u.inbound),u.sorters?`${fmt(u.sortWork)}/${fmt(u.sorters)} Sortierplätze arbeitend${u.sortBlock?' · '+label(u.sortBlock):''}`:u.inbound?'Kein Sortierplatz · Handsortierung':'Kein Sortierplatz',u.sortBlock?'wait':u.sortWork?'move':u.inbound?'wait':'neutral');
+ station('sort',fmt(u.inbound),u.sorters?`${fmt(u.sortWork)}/${fmt(u.sorters)} Sortierplätze arbeitend${u.sortBlock?' · '+label(u.sortBlock):''}`:u.hand==='working'?'Handsortierung läuft':u.inbound?'Kein Sortierplatz · Handsortierung '+(u.hand==='staff'?'wartet auf Lagerkraft':u.hand==='storage'?'blockiert':'wartet'):'Kein Sortierplatz',u.sortBlock?'wait':u.sortWork||u.hand==='working'?'move':u.inbound?'wait':'neutral');
  station('out',fmt(u.outTotal),u.outTotal?[...u.out].sort((a,b)=>b[1]-a[1]).map(([lane,n])=>`${lane} ${fmt(n)}`).join(' · '):'Keine versandfähigen Pakete',u.outTotal?'move':'neutral');
  station('delivery',fmt(u.orders),u.orders?parts([[u.openParcels,'Pakete offen'],[u.late,'verspätet'],[h.loadsToday,'Abfahrten heute']])||'Alle Pakete unterwegs':'Keine aktiven Hub-Aufträge',u.late?'bad':u.orders?'move':'neutral');}
 function hubPanelFor(id){const s=sim.state;if((s.yard||[]).some(a=>a.id===id))return 'yard';if((s.contracts||[]).some(c=>c.id===id))return 'contracts';return null;}
