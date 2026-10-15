@@ -68,7 +68,7 @@ export function large(seed=4242,{warmup=600,history=25000}={}){
 // fromJSON eines gültigen Zustands geladen; der Validator prüft den Stand vollständig.
 export function withHistory(sim,count){
  if(!count)return sim;
- const s=JSON.parse(sim.serialize()),items=Object.keys(ITEMS).filter(k=>!ITEMS[k].cold&&k!=='parcel'),locs=['stock','stock','stock','machine','vehicle'],hist=[];
+ const s=JSON.parse(sim.serialize()),items=Object.keys(ITEMS).filter(k=>!ITEMS[k].cold&&k!=='parcel'&&k!=='pallet'),locs=['stock','stock','stock','machine','vehicle'],hist=[];
  for(let k=0;k<count;k++){const site=s.sites[k%s.sites.length].id,item=items[(k*7)%items.length],id=`batch-${s.seq++}`;
   hist.push({id,item,qty:0,site,owner:'company',location:locs[k%locs.length],quality:80+(k%20),unitCost:10+(k%13),parents:k>=s.sites.length&&k%3?[hist[k-s.sites.length].id]:[],reserved:0,created:480+(k%400)});}
  s.batches=[...hist,...s.batches];
