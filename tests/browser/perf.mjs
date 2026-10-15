@@ -1,5 +1,5 @@
 // Browser-Leistungsmessung (Playwright, Chromium headless). Nicht Teil von `npm test`.
-// Aufruf: npm run perf:browser [-- --seconds=20 --state-mb=2 --out=perf.json --swiftshader --ref=<commit>]
+// Aufruf: npm run perf:browser [-- --seconds=20 --state-mb=2 --out=perf.json --swiftshader --ref=<commit> --renderer=2d]
 // Misst requestAnimationFrame-Abstände (Median/p95/p99, Anteile > 16,7/20/33,4 ms) und Long Tasks (> 50 ms) bei 12×.
 // Hinweis: Bei 60 Hz liegen viele Abstände bei 16,7–16,8 ms; „over16_7“ zählt dieses Rauschen mit, „over20“ nicht.
 // Szenarien: „start“ (neues Unternehmen mit Startbetrieb) und „gross“ (vorab gespeicherter großer Stand, Autosave im Fenster).
@@ -15,6 +15,8 @@ import {bigState} from './big-state.mjs';
 const opt=Object.fromEntries(process.argv.slice(2).map(a=>a.replace(/^--/,'').split('=')).map(([k,v])=>[k,v??true]));
 const seconds=Number(opt.seconds||20),stateMB=Number(opt['state-mb']||2);
 const STORE='industrie-logistik-v1';
+// --renderer=2d|3d erzwingt die Szene über ?renderer= (scene-select.js); Standard: automatische Wahl.
+const query=opt.renderer?'?renderer='+encodeURIComponent(opt.renderer):'';
 
 const INIT=()=>{
  window.__perf={longtasks:[],deltas:[],recording:false};
@@ -43,20 +45,20 @@ if(opt.ref&&!opt.repo)for(const file of ['dist/app.js','dist/core.js'])writeFile
 const {server,url}=await startServer(root);
 const launchOptions=pw.launchOptions;
 const browser=await pw.chromium.launch(launchOptions);
-const errors=[],result={date:new Date().toISOString(),ref:opt.ref||'Arbeitskopie',flags:launchOptions.args,chromium:browser.version(),seconds,viewport:'1600x900',renderer:null,scenarios:{},
+const errors=[],result={date:new Date().toISOString(),renderParam:opt.renderer||'auto',ref:opt.ref||'Arbeitskopie',flags:launchOptions.args,chromium:browser.version(),seconds,viewport:'1600x900',renderer:null,scenarios:{},
  hinweis:'Headless-Software-Rendering (SwiftShader), nicht repräsentativ für GPU-Hardware. Für 60-FPS-Aussagen auf Referenzgerät messen.'};
 try{
  const context=await browser.newContext({viewport:{width:1600,height:900}});
  await context.addInitScript(INIT);
  const page=await context.newPage();watch(page,errors,'perf');
- await page.goto(url+'index.html');
+ await page.goto(url+'index.html'+query);
  await page.waitForFunction(()=>document.querySelector('#welcome')?.open===true);
  result.renderer=await page.evaluate(()=>{const gl=document.createElement('canvas').getContext('webgl');const ext=gl?.getExtension('WEBGL_debug_renderer_info');return gl?(ext?gl.getParameter(ext.UNMASKED_RENDERER_WEBGL):'webgl'):'kein WebGL';});
  result.localStorageQuotaChars=await page.evaluate(()=>{let ok=0;for(const mb of [1,2,3,4,5,6,8,10]){try{localStorage.setItem('__quota',('x').repeat(mb*1e6));ok=mb*1e6;}catch{break;}}localStorage.removeItem('__quota');return ok;});
  // Szenario start
  await page.click('#welcome [data-action="start"]');
  await page.waitForFunction(()=>!document.querySelector('#welcome').open);
- await page.click('.rail button[data-panel="overview"]');
+ await page.locator('button[data-panel="overview"]:visible').first().click();
  const starter=page.locator('#panelBody [data-action="starter"]');if(await starter.count())await starter.first().click();
  await page.keyboard.press('Escape');
  await page.click('[data-speed="12"]');await page.waitForTimeout(1000);
@@ -68,7 +70,7 @@ try{
  await page.goto(url+'dist/styles.css');
  const stored=await page.evaluate(({k,raw})=>{try{localStorage.setItem(k+'-sandbox',raw);localStorage.removeItem(k+'-sandbox-backup');localStorage.setItem(k+'-prefs',JSON.stringify({mode:'sandbox'}));return true;}catch(e){return String(e);}},{k:STORE,raw:big});
  if(stored!==true)throw Error('Großer Stand passt nicht in localStorage: '+stored);
- await page.goto(url+'index.html');
+ await page.goto(url+'index.html'+query);
  await page.waitForFunction(()=>/Tag [2-9]/.test(document.querySelector('#clock').textContent),null,{timeout:30000}).catch(async e=>{throw Error(e.message+' · Uhr: '+await page.locator('#clock').textContent()+' · Toast: '+await page.locator('#toast').textContent());});
  await page.click('[data-speed="12"]');await page.waitForTimeout(1000);
  result.scenarios.gross={stateMB:+(big.length/1e6).toFixed(2),...await record(page,Math.max(seconds,25)*1000)};

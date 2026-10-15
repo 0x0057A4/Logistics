@@ -35,10 +35,12 @@ try{
  check('WebGL verfügbar (Software)',await page.evaluate(()=>{const c=document.createElement('canvas');return !!(c.getContext('webgl2')||c.getContext('webgl'));}));
  await page.click('#welcome [data-action="start"]');
  await page.waitForFunction(()=>!document.querySelector('#welcome').open,null,{timeout:10000}).catch(async e=>{throw Error(e.message+' · Toast: '+await page.locator('#toast').textContent()+' · Status: '+await page.locator('#statusText').textContent());});
+ const renderer=page=>page.evaluate(()=>{const c=document.querySelector('#world');return c?.dataset.renderer||(c?.getContext&&'3d (kein 2D-Rückfall markiert)')||'?';});
+ check('Szene: 3D aktiv (kein 2D-Rückfall)',(await renderer(page))!=='2d',await renderer(page));
  const t0=await storedT(page);check('Gründung gespeichert',t0===480,'t='+t0);
  await page.click('[data-speed="1"]');
  for(const panel of ['overview','production','inventory','purchasing','staff','orders','fleet','finance','service','settings']){
-  await page.click(`.rail button[data-panel="${panel}"], header button[data-panel="${panel}"]`);
+  await page.locator(`button[data-panel="${panel}"]:visible`).first().click();
   const visible=await page.evaluate(()=>!document.querySelector('#panel').hidden&&document.querySelector('#panelBody').innerHTML.length>0);
   check('Panel '+panel+' geöffnet',visible,await page.locator('#panelTitle').textContent());
  }
@@ -58,7 +60,7 @@ try{
  await page.waitForTimeout(500);
  const afterReload=minutesOf(await clock(page));
  check('Neuladen lädt Spielstand',!await page.evaluate(()=>document.querySelector('#welcome').open)&&afterReload>480&&afterReload<=beforeReload+5,`vor ${beforeReload} · nach ${afterReload} Min.`);
- await page.click('header button[data-panel="settings"]');
+ await page.locator('button[data-panel="settings"]:visible').first().click();
  const [jsonDownload]=await Promise.all([page.waitForEvent('download'),page.click('#panelBody [data-action="export"]')]);
  const json=JSON.parse(readFileSync(await jsonDownload.path(),'utf8'));
  check('JSON-Export gültig',json.schema===1&&json.mode==='guided'&&json.t>=afterReload,`${jsonDownload.suggestedFilename()} · t=${json.t}`);
@@ -78,6 +80,7 @@ try{
  // Bekannter Anzeigefehler (A10): Simulation pausiert, Geschwindigkeitsleiste markiert aber weiter 1×. Nur Hinweis.
  const activeSpeed=await file.evaluate(()=>document.querySelector('#speeds .active')?.dataset.speed);
  if(!paused)console.log('  HINWEIS file://: Pause-Schaltfläche nicht markiert, aktive Stufe data-speed='+activeSpeed);
+ check('file://: Szene 3D aktiv (gebündeltes three.js)',(await renderer(file))!=='2d',await renderer(file));
  check('file://: Hinweis temporärer Modus',(await file.locator('#toast').textContent()).includes('HTML-Spielstand geladen'),await file.locator('#toast').textContent());
  check('Keine Konsolen-/Seitenfehler',errors.length===0,errors.join(' | '));
  exitCode=checks.every(c=>c.ok)?0:1;

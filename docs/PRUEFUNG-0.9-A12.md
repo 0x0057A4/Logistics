@@ -1,13 +1,13 @@
 # Prüfung 0.9 Welle 0 – A12 (Spielstände, Leistung, Veröffentlichung)
 
-Stand: 15.10.2026. Umgebung: Linux-Container mit 4 Kernen, Node v22.22.0, Playwright 1.56.1, Chromium 141.0.7390.37 headless. Keine GPU. WebGL läuft über SwiftShader (Software).
+Stand: 15.10.2026, integriert mit `claude/loving-wozniak-56yxt7` (`d613cdd`: A03, A09, A10, Fix der Tab-Sperre). Umgebung: Linux-Container mit 4 Kernen, Node v22.22.0, Playwright 1.56.1, Chromium 141.0.7390.37 headless. Keine GPU. WebGL läuft über SwiftShader (Software).
 
 ## Ergebnis in Kürze
 
 | Bereich | Ergebnis |
 |---|---|
-| `npm test` | 210 von 210 bestanden (195 Basis plus 15 neue A12-Prüfungen) |
-| `npm run test:browser` | 22 von 22 Prüfpunkten bestanden, keine Konsolenfehler. Ein Anzeigehinweis, siehe unten |
+| `npm test` | 243 von 243 bestanden, dreimal hintereinander (darin 15 neue A12-Prüfungen) |
+| `npm run test:browser` | 24 von 24 Prüfpunkten bestanden, mit echter 3D-Szene (http und file://), keine Konsolenfehler. Ein Anzeigehinweis, siehe unten |
 | Speichern bei 5 MB (Node) | Median **157,9 ms → 34,6 ms** je Speichervorgang |
 | Browser-Autosave bei 2,4 MB (gemessen auf dem Basisbranch `041ab13`, siehe unten) | Long Tasks 112 ms und 51 ms → **keine**. Längster Frame 116,6 ms → 33,4 ms |
 | Kritischer Fund | Die Tab-Sperre warf im Browser „Illegal invocation“. Damit war Speichern in 0.8 nie möglich. A01 hat den Fehler in `041ab13` behoben |
@@ -17,7 +17,9 @@ Stand: 15.10.2026. Umgebung: Linux-Container mit 4 Kernen, Node v22.22.0, Playwr
 - `scripts/build-portable.py` bettet Module unter `dist/vendor/` ein, ohne ihre Syntax zu analysieren. Bedingungen: keine Imports und genau ein `export{a as B,…}` am Dateiende. Aus diesem Block entsteht ein eingefrorener Namensraum mit Live-Gettern. Der übrige Code läuft unverändert in `(function(){…}).call(undefined)`, also strikt und mit `this` = undefined wie in einem Modul.
 - Fehlformen werden abgelehnt: Import im Vendor-Modul, Export nicht am Ende, mehrere Exportblöcke, String-Exportnamen und doppelte Namen. Eigene Module lehnen jetzt auch `export{…}` ab, denn die bisherige Regel verlangte ein Leerzeichen nach `export`.
 - `</script` und `<!--` werden wie bisher maskiert. Lizenzdateien `dist/vendor/*LICENSE*` gelangen nur dann als HTML-Kommentar vor das Laufzeitskript, wenn ein Vendor-Modul tatsächlich gebündelt wird.
-- Ohne Import von three.js bleibt `dist/portable.html` gegenüber dem bisherigen Build unverändert. Mit three.js wächst sie um etwa 0,7 MB.
+- Ohne Import von three.js bleibt `dist/portable.html` gegenüber dem bisherigen Build unverändert. Mit der echten `scene3d.js` von A09 ist sie 1.079.280 Byte groß. Der HTML-Spielstand-Download im Rauchtest war 1055 KB groß.
+- `portable.html` wird über eine tmp-Datei und `os.replace` atomar ersetzt. Damit ist das Rennen behoben, bei dem `portable-build.test.js` die Datei schrieb, während `qa-html-save.test.js` sie parallel las.
+- Test-Harness `tests/qa-html-save.test.js`: Der VM-Kontext enthält jetzt `URLSearchParams`, das `scene-select.js` nutzt. Diese Einzeilen-Änderung steht in einem eigenen Commit, weil sie außerhalb des A12-Bereichs liegt.
 - Geprüfte Alternative: Ein Blob-URL-Modul mit dynamischem `import()` funktioniert in Chromium auch unter file://. Verworfen wurde es, weil der Start dann asynchron würde, ein Modul-Loader zur Laufzeit nötig wäre und Firefox nicht geprüft ist.
 - Prüfungen in `tests/portable-build.test.js`:
   - Vendor-Namensraum und alle Ablehnungsfälle (Node VM).
@@ -56,6 +58,21 @@ Stand: 15.10.2026. Umgebung: Linux-Container mit 4 Kernen, Node v22.22.0, Playwr
   - Der Rückfall auf setTimeout greift.
   - Das Verlassen speichert synchron.
 
+### Integrierter Stand mit 3D-Szene (A09)
+
+Gemessen mit `npm run perf:browser -- --state-mb=2.4` (automatische Wahl, also 3D über SwiftShader) und mit `--renderer=2d`:
+
+| Szene | Szenario | fps | Median / p95 / p99 | über 20 ms | Long Tasks |
+|---|---|---|---|---|---|
+| 3D (SwiftShader) | start | 13,3 | 83,4 / 116,7 / 133,3 ms | 98 % | 166, längster 130 ms |
+| 3D (SwiftShader) | gross | 14,0 | 83,3 / 116,7 / 116,8 ms | 96 % | 206, längster 145 ms |
+| 2D (neues HUD) | start | 50,1 | 16,7 / 33,4 / 50 ms | 18 % | 0 |
+| 2D (neues HUD) | gross | 50,0 | 16,7 / 33,4 / 50 ms | 18 % | 0 |
+
+- Die Long Tasks der 3D-Szene entstehen bei jedem Frame durch Software-WebGL. Für die GPU-Leistung haben sie keine Aussagekraft.
+- In 2D gibt es auch mit Autosave eines Stands von 2,4 MB keine Long Tasks.
+- Vor A10 lag die 2D-Szene bei 60 fps und 0 % über 20 ms. Der Rückgang auf 50 fps kam mit dem neuen HUD. Ich habe ihn nicht weiter untersucht. Hinweis an A10/A01.
+
 ## 3. Migrationsrahmen
 
 - `core.js` enthält jetzt `SCHEMA = 1`, `MIGRATIONS = []` (Schritte `{from,to,migrate}`) und `migrate(state)`.
@@ -80,7 +97,8 @@ Stand: 15.10.2026. Umgebung: Linux-Container mit 4 Kernen, Node v22.22.0, Playwr
   4. Der Autosave schreibt (t=705), das Backup enthält den vorherigen Stand.
   5. Nach dem Neuladen ist derselbe Stand geladen (839 → 839 Min.).
   6. Der JSON-Export ist gültig.
-  7. Der HTML-Download (266 KB) wird per file:// geöffnet: Die Uhr steht pausiert bei 839 und der Hinweis „HTML-Spielstand geladen“ erscheint.
+  7. Der HTML-Download (1055 KB, mit three.js) wird per file:// geöffnet: Die Uhr steht pausiert auf dem eingebetteten Stand, die 3D-Szene ist aktiv und der Hinweis „HTML-Spielstand geladen“ erscheint.
+  - Die Zahlen in Schritt 3 bis 6 stammen aus dem Lauf vor der A09-Integration. Der integrierte Lauf ergab 356 Spielminuten, Autosave t=670, Neuladen 839 → 841 und alle Punkte bestanden.
   8. Keine Konsolen- oder Seitenfehler.
 - `/favicon.ico` fehlt. Chromium meldet dazu eine 404 in der Konsole, die der Test bewusst ignoriert.
 - `tests/browser/perf.mjs` (`npm run perf:browser`) misst die Abstände zwischen requestAnimationFrame-Aufrufen (Median, p95, p99, Anteile über 16,7, 20 und 33,4 ms) und Long Tasks. Das Ergebnis wird als JSON ausgegeben, mit `--out=` auch in eine Datei.
@@ -99,6 +117,6 @@ Stand: 15.10.2026. Umgebung: Linux-Container mit 4 Kernen, Node v22.22.0, Playwr
 - Die Browserwerte stammen aus headless Chromium mit Software-Rendering in einem Container. Sie sind **nicht repräsentativ** für GPU-Hardware und taugen nur für Vergleiche auf derselben Maschine. Für 60-FPS-Aussagen muss auf dem Referenzgerät gemessen werden.
 - `serialize()` bleibt synchron: etwa 17 ms bei 2,4 MB und etwa 36 ms bei 5 MB in Node. Das ist ein einzelner langer Frame, aber kein Long Task über 50 ms. Inkrementelles Speichern ist nicht umgesetzt.
 - In der Node-Messung fehlen die Schreibkosten von localStorage.
-- Nicht geprüft: Firefox und Safari, mobile Geräte, echte Mehrtab-Szenarien im Browser, three.js-Szene von A09 (noch nicht vorhanden; geprüft ist nur das Bundling mit einem Testmodul).
+- Nicht geprüft: Firefox und Safari, mobile Geräte, echte Mehrtab-Szenarien im Browser, Bildqualität und Bedienung der 3D-Szene (zuständig: A09).
 - Der große Teststand entsteht aus 8 Standorten und 3 Spieltagen, aufgefüllt mit Chronikeinträgen. Das ist realistisch geformt, aber keine echte Langzeitpartie.
 - Folgen für Spielstände: keine. Das Format bleibt `schema:1`. Alte Stände laden wie zuvor. Die Sicherung behält dieselbe Bedeutung: zuletzt geschriebener, gültiger Stand.
