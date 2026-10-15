@@ -45,9 +45,49 @@ export function slotPose(layout, k, len = 4.2, dockX = null) {
     const x = dockX != null ? Math.max(1, Math.min(layout.W - 1, dockX)) : layout.bays[k];
     return { x, z: layout.bayZ + len / 2, heading: Math.PI / 2 };
   }
-  const i = k - layout.bays.length, col = i % 3, row = Math.floor(i / 3) % 3;
-  return { x: -15 + col * 4.4, z: layout.H + 1.6 + row * 1.9, heading: 0 };
+  return fleetParkPose(layout, k - layout.bays.length, len);
 }
+// Eigene Flotte und Fremd-Lkw teilen keine Fläche: Fremd-Lkw nur an Dockplätzen, Tor, gelber Wartefläche;
+// eigene Fahrzeuge am belegten Dock, sonst an freien Stellplätzen der Andockreihe (nicht vor Docks), sonst Fuhrpark östlich.
+export const DOCK_GAP = 1.7;               // Mindestabstand der Fahrzeugmitten an der Andockreihe
+export const PARK_GAP = 2.9;               // Stellplatz der eigenen Flotte: Seitenabstand zum nächsten Dockplatz (sichtbare Lücke auch in Schrägsicht)
+export const FLEET_PARK = 8;               // Stellplätze im Fuhrpark östlich der Andockreihe
+/** Fuhrpark-Stellplatz i (östlich der Halle, südlich des Mitarbeiterparkplatzes); Heck zur Hallenwand. */
+export function fleetParkPose(L, i, len = 4.2) { return { x: L.W + 2.2 + (Math.max(0, i) % FLEET_PARK) * 1.9, z: L.H + .6 + len / 2, heading: Math.PI / 2 }; }
+/** Andockplatz je Dock an der Südwand: Mitte der Dockspalte (Rotation über footprint). Docks in derselben Spalte rücken um DOCK_GAP nach Osten. */
+export function dockSlots(L, buildings) {
+  const docks = (buildings || []).filter(b => b.type === 'dock').map(b => { const box = buildingBox(b); return { id: b.id, x: (box.x0 + box.x1) / 2 }; });
+  docks.sort((a, b) => a.x - b.x || String(a.id).localeCompare(String(b.id)));
+  const out = new Map(); let last = -Infinity;
+  for (const d of docks) { const x = Math.min(L.W - 1, Math.max(1, d.x, last + DOCK_GAP)); out.set(d.id, x); last = x; }
+  return out;
+}
+/** Stellplätze der Andockreihe, die vor keinem Dock liegen (Abstand ≥ PARK_GAP zu jedem Andockplatz). */
+export function freeBays(L, slots) { const xs = [...(slots?.values?.() || [])]; return L.bays.filter(x => xs.every(d => Math.abs(d - x) >= PARK_GAP)); }
+/** Stellplatz des eigenen Fahrzeugs k ohne Dock: freie Andockreihe, dann Fuhrpark. Nie Wartefläche, nie vor einem Dock. */
+export function parkPose(L, free, k, len = 4.2) {
+  if (k < free.length) return { x: free[k], z: L.bayZ + len / 2, heading: Math.PI / 2 };
+  return fleetParkPose(L, k - free.length, len);
+}
+/**
+ * Eigene (und durchfahrende) Fahrzeuge am Standort: am tatsächlich belegten Dock (b.task = Sendungs-/Tour-ID), sonst Stellplatz k
+ * (stabil nach Reihenfolge der Heimatflotte). Reine Ableitung aus dem Zustand, ohne Seiteneffekte.
+ */
+export function fleetPlans(state, siteId, buildings, L) {
+  const vehicles = state?.vehicles || [], home = vehicles.filter(v => v.site === siteId), slots = dockSlots(L, buildings), free = freeBays(L, slots), out = [];
+  let foreign = home.length;
+  for (const v of vehicles) {
+    if (v.status === 'rentalReturned') continue;
+    const plan = vehiclePlan(state, v, siteId); if (plan.mode === 'away') continue;
+    const k = v.site === siteId ? home.indexOf(v) : foreign++;
+    const id = plan.task?.id, dock = plan.mode === 'site' && id ? buildings.find(b => b.type === 'dock' && b.task === id) : null;
+    const len = VEH_LEN[v.type] || 4.2, pose = dock ? dockSlotPose(L, slots.get(dock.id), len) : parkPose(L, free, k, len);
+    out.push({ v, plan, pose, len, dock: dock?.id || null });
+  }
+  return out;
+}
+/** Pose am Andockplatz (Heck an der Rampe). */
+export function dockSlotPose(L, x, len = 4.2) { return { x, z: L.bayZ + len / 2, heading: Math.PI / 2 }; }
 /** Fahrweg Stellplatz → Straße (out) bzw. Straße → Stellplatz (in). */
 export function vehiclePath(layout, pose, dir) {
   const L = layout;
@@ -202,7 +242,7 @@ export function gatePose(L, len = FOREIGN_LEN) { return { x: L.exitX, z: L.yardG
 /** Dockposition des zugeteilten Docks (Heck an der Rampe), sonst null. */
 export function dockPoseFor(L, buildings, dockId, len = FOREIGN_LEN) {
   const b = dockId != null && (buildings || []).find(o => o.id === dockId); if (!b) return null;
-  const box = buildingBox(b); return slotPose(L, 0, len, (box.x0 + box.x1) / 2);
+  return dockSlotPose(L, dockSlots(L, buildings).get(b.id), len);
 }
 /** Polygonzug mit abgerundeten Ecken (quadratische Bézier) und Rückwärtskennung r je Segmentende. Spitzkehren (Wechsel vor/zurück) bleiben Ecke. */
 export function makePath(pts, radius = YARD_TURN, steps = 6) {
@@ -438,7 +478,7 @@ function mergedGeo(build) { const P = new Parts(); build(P); return P.geometry()
 const TONE_HEX = { active: '#3cbb8e', blocked: '#e4ab4b', idle: '#95aaa5' };
 const CHIP = { wait: ['#fff3cf', '#e0a83a', '#7a5312'], move: ['#e3eefc', '#5b8fd6', '#244a7a'], gate: ['#eef0ee', '#9aa7a3', '#4b5a57'], dock: ['#e3f3ea', '#3cbb8e', '#22604a'], idle: ['#fbfcf8', '#c9d3cf', '#405960'], infra: ['#fbfcf8', '#23574e', '#23574e'], bad: ['#fbe4df', '#cb675d', '#8f3e36'] };
 const CAM_KEYS = ['tx', 'tz', 'dist', 'yaw'];
-const VEH_LEN = { van: 3.0, truck: 4.2, refrigerated: 4.0 };
+export const VEH_LEN = { van: 3.0, truck: 4.2, refrigerated: 4.0 };
 const CAB_HEX = { van: '#5ea7a3', truck: '#ebac53', refrigerated: '#6b9fd6' };
 const BOX_HEX = { van: '#f1f3ec', truck: '#eef0e8', refrigerated: '#d9eef3' };
 
@@ -632,7 +672,12 @@ export class Scene3D {
     P.quad(-75, L.roadOutZ - 1.1, W + 150, 3.6, -.005, '#7b8c8e'); for (let x = -74; x < W + 74; x += 3) P.quad(x, L.roadOutZ + .62, 1.4, .1, .002, '#e5e8dc');
     P.quad(-75, L.roadOutZ - 1.25, W + 150, .15, -.004, '#d3d9cc'); P.quad(-75, L.roadInZ + 1.15, W + 150, .15, -.004, '#d3d9cc');
     P.quad(-17, H, W + 18, L.roadOutZ - 1.1 - H, -.01, '#a3b0b0'); P.quad(-6, 9.6, 5.8, H - 9.6, -.012, '#b3bdb9');
-    for (const x of L.bays) { P.quad(x - 1.55, H + .05, .08, 5, .003, '#f4f5ec'); P.quad(x + 1.47, H + .05, .08, 5, .003, '#f4f5ec'); }
+    // Andockreihe: Dockplätze (Mitte je Dock) und freie Stellplätze; Fuhrpark der eigenen Flotte östlich davon.
+    const slots = dockSlots(L, (this.state?.buildings || []).filter(b => b.site === s.id));
+    for (const x of [...slots.values(), ...freeBays(L, slots)]) { P.quad(x - .95, H + .05, .07, 5, .003, '#f4f5ec'); P.quad(x + .88, H + .05, .07, 5, .003, '#f4f5ec'); }
+    for (const x of slots.values()) P.quad(x - .7, H + .25, 1.4, .12, .004, '#f2c363');
+    P.quad(W + 1, H, FLEET_PARK * 1.9 + 1.2, L.roadOutZ - 1.1 - H, -.01, '#a3b0b0');
+    for (let i = 0; i <= FLEET_PARK; i++) P.quad(W + 1.2 + i * 1.9, H + .6, .07, 4.6, .003, '#f4f5ec');
     P.quad(-16.6, H + .6, 13.4, .1, .003, '#f2c363'); P.quad(-16.6, H + 6, 13.4, .1, .003, '#f2c363'); P.quad(-16.6, H + .6, .1, 5.5, .003, '#f2c363'); P.quad(-3.3, H + .6, .1, 5.5, .003, '#f2c363');
     for (let i = 0; i < 3; i++) P.quad(-16.2 + i * 4.4, H + 3.2, 3.6, .06, .003, '#e7d9a4');
     P.quad(L.entryX - 1.2, L.laneZ + 2.2, .1, 2.3, .003, '#f4f5ec');
@@ -709,16 +754,8 @@ export class Scene3D {
     for (let i = 0; i < cars; i++) this.setInst(car, i, L.W + 3.4 + (i % 2) * 5.2, 0, 2.1 + Math.floor(i / 2) * 1.8, 0, 1, 1, 1, ['#d9dfe2', '#7c96a8', '#c9b28a', '#a7b9a1', '#e6e2d7'][i % 5]);
     this.finish(car, cars);
     // Fahrzeugpläne; Positionen folgen pro Frame
-    const vehicles = st?.vehicles || [], home = vehicles.filter(v => v.site === s.id), plans = [];
-    let foreign = home.length;
-    for (const v of vehicles) {
-      if (v.status === 'rentalReturned') continue;
-      const plan = vehiclePlan(st, v, s.id); if (plan.mode === 'away') continue;
-      const k = v.site === s.id ? home.indexOf(v) : foreign++;
-      const dock = plan.mode === 'site' && plan.task ? buildings.find(b => b.type === 'dock' && b.task && b.task === plan.task.id) : null;
-      const len = VEH_LEN[v.type] || 4.2, pose = slotPose(L, k, len, dock ? (buildingBox(dock).x0 + buildingBox(dock).x1) / 2 : null);
-      plans.push({ v, plan, pose, len, path: plan.mode === 'site' ? null : vehiclePath(L, pose, plan.mode), x: pose.x, z: pose.z, heading: pose.heading, shown: false, label: `${vehicleTag(v)} · ${this.statusLabel(plan.status)}` });
-    }
+    const plans = fleetPlans(st, s.id, buildings, L);
+    for (const p of plans) Object.assign(p, { path: p.plan.mode === 'site' ? null : vehiclePath(L, p.pose, p.plan.mode), x: p.pose.x, z: p.pose.z, heading: p.pose.heading, shown: false, label: `${vehicleTag(p.v)} · ${this.statusLabel(p.plan.status)}` });
     this.fleet = plans; this.ensure('vbox', plans.length); this.ensure('vcab', plans.length); this.ensure('vbase', plans.length);
     for (const p of plans) { p.hit = { id: p.v.id, box: { x0: 0, x1: 0, y0: 0, y1: 1.9, z0: 0, z1: 0 }, fleet: p }; this.boxes.push(p.hit); }
     // Fremd-Lkw aus s.yard (W1-S4); Positionen folgen pro Frame. Phasenwechsel übernehmen die zuletzt gezeigte Pose (nur Darstellung).
