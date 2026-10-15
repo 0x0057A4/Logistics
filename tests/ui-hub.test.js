@@ -12,14 +12,15 @@ async function probe(options){const ui=await boot();await ui.click('start');cons
 test('Verträge: Startangebot zeigen, annehmen über acceptContract, Ankunftsplan, Kündigung mit Rückfrage',async()=>{
  const ui=await boot();await ui.click('start');
  const c=ui.run("sim.state.contracts[0]");assert.equal(c.status,'offer');
- assert.equal(text(ui,'missionTitle'),'Ersten Frachtvertrag annehmen');assert.equal(ui.nodes.get('#missionAction').dataset.panel,'contracts');
+ // A02 W1b: Einstieg beginnt mit dem Dock; der Vertragsschritt ist Schritt 3 (vollständige Reihenfolge in ui-guided.test.js).
+ assert.equal(text(ui,'missionTitle'),'Laderampe bauen');assert.equal(ui.run("requirements()[2].title"),'Ersten Frachtvertrag annehmen');assert.equal(ui.run('requirements()[2].ok'),false);
  press(ui,{panel:'contracts'});assert.equal(ui.run('panel'),'contracts');const body=()=>ui.nodes.get('#panelBody').innerHTML;
  assert.ok(body().includes(c.shipper));for(const l of c.lanes)assert.ok(body().includes(l.name),l.name);
  const perDay=c.arrivals.reduce((n,a)=>n+a.parcels,0);assert.ok(body().includes(`<b>${perDay}</b><small>Pakete / Tag`));
  assert.match(body(),/Preis \/ Paket/);assert.match(body(),/Frist ab Tor/);assert.match(body(),new RegExp(`data-action="acceptContract" data-id="${c.id}"`));
  ui.click('acceptContract',c.id);assert.equal(ui.run(`sim.state.contracts.find(x=>x.id==='${c.id}').status`),'active');
  assert.match(body(),/Ankunftsplan heute und morgen/);assert.match(body(),/<td>(Heute|Morgen)<\/td>/);assert.match(body(),/Geplant/);
- assert.equal(text(ui,'missionTitle'),'Sortierplatz bauen');assert.equal(ui.nodes.get('#missionAction').dataset.id,'sorter');
+ assert.equal(ui.run('requirements()[2].ok'),true,'Vertragsschritt erfüllt');
  ui.click('cancelContract',c.id);assert.equal(ui.nodes.get('#confirm').open,true,'Kündigung fragt nach');assert.match(text(ui,'confirmText'),/Vertrag endet/);
  ui.click('confirmCancel');assert.equal(ui.run(`sim.state.contracts.find(x=>x.id==='${c.id}').status`),'active');
  ui.click('cancelContract',c.id);ui.click('confirmOk');assert.equal(ui.run(`sim.state.contracts.find(x=>x.id==='${c.id}').status`),'ended');

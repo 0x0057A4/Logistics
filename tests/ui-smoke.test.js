@@ -19,7 +19,9 @@ test('UI übergibt Versand-/Wartungsregeln und Spezialfracht samt Dokumentprüfu
  ui.click('cancelFreight',fid);await ui.click('confirmOk');assert.equal(ui.run('sim.state.freights[0].status'),'cancelled');
 });
 test('UI Aufbauassistent und Einkauf senden echte Fachbefehle',async()=>{
- const ui=await boot();await ui.click('start');ui.click('starter');assert.equal(ui.run('sim.state.buildings.length'),5);assert.equal(ui.run('sim.state.workers.length'),5);assert.equal(ui.run('sim.state.vehicles.length'),1);
+ // A02 W1b: Aufbauassistent richtet die Depot-Grundausstattung ein (Dock, Regal, Lagerkraft, Fahrer, Lieferwagen), kostenpflichtig 14.500 €.
+ const ui=await boot();await ui.click('start');const money=ui.run('sim.state.money');ui.click('starter');assert.equal(ui.run("sim.state.buildings.map(b=>b.type).sort().join()"),'dock,rack');assert.equal(ui.run("sim.state.workers.map(w=>w.role).sort().join()"),'driver,warehouse');assert.equal(ui.run('sim.state.vehicles.length'),1);assert.equal(money-ui.run('sim.state.money'),14500);assert.equal(ui.run('panel'),'contracts');
+ ui.click('starter');assert.equal(ui.run('sim.state.buildings.length'),2,'zweiter Klick kauft nichts doppelt');assert.equal(ui.run('sim.state.workers.length'),2);assert.equal(ui.run('sim.state.vehicles.length'),1);
  ui.submit('buy',{item:'housing',qty:'2',supplier:'standard'});assert.equal(ui.run('sim.state.purchases.length'),1);assert.equal(ui.run('sim.state.purchases[0].qty'),2);
  ui.click('save');assert.ok(ui.memory.has('industrie-logistik-v1-guided'));assert.doesNotThrow(()=>Simulation.fromJSON(ui.memory.get('industrie-logistik-v1-guided')));
  for(const panel of ['production','inventory','purchasing','staff','orders','fleet','finance','history'])assert.doesNotThrow(()=>ui.run(`openPanel('${panel}')`));

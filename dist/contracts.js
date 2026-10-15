@@ -12,14 +12,21 @@ export const MAX_OFFERS=3,OFFER_INTERVAL=720,OFFER_PHASE=300,OFFER_VALIDITY=2880
 // Fiktive Versender und Gebiete (anonymisiert, eigenständig erzeugt).
 const SHIPPERS=['Kranichfeld Versandhaus','Lindenstein Online-Handel','Talbrück Modeversand','Sonnhalde Haushaltswaren','Eichenrode Buchversand','Mühlbach Elektroversand','Weidenau Spielwaren','Brunnhof Gartenversand'];
 const LANES=['Nordviertel','Altstadt Süd','Am Kanal','Hügelfeld','Westring','Bachgrund','Ostpark','Lerchenhöhe','Fischerdorf','Industriegebiet Nord'];
-const ARRIVAL_MINUTES=[540,600,660,720,780,840,900,960];
+// Depot-Stufe (A02 W1b): Ankünfte 08:30–12:00, damit Tagschicht (08–16 Uhr) sortieren und zustellen kann.
+const ARRIVAL_MINUTES=[510,540,570,600,630,660,690,720];
+/** Spielwerte Depot-Stufe (A02 W1b, docs/BALANCING-0.9-W1.md). start = Startangebot, offer = Folgeangebote.
+ *  parcels: Spanne in Zehnern je Ankunft; price (offer): [Basis €, Schritt €, Schritte]; sla: start in Minuten, offer in Stunden; days: Laufzeit in Tagen. */
+export const TERMS={
+ start:{minutes:[540,570],parcels:[10,13],price:15,sla:360,days:7},
+ offer:{parcels:[5,10],price:[13.5,0.25,10],sla:[5,8],days:[5,10]}
+};
 const STATUSES=['offer','active','ended'];
 
 const pick=(api,list)=>list[Math.floor(api.random()*list.length)];
 const int=(api,min,max)=>min+Math.floor(api.random()*(max-min+1));
 const cents=n=>Math.round(n*100)/100;
 
-/** Deterministisches Angebot aus api.random. small=true: Startangebot (1 Ankunft/Tag, 60–90 Pakete). */
+/** Deterministisches Angebot aus api.random. small=true: Startangebot (1 Ankunft/Tag, 100–130 Pakete). */
 function makeOffer(s,api,small=false){
  const shipper=pick(api,SHIPPERS),laneCount=small?int(api,1,2):int(api,1,3),names=[...LANES],lanes=[];
  for(let i=0;i<laneCount;i++){const name=names.splice(Math.floor(api.random()*names.length),1)[0];lanes.push({id:`lane-${i+1}`,name,distance:int(api,15,45)});}
@@ -27,12 +34,12 @@ function makeOffer(s,api,small=false){
  const parts=lanes.map(()=>5);let rest=20-5*lanes.length;while(rest-->0)parts[Math.floor(api.random()*parts.length)]++;
  const laneShare=parts.map(p=>p/20);
  const arrivalCount=small?1:int(api,1,2),minutes=[...ARRIVAL_MINUTES],arrivals=[];
- for(let i=0;i<arrivalCount;i++){const minute=small?pick(api,[600,660]):minutes.splice(Math.floor(api.random()*minutes.length),1)[0];arrivals.push({minute,parcels:small?int(api,6,9)*10:int(api,6,12)*10});}
+ for(let i=0;i<arrivalCount;i++){const minute=small?pick(api,TERMS.start.minutes):minutes.splice(Math.floor(api.random()*minutes.length),1)[0];arrivals.push({minute,parcels:(small?int(api,...TERMS.start.parcels):int(api,...TERMS.offer.parcels))*10});}
  arrivals.sort((a,b)=>a.minute-b.minute);
  const id=api.id('contract');
  return {id,shipper,site:s.selectedSite,status:'offer',lanes,arrivals,laneShare,
-  pricePerParcel:small?2.6:cents(2.4+int(api,0,8)*0.1),slaMinutes:small?600:int(api,8,12)*60,
-  durationDays:small?7:int(api,7,14),offeredAt:s.t,expiresAt:s.t+OFFER_VALIDITY,
+  pricePerParcel:small?TERMS.start.price:cents(TERMS.offer.price[0]+int(api,0,TERMS.offer.price[2])*TERMS.offer.price[1]),slaMinutes:small?TERMS.start.sla:int(api,...TERMS.offer.sla)*60,
+  durationDays:small?TERMS.start.days:int(api,...TERMS.offer.days),offeredAt:s.t,expiresAt:s.t+OFFER_VALIDITY,
   startT:null,endT:null,acceptedAt:null,issued:0,lastEta:null};
 }
 
