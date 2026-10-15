@@ -39,14 +39,26 @@ Reihenfolge und Gleitkomma-Summation bleiben die des Arrays. Nullchargen tragen 
 
 ## Invalidierung und Annahmen
 
-- Wird `s.batches` ersetzt, gekürzt oder umsortiert (Prüfung über Referenz, Länge und letztes Element), baut der Index vollständig neu auf. Angehängte Chargen werden nachgetragen.
+- Wird `s.batches` ersetzt, gekürzt oder wechselt das letzte Element (Prüfung über Referenz, Länge und letztes Element), baut der Index sofort vollständig neu auf. Angehängte Chargen werden nachgetragen.
+- In-place-Umsortierung (gleiche Referenz, Länge und letztes Element, z. B. Tausch zweier Chargen) erkennt die nächste Auffrischung der Aktivliste (nächste Spielminute oder Standortwechsel über `move`/`relocate`): Zu jeder aktiven Charge ist ihre Arrayposition gespeichert; steht dort nicht mehr dieselbe Charge, folgt ein vollständiger Neuaufbau. Kosten: ein Arrayzugriff je aktiver Charge und Auffrischung. Innerhalb derselben Minute vor der Auffrischung folgen `available`/`reserve` noch der alten Reihenfolge; `findBatch` erkennt eine verschobene Charge sofort über seine Gegenprüfung. Kein Spielmodul sortiert `s.batches` in place (QS-W0-07).
 - Je Spielminute (`s.t` ändert sich) und nach Standortwechsel über `move` oder `relocate` frischt die Aktivliste aus den bisher aktiven und den neu angehängten Chargen auf: O(aktive Chargen). `location`, `owner`, `blocked`, `locked` und `site` werden bei jeder Abfrage live geprüft.
 - **Annahme:** Nur `inventory.js` schreibt `qty`, `reserved`, `site` und `item` einer Charge. Eine Nullcharge wird nie wieder befüllt. `tests/perf-index.test.js` prüft die Quelltexte in `dist/` darauf. Eine direkte Wiederbefüllung einer Nullcharge außerhalb der API, etwa per Konsole, bliebe bis zum nächsten vollständigen Neuaufbau unsichtbar. Ein direkter Standortwechsel außerhalb der API wirkt erst ab der nächsten Spielminute. Beides kommt im Spiel nicht vor.
+
+### Nachtrag QS-W0-07 (Positionsprüfung der Aktivliste)
+
+Gleiche Maschine, je drei abwechselnde Läufe `node tests/perf-sim.mjs`, Median / p95 in ms je Spielminute:
+
+| Szenario | ohne Prüfung | mit Prüfung |
+|---|---|---|
+| groß ohne Historie | 0,300 / 0,264 / 0,303 (p95 0,741 / 0,535 / 0,747) | 0,283 / 0,286 / 0,284 (p95 0,723 / 0,686 / 0,846) |
+| groß + 25.000 Nullchargen | 0,456 / 0,450 / 0,437 (p95 0,805 / 0,887 / 2,311) | 0,463 / 0,501 / 0,484 (p95 0,829 / 0,924 / 1,250) |
+
+Unterschied im Rauschen der Fremdlast; Ziel (< 1 ms je Spielminute im Median) eingehalten. Hashes unverändert (`tests/perf-determinism.test.js` grün). Eine erste Variante mit `Map`-Lookup je aktiver Charge kostete ≈ +15–25 % und wurde verworfen.
 
 ## Prüfungen
 
 - `tests/perf-determinism.test.js`: 13 Zustandshashes in vier Szenarien. Erzeugt mit dem unveränderten Code (Commit `d81c0e0`, Fachcode wie `f986e5d`). Abgedeckt sind Produktion über 1200 Minuten mit Nacht, Einkauf, Lieferung, Sammeltour, Retoure, Rückruf, Kühlkette mit späterem Kühllager, Wartung, multimodale Fracht, sechs Standorte mit Kühltransfer und 3.000 Nullchargen sowie `forecast`. Nach der Optimierung sind alle Hashes gleich.
-- `tests/perf-index.test.js`: Eine Zufallsfolge von 3.000 Lageroperationen vergleicht `available`, `used`, `capacity`, FIFO-Reservierungen und ID-Suche bitgenau mit den alten linearen Formeln. Dabei ändern fremde Module Felder direkt. Weitere Prüfungen: Der Index steht nicht im Spielstand. Ein ersetztes, gekürztes oder umsortiertes Array baut den Index neu auf. Andere Module schreiben die Indexfelder nicht.
+- `tests/perf-index.test.js`: Eine Zufallsfolge von 3.000 Lageroperationen vergleicht `available`, `used`, `capacity`, FIFO-Reservierungen und ID-Suche bitgenau mit den alten linearen Formeln. Dabei ändern fremde Module Felder direkt. Weitere Prüfungen: Der Index steht nicht im Spielstand. Ein ersetztes, gekürztes oder umgedrehtes Array baut den Index neu auf; ein In-place-Tausch bei gleichem letztem Element wird bei der nächsten Auffrischung erkannt (QS-W0-07). Andere Module schreiben die Indexfelder nicht.
 - `npm test`: 202 von 202 grün (194 Bestand + 8 neu).
 
 ## Aussagegrenzen

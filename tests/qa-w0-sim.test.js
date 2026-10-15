@@ -107,10 +107,9 @@ test('QS-W0 Index: Bau/Abriss eines Regals in derselben Minute aktualisiert capa
  assert.ok(sim.command({type:'demolish',id}).ok);assert.equal(inv.capacity('site-1'),40);
 });
 
-// Befund QS-W0-07 (niedrig, A03): Doku nennt „umsortiert“ als erkannten Fall. Ein In-place-Tausch zweier Chargen
-// (gleiche Referenz, Länge, letztes Element) wird nicht erkannt; die Aktivliste behält dauerhaft die alte Reihenfolge,
-// FIFO weicht von der Arrayreihenfolge ab. Kein Spielmodul sortiert s.batches heute in place → nur theoretisch.
-test('QS-W0 Befund 07: In-place-Umsortierung von s.batches → FIFO folgt weiter alter Reihenfolge',{todo:'Befund QS-W0-07 (niedrig, A03), siehe docs/QS-0.9-W0.md'},()=>{
+// Befund QS-W0-07 (niedrig, A03): In-place-Tausch zweier Chargen (gleiche Referenz, Länge, letztes Element) wurde
+// nicht erkannt. Behoben: Positionsprüfung der aktiven Chargen bei jeder Auffrischung (dist/inventory.js, regroup).
+test('QS-W0 Befund 07: In-place-Umsortierung von s.batches → FIFO folgt nach der nächsten Spielminute der neuen Reihenfolge',()=>{
  const sim=new Simulation({mode:'sandbox',seed:5}),inv=sim.api.inventory,s=sim.state;
  const a=inv.add({item:'housing',qty:2,site:'site-1'}),b=inv.add({item:'housing',qty:2,site:'site-1'});inv.add({item:'board',qty:1,site:'site-1'});
  inv.available('housing','site-1');sim.step(1);inv.available('housing','site-1');

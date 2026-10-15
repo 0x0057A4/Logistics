@@ -59,6 +59,16 @@ test('Ersetztes, gekürztes oder umsortiertes Chargenarray baut den Index neu au
  s.batches.push({...x,id:'neu',reserved:0});assert.equal(i.available('board','a'),2);
 });
 
+test('In-place-Tausch (Referenz, Länge, letztes Element gleich) wird bei der nächsten Auffrischung erkannt',()=>{
+ const {s,i}=fixture();const x=i.add({item:'board',qty:2,site:'a'}),y=i.add({item:'board',qty:3,site:'a'}),z=i.add({item:'housing',qty:1,site:'a'});
+ i.add({item:'board',qty:0.5,site:'b'});assert.equal(i.available('board','a'),5);s.t++;assert.equal(i.available('board','a'),5);
+ s.batches[0]=y;s.batches[1]=x;s.t++;
+ // Zuerst Aktivliste/FIFO (findBatch würde über seine eigene Gegenprüfung ebenfalls neu aufbauen).
+ assert.deepEqual(inventory.activeBatches(s).filter(b=>b.site==='a').map(b=>b.id),[y.id,x.id,z.id]);
+ assert.equal(i.reserve('board',3,'a','j'),true);assert.deepEqual(s.reservations.map(r=>r.batchId),[y.id]);
+ assert.equal(inventory.findBatch(s,x.id),x);assert.equal(inventory.findBatch(s,y.id),y);
+});
+
 test('Nur inventory.js schreibt Menge, Reservierung, Standort und Artikel von Chargen (Voraussetzung der Aktivliste)',()=>{
  // Bekannte Schreibstellen anderer Objekte: Personal-Standortwechsel in workforce.js.
  const dir=new URL('../dist/',import.meta.url),bad=[],allowed=['workforce.js:w.site='];

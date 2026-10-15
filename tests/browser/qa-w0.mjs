@@ -278,6 +278,9 @@ try{
   check('fallback','?renderer=2d: 2D-Szene, spielbar, Labelgruppe verborgen',await renderer(page)==='2d'&&t1-t0>=40,`${t0}→${t1} · labelGroup hidden=${await page.evaluate(()=>document.querySelector('#labelGroup').hidden)}`);
   await ctx.close();
   check('fallback','Keine Konsolen-/Seitenfehler',errors.length===0,errors.join(' | '));
+  // QS-W0-08: ?renderer=3d ohne WebGL → genau ein deutscher Hinweis, nur für diese Seite.
+  const notes=warns.filter(w=>w.includes('3D-Ansicht nicht möglich'));
+  check('fallback','?renderer=3d ohne WebGL: genau ein Hinweis (QS-W0-08)',notes.length===1&&notes[0].startsWith('nowebgl?renderer=3d'),notes.join(' | '));
   console.log('  Warnungen:',warns.slice(0,4).join(' | '));
  }
 

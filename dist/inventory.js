@@ -9,9 +9,10 @@ const EMPTY = Object.freeze([]);
 
 // Laufzeitlokale Indexe (Welle 0, S4). WeakMap am Zustand: nie serialisiert, nie aufzählbar, nach fromJSON neu.
 // Sie ersetzen nur lineare Suchen; Reihenfolge (FIFO) und Summationsreihenfolge bleiben die des Arrays.
-// pos: Chargen-ID -> Arrayposition. Vollständiger Neuaufbau, wenn s.batches ersetzt, gekürzt oder umsortiert
-//      wurde (Referenz, Länge, letztes Element); angehängte Chargen werden nachgetragen. Treffer werden an der
-//      Arrayposition gegengeprüft.
+// pos: Chargen-ID -> Arrayposition. Vollständiger Neuaufbau, wenn s.batches ersetzt oder gekürzt wurde bzw. das
+//      letzte Element wechselt (Referenz, Länge, letztes Element); angehängte Chargen werden nachgetragen. Treffer
+//      werden an der Arrayposition gegengeprüft. In-place-Umsortierung wird bei der nächsten Auffrischung der
+//      Aktivliste erkannt (Positionsprüfung jeder aktiven Charge, s. regroup) und führt zum Neuaufbau.
 // aktiv: Chargen mit Menge oder Reservierung (qty!==0||reserved!==0) in Arrayreihenfolge, gesamt, je Standort
 //      und je Standort+Artikel. Nullchargen tragen zu allen Summen exakt 0 bei und werden übersprungen; sie
 //      bleiben als Herkunft für Rückrufe im Array. Menge und Reservierung schreibt ausschließlich diese Datei
@@ -22,32 +23,44 @@ const EMPTY = Object.freeze([]);
 //      owner, blocked, locked werden bei jeder Abfrage live geprüft.
 const indexes = new WeakMap();
 const isActive = b => b.qty !== 0 || b.reserved !== 0;
-function addActive(x, b) {
-  x.active.push(b);
+function addActive(x, b, at) {
+  x.active.push(b); x.activeAt.push(at);
   let site = x.bySite.get(b.site); if (!site) x.bySite.set(b.site, site = {all:[], items:new Map()});
   site.all.push(b);
   let list = site.items.get(b.item); if (!list) site.items.set(b.item, list = []);
   list.push(b);
 }
 // Gruppen aus Kandidaten (Arrayreihenfolge) neu bilden; danach angehängte Zeilen ab `from`.
-function regroup(x, candidates, rows, from) {
-  x.active = []; x.bySite = new Map(); x.dirty = false;
-  for (let i = 0; i < candidates.length; i++) { const b = candidates[i]; if (isActive(b)) addActive(x, b); }
-  for (let i = from; i < rows.length; i++) { const b = rows[i]; if (isActive(b)) addActive(x, b); }
+// activeAt[i] ist die Arrayposition von active[i]. Jeder Kandidat muss noch an seiner Position stehen
+// (rows[at] === b); da die Positionen aufsteigen, ist die FIFO-Reihenfolge damit gesichert. Abweichung
+// (z. B. In-place-Tausch) → false, der Aufrufer baut neu auf. Kosten: ein Arrayzugriff je aktiver Charge.
+function regroup(x, candidates, at, rows, from) {
+  x.active = []; x.activeAt = []; x.bySite = new Map(); x.dirty = false;
+  for (let i = 0; i < candidates.length; i++) {
+    const b = candidates[i], p = at[i];
+    if (rows[p] !== b) return false;
+    if (isActive(b)) addActive(x, b, p);
+  }
+  for (let i = from; i < rows.length; i++) { const b = rows[i]; if (isActive(b)) addActive(x, b, i); }
   x.groupsLen = rows.length;
+  return true;
+}
+function rebuild(s, rows) {
+  const x = {rows, t:s.t, len:rows.length, pos:new Map(), buildings:null, buildingsLen:-1, buildingsT:null, capacity:new Map()};
+  for (let i = 0; i < rows.length; i++) if (!x.pos.has(rows[i].id)) x.pos.set(rows[i].id, i);
+  regroup(x, EMPTY, EMPTY, rows, 0); indexes.set(s, x);
+  return x;
 }
 export function batchIndex(s) {
   const rows = s.batches;
   let x = indexes.get(s);
   if (!x || x.rows !== rows || rows.length < x.len || (x.len && rows[x.len-1] !== x.last)) {
-    x = {rows, t:s.t, len:rows.length, pos:new Map(), buildings:null, buildingsLen:-1, buildingsT:null, capacity:new Map()};
-    for (let i = 0; i < rows.length; i++) if (!x.pos.has(rows[i].id)) x.pos.set(rows[i].id, i);
-    regroup(x, EMPTY, rows, 0); indexes.set(s, x);
+    x = rebuild(s, rows);
   } else {
     for (let i = x.len; i < rows.length; i++) if (!x.pos.has(rows[i].id)) x.pos.set(rows[i].id, i);
     x.len = rows.length;
-    if (x.dirty || x.t !== s.t) { x.t = s.t; regroup(x, x.active, rows, x.groupsLen); }
-    else if (x.groupsLen < rows.length) { for (let i = x.groupsLen; i < rows.length; i++) if (isActive(rows[i])) addActive(x, rows[i]); x.groupsLen = rows.length; }
+    if (x.dirty || x.t !== s.t) { x.t = s.t; if (!regroup(x, x.active, x.activeAt, rows, x.groupsLen)) x = rebuild(s, rows); }
+    else if (x.groupsLen < rows.length) { for (let i = x.groupsLen; i < rows.length; i++) if (isActive(rows[i])) addActive(x, rows[i], i); x.groupsLen = rows.length; }
   }
   x.last = rows[rows.length-1];
   return x;
