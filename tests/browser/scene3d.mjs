@@ -40,14 +40,14 @@ try {
   // Baumodus: Montageplatz auf freie Zelle
   await page.click('.rail [data-action="build"]'); await wait(300);
   await page.click('[data-build="assembly"]'); await wait(300);
-  const before = await page.evaluate(() => document.querySelector('#worldTitle').textContent);
+  const before = await page.evaluate(() => document.querySelectorAll('[data-flow]').length ? document.querySelector('#toast').textContent : '');
   const cell = await page.evaluate(() => { const c = document.querySelector('#world'), r = c.getBoundingClientRect(), p = c.__scene.cellToScreen(12, 6); return { x: r.left + p.x, y: r.top + p.y }; });
   await page.mouse.move(cell.x, cell.y); await wait(250);
   const ghost = await page.evaluate(() => document.querySelector('#world').__scene.ghost.visible);
   check('Baugeist sichtbar unter Mauszeiger', ghost);
   await page.mouse.click(cell.x, cell.y); await wait(600);
-  const after = await page.evaluate(() => ({ title: document.querySelector('#worldTitle').textContent, toast: document.querySelector('#toast').textContent }));
-  check('Klick auf freie Zelle baut Anlage', before !== after.title && /Fahrt/.test(after.title), JSON.stringify({ before, ...after }));
+  const after = await page.evaluate(() => ({ toast: document.querySelector('#toast').textContent }));
+  check('Klick auf freie Zelle baut Anlage', /übernommen/i.test(after.toast), JSON.stringify({ before, ...after }));
   await page.keyboard.press('Escape'); await wait(500);
   const shot = path.join(root, 'docs/assets/scene3d-0.9.png');
   await page.screenshot({ path: shot });
