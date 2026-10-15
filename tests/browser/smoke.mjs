@@ -2,8 +2,9 @@
 // Aufruf: npm run test:browser   (Optionen: --repo = Repo-Root direkt ausliefern statt tmp-Kopie, --headed)
 // Ablauf: statischer Server → index.html (mit <base href="./dist/">) → Gründen → Panels → 30 s bei 12× →
 // Autosave → Neuladen lädt Stand → JSON-Export → „Spiel als HTML speichern“ → Download per file:// öffnen.
-import {readFileSync} from 'node:fs';
+import {readFileSync,mkdtempSync,rmSync} from 'node:fs';
 import {join} from 'node:path';
+import {tmpdir} from 'node:os';
 import {pathToFileURL} from 'node:url';
 import {loadPlaywright} from './playwright.mjs';
 import {prepareRoot,startServer,watch} from './serve.mjs';
@@ -21,6 +22,8 @@ const minutesOf=text=>{const m=/Tag (\d+) · (\d\d):(\d\d)/.exec(text||'');retur
 const pw=loadPlaywright();
 if(!pw){console.error('Playwright nicht gefunden (lokal oder global). Kein Download, keine Installation.');process.exit(2);}
 const {root,cleanup}=prepareRoot(args.has('--repo'));
+// Downloads immer in eigenes tmp-Verzeichnis, auch bei --repo (QS-W0-09): Repo bleibt unverändert.
+const downloads=mkdtempSync(join(tmpdir(),'logistics-smoke-dl-'));
 const {server,url}=await startServer(root);
 const browser=await pw.chromium.launch({...pw.launchOptions,headless:!args.has('--headed')});
 const errors=[];
@@ -65,7 +68,7 @@ try{
  const json=JSON.parse(readFileSync(await jsonDownload.path(),'utf8'));
  check('JSON-Export gültig',json.schema===1&&json.mode==='guided'&&json.t>=afterReload,`${jsonDownload.suggestedFilename()} · t=${json.t}`);
  const [htmlDownload]=await Promise.all([page.waitForEvent('download'),page.click('#panelBody [data-action="exportHtml"]')]);
- const htmlPath=join(root,'export-'+Date.now()+'.html');await htmlDownload.saveAs(htmlPath);
+ const htmlPath=join(downloads,'export-'+Date.now()+'.html');await htmlDownload.saveAs(htmlPath);
  const exported=readFileSync(htmlPath,'utf8');
  const embedded=JSON.parse(/<script id="embedded-save" type="application\/json">([\s\S]*?)<\/script>/.exec(exported)[1]);
  check('HTML-Download enthält Spielstand',embedded.t>=json.t,`${htmlDownload.suggestedFilename()} · ${(exported.length/1024).toFixed(0)} KB · t=${embedded.t}`);
@@ -85,6 +88,6 @@ try{
  check('Keine Konsolen-/Seitenfehler',errors.length===0,errors.join(' | '));
  exitCode=checks.every(c=>c.ok)?0:1;
 }catch(e){console.error(e);check('Ablauf ohne Ausnahme',false,e.message);}
-finally{await browser.close();server.kill();cleanup();}
+finally{await browser.close();server.kill();cleanup();rmSync(downloads,{recursive:true,force:true});}
 console.log(JSON.stringify({passed:checks.filter(c=>c.ok).length,failed:checks.filter(c=>!c.ok).length,errors},null,1));
 process.exit(exitCode);

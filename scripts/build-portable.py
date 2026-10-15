@@ -96,6 +96,27 @@ def bundle(entry, vendors=None):
     return '(()=>{\n"use strict";\nconst __modules=[];\n' + '\n'.join(chunks) + '\n})();\n'
 
 
+# QS-W0-01: Die Datei trägt ihre unveränderte Vorlage („Schale“) als inerte JSON-Zeichenkette. Ein erneuter
+# HTML-Export setzt Schale, Stylesheet- und Laufzeit-Rohtext wieder zusammen statt das laufende DOM zu
+# serialisieren. Gleiche Platzhalter und Kodierung wie portableTemplate() in dist/portable-save.js.
+MARKS = {'style': '@@PORTABLE-STYLE@@', 'runtime': '@@PORTABLE-RUNTIME@@', 'template': '@@PORTABLE-TEMPLATE@@'}
+MARK_PATTERN = re.compile(r'@@PORTABLE-(?:STYLE|RUNTIME|TEMPLATE)@@')
+
+
+def encode_json(value):
+    """Wie JSON.stringify + Maskierung von <, >, & in portable-save.js."""
+    return (json.dumps(value, ensure_ascii=False)
+            .replace('<', '\\u003c').replace('>', '\\u003e').replace('&', '\\u0026'))
+
+
+def portable_template(shell, style, runtime):
+    parts = {MARKS['style']: style, MARKS['runtime']: runtime, MARKS['template']: encode_json(shell)}
+    for mark in parts:
+        if shell.count(mark) != 1:
+            raise ValueError('Template marker must occur exactly once: ' + mark)
+    return MARK_PATTERN.sub(lambda match: parts[match[0]], shell)
+
+
 def license_comments(vendors, dist):
     """License texts of all used vendor folders as passive HTML comments."""
     notices = []
@@ -123,11 +144,20 @@ def build(root=ROOT):
     # HTML's script parser also recognizes closing tags inside JS strings/comments.
     code = re.sub(r'</script', r'<\\/script', code, flags=re.I)
     code = code.replace('<!--', '<\\!--')
+    # Der HTML-Parser normalisiert Zeilenenden; die Vorlage muss dem DOM-Rohtext exakt entsprechen.
+    normalize = lambda text: text.replace('\r\n', '\n').replace('\r', '\n')
+    html, css, code = normalize(html), normalize(css), normalize(code)
+    for mark in MARKS.values():
+        if mark in html or mark in css:
+            raise ValueError('Template marker inside page or stylesheet: ' + mark)
     payload = ('<script id="embedded-save" type="application/json">null</script>\n'
                '<script id="embedded-prefs" type="application/json">null</script>\n'
+               '<script id="portable-template" type="application/json">' + MARKS['template'] + '</script>\n'
                + license_comments(vendors, dist) +
-               '<script id="portable-runtime">' + code + '</script>')
-    html = html.replace(css_tag, '<style>' + css + '</style>', 1).replace(app_tag, payload, 1)
+               '<script id="portable-runtime">' + MARKS['runtime'] + '</script>')
+    shell = (html.replace(css_tag, '<style id="portable-style">' + MARKS['style'] + '</style>', 1)
+             .replace(app_tag, payload, 1))
+    html = portable_template(shell, css, code)
     # Atomar ersetzen: parallele Leser (z. B. gleichzeitig laufende Tests) sehen nie eine halb geschriebene Datei.
     target = dist / 'portable.html'
     temp = dist / f'.portable.html.{os.getpid()}.tmp'

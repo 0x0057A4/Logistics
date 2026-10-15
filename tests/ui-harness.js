@@ -1,4 +1,4 @@
-import {injectPortableSave} from '../dist/portable-save.js';
+import {injectPortableSave,portableTemplate} from '../dist/portable-save.js';
 import {RENTAL_RATES} from '../dist/rental.js';
 import * as tours from '../dist/tours.js';
 // Isolierte JavaScript-/Bindungsprüfung. Kein Browser, kein Layouttest.
@@ -24,7 +24,7 @@ export async function boot(options={}){
  const locks=options.locks||makeLocks();
  const storage=options.storage||{getItem:k=>memory.get(k)||null,setItem:(k,v)=>memory.set(k,v),removeItem:k=>memory.delete(k)};
  const createSaveGuard=opts=>realGuard({...opts,storage:options.storageGetterError?null:storage,locks,setInterval:()=>1,clearInterval:()=>{}});
- const context=vm.createContext({...catalog,injectPortableSave,fetch:options.fetch,RENTAL_RATES,planTour:tours.planTour,createSaveGuard,report,Simulation,onShift,Scene,document,window:{addEventListener(){}},localStorage:storage,matchMedia:()=>({matches:false}),performance:{now:()=>1000},setTimeout(){},clearTimeout(){},setInterval(){},Blob,URL,FormData:class{constructor(f){return Object.entries(f.values);}}});
+ const context=vm.createContext({...catalog,injectPortableSave,portableTemplate,fetch:options.fetch,RENTAL_RATES,planTour:tours.planTour,createSaveGuard,report,Simulation,onShift,Scene,document,window:{addEventListener(){}},localStorage:storage,matchMedia:()=>({matches:false}),performance:{now:()=>1000},setTimeout(){},clearTimeout(){},setInterval(){},Blob,URL,FormData:class{constructor(f){return Object.entries(f.values);}}});
  if(options.storageGetterError)Object.defineProperty(context,'localStorage',{get(){throw new DOMException('Access denied','SecurityError');}});
  vm.runInContext(code,context);await vm.runInContext('ready',context);
  const run=source=>vm.runInContext(source,context);

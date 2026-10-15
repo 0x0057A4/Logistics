@@ -220,9 +220,14 @@ try{
   await page.goto(url+'index.html');await page.waitForFunction(()=>!!globalThis.__qa);await wait(1200);
   const st=await page.evaluate(()=>({welcome:document.querySelector('#welcome').open,toast:document.querySelector('#toast').textContent}));
   check('autosave','Start mit beschädigtem Hauptstand: Fehlermeldung, Willkommensdialog',st.welcome&&/nicht geladen/.test(st.toast),JSON.stringify(st));
-  check('autosave','Willkommensdialog bietet keinen Weg zur Sicherung (Hinweis)',!(await page.locator('#welcome [data-action="backup"]').count()),'nur Gründen/Speicher prüfen/temporär');
+  // QS-W0-05 (A12-Fix): Willkommensdialog bietet „Letzte Sicherung laden“, weil eine gültige Sicherung existiert.
+  check('autosave','Willkommensdialog bietet „Letzte Sicherung laden“ (QS-W0-05)',await page.locator('#welcome #welcomeBackup').isVisible(),'sichtbar');
   await wait(21000);
   check('autosave','Ohne Handlung nach 21 s: Sicherung unverändert',await page.evaluate(k=>localStorage.getItem(k+'-backup'),STORE+'-guided')===r.backup);
+  await page.click('#welcomeBackup');await page.click('[data-action="confirmOk"]');
+  await page.waitForFunction(()=>!document.querySelector('#welcome').open,null,{timeout:10000}).catch(()=>{});
+  const restored=await page.evaluate(k=>({t:__qa.sim().state.t,main:JSON.parse(localStorage.getItem(k)).t,backup:localStorage.getItem(k+'-backup')}),STORE+'-guided');
+  check('autosave','„Letzte Sicherung laden“ im Willkommensdialog stellt Stand wieder her (QS-W0-05)',restored.t===JSON.parse(r.backup).t&&restored.main===restored.t&&restored.backup===r.backup,JSON.stringify({t:restored.t,main:restored.main}));
   check('autosave','Keine Konsolen-/Seitenfehler',errors.length===0,errors.join(' | '));
   await ctx.close();
  }
@@ -232,11 +237,11 @@ try{
   const errors=[],warns=[];const ctx=await browser.newContext({viewport:{width:1600,height:900},acceptDownloads:true});await ctx.addInitScript(INIT);
   const page=await newPage(ctx,'http',errors,warns);await found(page);await starterLine(page);
   await page.evaluate(()=>{__qa.sim().step(200);__qa.render(true);});
-  const gen=[];let src=page,expectT=await page.evaluate(()=>__qa.sim().state.t);
+  const gen=[],htmls=[];let src=page,expectT=await page.evaluate(()=>__qa.sim().state.t);
   for(let g=1;g<=3;g++){
    await src.locator('button[data-panel="settings"]:visible').first().click();
    const [dl]=await Promise.all([src.waitForEvent('download'),src.click('#panelBody [data-action="exportHtml"]')]);
-   const path=join(downloads,`gen${g}.html`);await dl.saveAs(path);const html=readFileSync(path,'utf8');
+   const path=join(downloads,`gen${g}.html`);await dl.saveAs(path);const html=readFileSync(path,'utf8');htmls.push(html);
    const emb=JSON.parse(/<script id="embedded-save" type="application\/json">([\s\S]*?)<\/script>/.exec(html)[1]);
    const f=await newPage(ctx,'file'+g,errors,warns);await f.goto(pathToFileURL(path).href);
    await f.waitForFunction(()=>/Tag \d+/.test(document.querySelector('#clock').textContent),null,{timeout:20000});await wait(500);
@@ -255,6 +260,9 @@ try{
    expectT=t1;src=f;
   }
   console.log('  Generationen:',JSON.stringify(gen));
+  // QS-W0-01 (A12-Fix): Vorlage je Generation byte-identisch bis auf Spielstand-/Prefs-Slot.
+  const tpl=h=>h.replace(/(<script id="embedded-(?:save|prefs)" type="application\/json">)[\s\S]*?(<\/script>)/g,'$1…$2');
+  check('portable','Gen 1→2→3: Vorlage byte-identisch bis auf Spielstand-/Prefs-Slot',tpl(htmls[1])===tpl(htmls[0])&&tpl(htmls[2])===tpl(htmls[1]),htmls.map(h=>tpl(h).length).join(' / '));
   check('portable','Dateigröße wächst nicht unkontrolliert (Gen3 ≤ Gen1 + 5 %)',gen[2].kb<=gen[0].kb*1.05,gen.map(x=>x.kb+' KB').join(' → '));
   check('portable','Keine Konsolen-/Seitenfehler',errors.length===0,errors.join(' | '));
   await ctx.close();
