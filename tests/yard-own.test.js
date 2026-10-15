@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {Simulation} from '../dist/core.js';
 import * as yard from '../dist/yard.js';
 
+const cid=sim=>sim.state.contracts.find(c=>c.status==='ended')?.id??'vertrag-test';
 // Aufbau: Sandbox, Docks und Regale an festen Plätzen, eine Lagerkraft. Aufträge wie W1-S1 (contracts.js kommt parallel).
 function setup({docks=1,racks=2,workers=1,drivers=0}={}){
  const sim=new Simulation({mode:'sandbox'}),s=sim.state,site=s.selectedSite;
@@ -12,10 +13,12 @@ function setup({docks=1,racks=2,workers=1,drivers=0}={}){
  for(let i=0;i<racks;i++){const r=sim.command({type:'build',buildingType:'rack',x:rackPos[i][0],y:rackPos[i][1]});assert.equal(r.ok,true,r.message);}
  for(let i=0;i<workers;i++)assert.equal(sim.command({type:'hire',role:'warehouse'}).ok,true);
  for(let i=0;i<drivers;i++)assert.equal(sim.command({type:'hire',role:'driver'}).ok,true);
+ // Echter Vertrag für Auftragsreferenzen (A08-validate); sofort beendet, damit er keine eigenen Lkw schickt.
+ const c=s.contracts[0];assert.equal(sim.command({type:'acceptContract',id:c.id}).ok,true);assert.equal(sim.command({type:'cancelContract',id:c.id}).ok,true);
  return {sim,s,site,dockIds};
 }
-function orders(sim,qtys,eta=520,sla=240){const s=sim.state;return qtys.map((qty,i)=>{const id=sim.api.id('order');s.orders.push({id,kind:'logistics',source:'hub',contractId:'vertrag-test',lane:`lane-${i}`,customer:`Gebiet ${i+1} (Testversand)`,item:'parcel',qty,price:1.2,due:eta+sla,quality:0,site:s.selectedSite,status:'active',delivered:0,paid:0});return id;});}
-function arrive(sim,qtys,eta){const ids=orders(sim,qtys,eta);return yard.schedule(sim.state,sim.api,{contractId:'vertrag-test',site:sim.state.selectedSite,parcels:qtys.reduce((n,q)=>n+q,0),eta,orderIds:ids});}
+function orders(sim,qtys,eta=520,sla=240){const s=sim.state;return qtys.map((qty,i)=>{const id=sim.api.id('order');s.orders.push({id,kind:'logistics',source:'hub',contractId:cid(sim),lane:(c=>c?c.lanes[i%c.lanes.length].id:`lane-${i}`)(s.contracts.find(c=>c.status==='ended')),customer:`Gebiet ${i+1} (Testversand)`,item:'parcel',qty,price:1.2,due:eta+sla,quality:0,site:s.selectedSite,status:'active',delivered:0,paid:0});return id;});}
+function arrive(sim,qtys,eta){const ids=orders(sim,qtys,eta);return yard.schedule(sim.state,sim.api,{contractId:cid(sim),site:sim.state.selectedSite,parcels:qtys.reduce((n,q)=>n+q,0),eta,orderIds:ids});}
 const parcels=(s,owner)=>s.batches.filter(b=>b.item==='parcel'&&(!owner||b.owner===owner)).reduce((n,b)=>n+b.qty,0);
 function runUntil(sim,cond,max=600){for(let i=0;i<max;i++){if(cond())return i;sim.step(1);}assert.fail('Bedingung nicht erreicht');}
 const reload=sim=>Simulation.fromJSON(sim.serialize());
