@@ -1,5 +1,6 @@
 // Browser-Leistungsmessung (Playwright, Chromium headless). Nicht Teil von `npm test`.
-// Aufruf: npm run perf:browser [-- --seconds=20 --state-mb=2 --out=perf.json --swiftshader --ref=<commit> --renderer=2d]
+// Aufruf: npm run perf:browser [-- --seconds=20 --state-mb=2 --out=perf.json --swiftshader --ref=<commit> --renderer=2d --overlay]
+// --overlay: lädt mit ?perf=1 und übernimmt je Szenario die Werte der Messanzeige (dist/perf-overlay.js): Sim-Zeit je Frame, Draw Calls, Renderer.
 // Misst requestAnimationFrame-Abstände (Median/p95/p99, Anteile > 16,7/20/33,4 ms) und Long Tasks (> 50 ms) bei 12×.
 // Hinweis: Bei 60 Hz liegen viele Abstände bei 16,7–16,8 ms; „over16_7“ zählt dieses Rauschen mit, „over20“ nicht.
 // Szenarien: „start“ (neues Unternehmen mit Startbetrieb) und „gross“ (vorab gespeicherter großer Stand, Autosave im Fenster).
@@ -16,7 +17,8 @@ const opt=Object.fromEntries(process.argv.slice(2).map(a=>a.replace(/^--/,'').sp
 const seconds=Number(opt.seconds||20),stateMB=Number(opt['state-mb']||2);
 const STORE='industrie-logistik-v1';
 // --renderer=2d|3d erzwingt die Szene über ?renderer= (scene-select.js); Standard: automatische Wahl.
-const query=opt.renderer?'?renderer='+encodeURIComponent(opt.renderer):'';
+const params=new URLSearchParams();if(opt.renderer)params.set('renderer',opt.renderer);if(opt.overlay)params.set('perf','1');
+const query=params.size?'?'+params:'';
 
 const INIT=()=>{
  window.__perf={longtasks:[],deltas:[],recording:false};
@@ -34,7 +36,9 @@ async function record(page,ms){
  const status0=await page.locator('#statusText').textContent();
  await page.waitForTimeout(ms);
  const data=await page.evaluate(()=>{window.__perf.recording=false;return window.__perf;});
- return {...summary(data.deltas,data.longtasks,ms),statusBefore:status0,statusAfter:await page.locator('#statusText').textContent(),longtaskError:data.longtaskError};
+ // Optional: Messanzeige (?perf=1) liefert Sim-Zeit je Frame und renderInfo; ohne Anzeige null.
+ const overlay=await page.evaluate(()=>{const p=window.__perfOverlay;if(!p)return null;const s=p.snapshot();return {simPerFrameMs:+s.simPerFrame.toFixed(3),fps1s:s.fps,render:s.render,longTasks10s:s.longTasks,p95Ms10s:s.stats.p95Ms};});
+ return {...summary(data.deltas,data.longtasks,ms),overlay,statusBefore:status0,statusAfter:await page.locator('#statusText').textContent(),longtaskError:data.longtaskError};
 }
 
 const pw=loadPlaywright({swiftshader:opt.swiftshader===true||undefined});

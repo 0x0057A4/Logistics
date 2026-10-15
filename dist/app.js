@@ -9,6 +9,7 @@ import {ITEMS,BUILDINGS,RECIPES,ROLES,VEHICLES,RESEARCH} from './catalog.js';
 import {createScene} from './scene-select.js';
 import {onShift,describeAssignment,workRate,UNLOAD_BASE} from './workforce.js';
 import {gateKey,unloadKey} from './yard.js';
+import {startPerfOverlay} from './perf-overlay.js';
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 // Zahlformat je Nachkommastellen einmal erzeugen: toLocaleString baut sonst je Aufruf ein Intl.NumberFormat (HUD/Panels, QS-W0-02).
@@ -518,7 +519,9 @@ document.addEventListener('visibilitychange',()=>{accumulator=0;lastTick=perform
 window.addEventListener('beforeunload',e=>{if(!started)return;if(temporary?dirty:leaveSave()!=='saved'){e.preventDefault();e.returnValue='';}});
 window.addEventListener('pagehide',()=>guard.release());
 window.addEventListener('pageshow',e=>{if(e.persisted){writable=false;speed=0;toast('Ansicht wiederhergestellt. Für sicheres Fortsetzen Seite neu laden.',true);render();}});
-setInterval(()=>{const now=performance.now(),dt=Math.min(1000,now-lastTick);lastTick=now;if(!started||switching||document.hidden||$('dialog[open]')||!speed||!canWrite()){accumulator=0;scene.setClock?.(sim.state.t);return;}accumulator+=dt*speed;const n=Math.floor(accumulator/1000);if(n){accumulator-=n*1000;try{sim.step(n);dirty=true;render();}catch(e){setSpeed(0);toast('Simulation angehalten: '+e.message,true);}}scene.setClock?.(sim.state.t+accumulator/1000);},100);
+// Messanzeige nur mit ?perf=1 (perf-overlay.js); sonst null und kein Messpfad im Takt.
+const perf=typeof startPerfOverlay==='function'?startPerfOverlay({scene,speed:()=>speed}):null;
+setInterval(()=>{const now=performance.now(),dt=Math.min(1000,now-lastTick);lastTick=now;if(!started||switching||document.hidden||$('dialog[open]')||!speed||!canWrite()){accumulator=0;scene.setClock?.(sim.state.t);return;}accumulator+=dt*speed;const n=Math.floor(accumulator/1000);if(n){accumulator-=n*1000;try{const p0=perf&&performance.now();sim.step(n);if(perf)perf.sim(performance.now()-p0,n);dirty=true;render();}catch(e){setSpeed(0);toast('Simulation angehalten: '+e.message,true);}}scene.setClock?.(sim.state.t+accumulator/1000);},100);
 // Autosave im Leerlauf; Verlassen (visibilitychange/beforeunload) speichert sofort (localStorage synchron; IndexedDB: Transaktion sofort + Notfall-Kopie).
 let idleSave=0;
 function requestIdleSave(){if(idleSave)return;const run=()=>{idleSave=0;if(started&&dirty)save();};idleSave=typeof requestIdleCallback==='function'?requestIdleCallback(run,{timeout:5000}):setTimeout(run,0);}
