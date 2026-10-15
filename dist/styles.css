@@ -304,3 +304,10 @@ body.large .flow{top:138px;max-height:calc(100% - 138px - var(--sb) - var(--vbar
 @media(max-width:1360px){.cmd{flex-basis:220px}.site-label{max-width:240px}.cash small{display:none}}
 @media(max-width:1180px){.kpi{width:152px}.vrow{gap:6px;padding:5px 8px}body.panel-open .kpis{display:none}body.panel-open .view-switch{top:12px}body.panel-open .flow{top:52px;max-height:calc(100% - 52px - var(--sb) - var(--vbar-h) - 18px)}}
 @media(max-width:900px){.kpis,.view-switch,.flow,.mission,.cash,.clock small,.site-text small,.sb-stats>span:nth-child(-n+3){display:none}.cmd{min-width:120px}body.panel-open{--pw:calc(100vw - var(--left) - var(--tools))}.vbar{right:var(--tools)}body.panel-open .vbar{display:none}.welcome-art{display:none}.welcome-body{padding:25px}}
+/* Hub W1 (A10): Fremd-Lkw, Torbuch, Dock-Belegung, optionale Kennzahl. Kein backdrop-filter. */
+.chip.tone-good{background:#e3f1e6;color:#2d6a41}.chip.tone-good::before{background:var(--good)}
+.vrow.foreign small{color:var(--wait-ink);font-weight:650;letter-spacing:.4px}
+tr.selected td{background:#eef6e4}
+.yard-table td{vertical-align:top}
+.dock-row strong .chip{margin-left:6px;font-weight:500}
+@media(max-width:1500px){body.panel-open .kpi-opt{display:none}}

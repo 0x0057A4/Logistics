@@ -84,7 +84,37 @@ for(const [width,height] of [[1920,1080],[1280,800]]){
  check(!errors.length,`${label}: keine Konsolenfehler${errors.length?' – '+errors.join(' | '):''}`);
  await context.close();
 }
+// Hub W1-S4: Probe-Zustand (echte Verträge, Hof und Sortierung; Platzhalter-Dockbelegung) über den echten Importweg laden; Hof & Docks und Verträge.
+{
+ const {Simulation}=await import(pathToFileURL(path.join(root,'dist/core.js')).href);
+ const {hubProbe}=await import(pathToFileURL(path.join(root,'tests/ui-hub-probe.js')).href);
+ const queued=hubProbe(Simulation,{blockDocks:true}).sim.serialize(),unloading=hubProbe(Simulation).sim.serialize();
+ for(const [width,height,json,shot] of [[1920,1080,unloading,'hof-ui-0.9.png'],[1280,800,queued,null]]){
+  const label=`Hub ${width}×${height}`;const context=await browser.newContext({viewport:{width,height},deviceScaleFactor:1});const page=await context.newPage();
+  const errors=[];page.on('console',m=>{if(m.type()==='error'&&!/favicon\.ico/.test(m.location()?.url||''))errors.push(m.text());});page.on('pageerror',e=>errors.push(String(e)));
+  await page.goto(base+'index.html');await page.waitForSelector('#welcome[open]');await page.click('[data-action="start"]');
+  try{await page.waitForFunction(()=>!document.querySelector('#welcome').open,null,{timeout:4000});}
+  catch{await page.click('#welcome [data-action="temporary"]');await page.click('#confirm [data-action="confirmOk"]');await page.waitForFunction(()=>!document.querySelector('#welcome').open);}
+  await page.setInputFiles('#importFile',{name:'hub-probe.json',mimeType:'application/json',buffer:Buffer.from(json)});
+  await page.waitForSelector('#confirm[open]');await page.click('#confirm [data-action="confirmOk"]');
+  await page.waitForFunction(()=>document.getElementById('st-gate-n').textContent==='1');
+  const flow=await page.evaluate(()=>Object.fromEntries(['gate','unload','sort','out','delivery'].map(k=>[k,document.getElementById(`st-${k}-n`).textContent+' · '+document.getElementById(`st-${k}-sub`).textContent])));
+  log.push(`${label}: Standortfluss ${JSON.stringify(flow)}`);
+  check(await page.locator('#vbarList .vrow.foreign').count()===1,`${label}: Fremd-Lkw in der Fahrzeugleiste`);
+  check(await page.isVisible('#kpiSortedBox'),`${label}: KPI „Verarbeitet heute“ mit Sortierzähler sichtbar`);
+  await overlapCheck(page,label,false);
+  await page.click('.rail [data-panel="yard"]');await page.waitForSelector('#panelBody .yard-table');
+  check(await page.locator('#panelBody .yard-table tbody tr').count()===1&&await page.locator('#panelBody .dock-row').count()===2,`${label}: Torbuch und Dock-Belegung`);
+  await overlapCheck(page,label+' Hof & Docks',true);
+  if(json===queued){await page.click('#panelBody [data-action="prioritizeArrival"]');check(await page.locator('#panelBody [data-action="prioritizeArrival"]').count()===0&&/vorgezogen/.test(await page.textContent('#panelBody')),`${label}: Vorziehen über echten Befehl`);
+   await page.click('#bellBtn');check(/wartet seit \d+ Min\./.test(await page.textContent('#bellList')),`${label}: Glocke meldet wartenden Lkw`);await page.keyboard.press('Escape');}
+  if(shot){fs.mkdirSync(outDir,{recursive:true});await page.screenshot({path:path.join(outDir,shot)});}
+  await page.click('.rail [data-panel="contracts"]');check(/Ankunftsplan heute und morgen/.test(await page.textContent('#panelBody')),`${label}: Vertragsfenster mit Ankunftsplan`);await overlapCheck(page,label+' Verträge',true);
+  check(!errors.length,`${label}: keine Konsolenfehler${errors.length?' – '+errors.join(' | '):''}`);
+  await context.close();
+ }
+}
 await browser.close();server.close();
 console.log(log.join('\n'));
 if(failures.length){console.error(failures.join('\n'));process.exit(1);}
-console.log(`Browser-Check bestanden. Bildschirmfotos: ${path.relative(root,outDir)}/hud-0.9-1920.png, hud-0.9-1280.png`);
+console.log(`Browser-Check bestanden. Bildschirmfotos: ${path.relative(root,outDir)}/hud-0.9-1920.png, hud-0.9-1280.png, hof-ui-0.9.png`);
