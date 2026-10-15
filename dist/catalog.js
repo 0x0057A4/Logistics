@@ -47,3 +47,7 @@ for(const key of ['lamp','lamp_pro','sensor'])ITEMS[key].sellable=true;
 for(const [key,weight] of Object.entries({van:80,truck:320,refrigerated:200})){VEHICLES[key].weightCapacity=weight;VEHICLES[key].maxWeight=weight;}
 
 ITEMS.cold_module={name:'Temperaturempfindliches Modul',price:80,weight:2,volume:1,purchasable:true,sellable:true,cold:true};
+
+// Hub-Betrieb Welle 1: Fremdpakete der Vertragskunden; Werte vorläufig, Balancing A02.
+Object.assign(ITEMS,{parcel:{name:'Paket',price:0,volume:0.05,weight:0.5}});
+Object.assign(BUILDINGS,{sorter:{name:'Sortierplatz',cost:8500,w:3,h:2,color:'#7fb7e6',role:'warehouse',recipes:[],power:3,throughput:240}});

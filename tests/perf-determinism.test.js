@@ -8,7 +8,9 @@ import {createHash} from 'node:crypto';
 import {Simulation} from '../dist/core.js';
 import * as P from './perf-scenarios.mjs';
 
-const hash=text=>createHash('sha256').update(text).digest('hex');
+// Welle-1-Listen (contracts, yard) bleiben leer, solange kein Hub-Befehl läuft; für Referenzhashes aus 0.9-W0 ausgeblendet.
+const hub=text=>{const o=JSON.parse(text);for(const k of ['contracts','yard'])if(Array.isArray(o[k])&&!o[k].length)delete o[k];return JSON.stringify(o);};
+const hash=text=>createHash('sha256').update(hub(text)).digest('hex');
 // Kontrollpunkte je Szenario: Hash des serialisierten Zustands nach jeweils `every` Minuten.
 function trace(sc,minutes,every){const out=[];for(let m=0;m<minutes;m+=every){P.run(sc,every,{offset:(sc.offset||0)+m});out.push(hash(sc.sim.serialize()));}return out;}
 // Szenarien bewusst über run() mit innerem Minutenzähler; services() nutzt plan(i) relativ zum Abschnitt.
