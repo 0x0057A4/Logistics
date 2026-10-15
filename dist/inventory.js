@@ -6,6 +6,8 @@ const STORED = new Set(['stock', 'inbound', 'quarantine']);
 const positive = n => Number.isFinite(n) && n > 0;
 const clean = n => Math.abs(n) < 1e-9 ? 0 : n;
 const EMPTY = Object.freeze([]);
+// Lagervolumen je Einheit (W1-S3: Paket 0,05). Alle Bestandsartikel bis 0.9 haben Volumen 1: qty*1 ist bitgleich qty.
+const vol = item => ITEMS[item]?.volume || 1;
 
 // Laufzeitlokale Indexe (Welle 0, S4). WeakMap am Zustand: nie serialisiert, nie aufzählbar, nach fromJSON neu.
 // Sie ersetzen nur lineare Suchen; Reihenfolge (FIFO) und Summationsreihenfolge bleiben die des Arrays.
@@ -73,6 +75,8 @@ export function findBatch(s, id) {
 }
 /** Chargen mit Menge/Reservierung in Arrayreihenfolge (Obermenge aller qty>0). Nur lesen. */
 export function activeBatches(s) { return batchIndex(s).active; }
+/** Aktive Chargen eines Artikels an einem Standort in Arrayreihenfolge (Obermenge; site/location live prüfen). Nur lesen. */
+export function siteItemBatches(s, site, item) { return batchIndex(s).bySite.get(site)?.items.get(item) || EMPTY; }
 export function init(s) { s.batches ??= []; s.reservations ??= []; s.recalls ??= []; }
 export function handle(s,c,api) {
   if(c.type!=='recallBatch')return null;
@@ -102,7 +106,7 @@ export function createAPI(s, api) {
     if (n === undefined) { n = 40 + s.buildings.filter(b => b.site === site).reduce((sum, b) => sum + (BUILDINGS[b.type]?.capacity || 0), 0); x.capacity.set(site, n); }
     return n;
   };
-  const used = site => { let sum = 0; for (const b of batchIndex(s).bySite.get(site)?.all || EMPTY) if (b.site === site && STORED.has(b.location)) sum += b.qty; return sum; };
+  const used = site => { let sum = 0; for (const b of batchIndex(s).bySite.get(site)?.all || EMPTY) if (b.site === site && STORED.has(b.location)) sum += b.qty * vol(b.item); return sum; };
   const free = site => Math.max(0, capacity(site) - used(site));
   const eligible = (b,item,site,owner) => b.item === item && b.site === site && b.owner === owner && b.location === 'stock' && !b.locked && !b.blocked;
   const group = (item,site) => batchIndex(s).bySite.get(site)?.items.get(item) || EMPTY;
@@ -114,14 +118,25 @@ export function createAPI(s, api) {
     const {item,qty,site} = spec;
     const location = spec.location || 'stock';
     if (!item || !positive(qty) || !siteExists(site) || !LOCATIONS.has(location)) return false;
-    if (STORED.has(location) && free(site) + 1e-9 < qty) return false;
+    if (STORED.has(location) && free(site) + 1e-9 < qty * vol(item)) return false;
     if (spec.quality != null && (!Number.isFinite(spec.quality) || spec.quality < 0 || spec.quality > 100)) return false;
     if (spec.unitCost != null && (!Number.isFinite(spec.unitCost) || spec.unitCost < 0)) return false;
+    // Opt-in (W1, Vorschlag für yard.js): gleiche mergeKey (z. B. Ankunft) + gleiche Ware/Ort/Eigentum/Qualität/Kosten
+    // füllt die jüngste passende aktive Charge auf, statt je Minute eine neue anzulegen. Nie in Nullchargen,
+    // gesperrte oder blockierte Chargen; nur ohne Elternteile (Herkunft bleibt eindeutig).
+    if (typeof spec.mergeKey === 'string' && spec.mergeKey && !spec.parents?.length && !spec.locked && !ITEMS[item]?.cold) {
+      const quality = spec.quality ?? 100, unitCost = spec.unitCost ?? 0, owner = spec.owner || 'company', list = group(item, site);
+      for (let i = list.length - 1; i >= 0; i--) {
+        const b = list[i];
+        if (b.mergeKey === spec.mergeKey && b.site === site && b.location === location && b.owner === owner && b.qty > 0 && !b.blocked && !b.locked && b.quality === quality && b.unitCost === unitCost && !b.parents.length) { b.qty += qty; return b; }
+      }
+    }
     const batch = {id:api.id('batch'), item, qty, site, owner:spec.owner || 'company', location,
       quality:spec.quality ?? 100, unitCost:spec.unitCost ?? 0, parents:[...(spec.parents || [])], reserved:0,
       created:s.t};
     if(ITEMS[item]?.cold){batch.temperature=Number.isFinite(spec.temperature)?spec.temperature:4;batch.exposure=Number.isFinite(spec.exposure)?spec.exposure:0;batch.peakTemperature=Number.isFinite(spec.peakTemperature)?spec.peakTemperature:batch.temperature;batch.coldDamaged=!!spec.coldDamaged;if(batch.coldDamaged)batch.blocked=true;}
     if (spec.locked) batch.locked = true;
+    if (typeof spec.mergeKey === 'string' && spec.mergeKey && !batch.parents.length) batch.mergeKey = spec.mergeKey;
     // Erste gesperrte Elternteilcharge in Arrayreihenfolge (wie s.batches.find), über Positionsindex.
     let recalled, first=Infinity; const pos=batchIndex(s).pos;
     for(const id of batch.parents){const i=pos.get(id);if(i!==undefined&&i<first&&s.batches[i]?.id===id&&s.batches[i].blocked){first=i;recalled=s.batches[i];}}
@@ -184,7 +199,7 @@ export function createAPI(s, api) {
     site ??= b.site;
     if (!siteExists(site)) return false;
     const alreadyStored = b.site===site && STORED.has(b.location);
-    if (STORED.has(location) && !alreadyStored && free(site)+1e-9<b.qty) return false;
+    if (STORED.has(location) && !alreadyStored && free(site)+1e-9<b.qty*vol(b.item)) return false;
     resite(b,site); b.location=location;
     return true;
   }
@@ -195,8 +210,8 @@ export function createAPI(s, api) {
     for (const p of parts) {
       const target=site ?? p.site;
       if (!siteExists(target)) return false;
-      if (STORED.has(p.location)) deltas.set(p.site,(deltas.get(p.site)||0)-p.qty);
-      if (STORED.has(location)) deltas.set(target,(deltas.get(target)||0)+p.qty);
+      if (STORED.has(p.location)) deltas.set(p.site,(deltas.get(p.site)||0)-p.qty*vol(p.item));
+      if (STORED.has(location)) deltas.set(target,(deltas.get(target)||0)+p.qty*vol(p.item));
     }
     for (const [target,delta] of deltas) if (used(target)+delta>capacity(target)+1e-9) return false;
     consume(job);
@@ -213,22 +228,44 @@ export function createAPI(s, api) {
     if(!Array.isArray(batchIds)||!batchIds.length||new Set(batchIds).size!==batchIds.length||!LOCATIONS.has(location)||!siteExists(site))return false;
     const batches=batchIds.map(byId);
     if(batches.some(b=>!b||b.reserved))return false;
-    const extra=STORED.has(location)?batches.reduce((n,b)=>n+(b.site===site&&STORED.has(b.location)?0:b.qty),0):0;
+    const extra=STORED.has(location)?batches.reduce((n,b)=>n+(b.site===site&&STORED.has(b.location)?0:b.qty*vol(b.item)),0):0;
     if(free(site)+1e-9<extra)return false;
     for(const b of batches){resite(b,site);b.location=location;}return true;
+  }
+  // Atomarer Ortswechsel einer Teilmenge am selben Standort (W1-S3, z. B. Sortierung inbound→stock).
+  // Nur freie Menge (qty-reserved), keine gesperrte/blockierte Charge. Eigentum, Qualität, Kosten bleiben.
+  // Ganze Charge ohne Kind: nur location wechselt (gleiche ID). Teilmenge: genau ein Kind je Quellcharge
+  // (b.sortedTo), weitere Teilmengen werden dort aufgefüllt, solange es dieselbe Ware am Zielort mit Menge ist;
+  // sonst neues Kind (Herkunft parents:[Quelle]). Nullchargen werden nie wieder befüllt. Rückgabe Zielcharge|false.
+  function relocateQty(batchId,qty,location) {
+    const b=byId(batchId);
+    if(!b||!positive(qty)||!LOCATIONS.has(location)||b.location===location||b.blocked||b.locked||b.qty-b.reserved+1e-9<qty)return false;
+    if(STORED.has(location)&&!STORED.has(b.location)&&free(b.site)+1e-9<qty*vol(b.item))return false;
+    const n=b.qty-qty<=1e-9?b.qty:qty;
+    let child=b.sortedTo?byId(b.sortedTo):null;
+    if(child&&!(child.location===location&&child.site===b.site&&child.item===b.item&&child.owner===b.owner&&child.qty>0&&!child.blocked&&!child.locked))child=null;
+    if(!child&&n===b.qty&&!b.reserved){b.location=location;return b;}
+    if(child)child.qty+=n;
+    else{
+      child={id:api.id('batch'),item:b.item,qty:n,site:b.site,owner:b.owner,location,quality:b.quality,unitCost:b.unitCost,parents:[b.id],reserved:0,created:s.t};
+      for(const k of ['temperature','exposure','peakTemperature','coldDamaged'])if(b[k]!==undefined)child[k]=b[k];
+      s.batches.push(child);b.sortedTo=child.id;
+    }
+    b.qty=clean(b.qty-n);
+    return child;
   }
   function restore(batchId,quality=90) {
     const b=byId(batchId);
     if(!b || b.coldDamaged || b.location!=='quarantine' || b.reserved || !Number.isFinite(quality) || quality<0 || quality>100) return false;
     b.quality=quality;b.locked=false;b.location='stock';return true;
   }
-  return {add,available,reserve,release,consume,move,used,capacity,free,transfer,remove,restore,relocate};
+  return {add,available,reserve,release,consume,move,used,capacity,free,transfer,remove,restore,relocate,relocateQty};
 }
 
 export function validate(s) {
   const ids=new Set();
   for(const b of s.batches) {
-    if(ids.has(b.id)||!Number.isFinite(b.qty)||b.qty<0||!Number.isFinite(b.reserved)||b.reserved<0||b.reserved>b.qty+1e-9||!LOCATIONS.has(b.location)) throw new Error('Ungültige Lagercharge.');
+    if(ids.has(b.id)||(b.sortedTo!==undefined&&typeof b.sortedTo!=='string')||(b.mergeKey!==undefined&&typeof b.mergeKey!=='string')||!Number.isFinite(b.qty)||b.qty<0||!Number.isFinite(b.reserved)||b.reserved<0||b.reserved>b.qty+1e-9||!LOCATIONS.has(b.location)) throw new Error('Ungültige Lagercharge.');
     ids.add(b.id);
     const reserved=s.reservations.filter(r=>r.batchId===b.id).reduce((n,r)=>n+r.qty,0);
     if(Math.abs(reserved-b.reserved)>1e-7) throw new Error('Reservierungssumme stimmt nicht.');
