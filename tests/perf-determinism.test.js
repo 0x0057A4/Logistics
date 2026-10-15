@@ -22,27 +22,29 @@ const SCENARIOS={
 };
 // Welle 1a (A08): Hashes neu erzeugt, weil contracts.js ab Spielbeginn ein Vertragsangebot anlegt und periodisch
 // neue Angebote über api.random/api.id erzeugt (Seed und ID-Zähler verschieben sich). Ursache geklärt; Node v22.22.0.
+// Welle 1b (A02): erneut erzeugt, weil Vertragswerte (Preis, Frist, Pakete, Ankunftsminuten, Laufzeit; contracts.js TERMS)
+// im Zustand stehen. Gleiche Anzahl Zufallszüge; mit alten Werten reproduzieren sich die alten Hashes exakt.
 const EXPECTED={
  klein:[
-  'ca72b0342d8a71c481f935a2ec626afb5ff62a9058be48fdc9c9e716de9956c1',
-  'ee9bac774c372fc22abf0fbf1af5d5c5fab5b89aaa8e4a9bed094480d4623f36',
-  'ffb02e12f4a86f2716bc2f76f81e023cc9ee68d069ec093f9728b4310895591e',
-  '4fc8f96cd8dbe80597806a7df395fc99d6e7e60a9c2281e290e28bfba6351c38',
+  'f38c478aa2973e664fe08b666eec5c7cc91223b998479dea20af8683bc097f0d',
+  'b15cb84fa26d12c946b28d962778a02ac9d7528cc2153da65d41be6fe0848e6a',
+  '8d2b9507dd86b9f278605dd6f5fdaeba1434d721c2216edd980d8933b3631609',
+  '8a6f961f208e2bd34fe9e5bf9628b6aadb6d1954619d1ede35fb3f85ef4ecf94',
  ],
  dienste:[
-  'f2ba8f97e62b42329b7347cb9915b066392609e45b06be69abd5faaf2e1f98bc',
-  '5f1e3829fdaf7558245756f572af1efec9ea0ccad93f13400986f5475107eb52',
-  '6152afd1d382dcf1782b4882dce4a4468c5bbfd4684f1e2911e2e60c8113ef2a',
-  'c984ca060a77359c38385d4101f90cae1aeffdab503ae942417e1595d06ee298',
+  'c438536f8b81320ebd1aa7f09410044c575bffb4dab82ae7620403cb545f1323',
+  '1c662861068c3deceb0551bda1ec3b4b5e720c81d140b1faca3502023c568ade',
+  '5d38f0c60051545437e123e587fdc49faaf1063c18c1bf2d474e089e040554ec',
+  'bcf5e13768c8465d1b3ef005369783356f14eddf57c8cd9046da7f803b38d31f',
  ],
  gross:[
-  '7ac8fb93db940e15019a43ae9791953aac5f01c468aa0e538e9206903bcb5973',
-  'e7b3bea4f65ed2452eb32724b4dbeda9f585b3d1d88afff02daedd2cdf964f80',
-  '527c00a77c2e7db14b284736051eb3b0a72dd82ddfb5e4ec4a25cef6c8eb9119',
-  'cd082af9d90ecf9a2b6b199e456562124bda28ff2173db51f0b7b82c235d7560',
+  '2247da5cf156579bbcb8710c94349eaf532b6ef6563c7f3eade717dc7a8573a2',
+  '963e2b5facffa3dffd83ea565d53aadb144c207ce1ddf3d0912f9a0949a638ea',
+  'd38adf490078b6d64a2ea3a1cd779cd7edef6b6a262c987179d81dedeadb2999',
+  '17a36afbcc68862d26d95c3063587b58dedc687f36ee633c17cd02c7e726eb47',
  ],
  prognose:[
-  'a96e5f28d7de2b7dc432fe73cb3ad7a552c293fa0de0b4112d02b46a57494cb6',
+  'e66b45ec975ff7501903eecd464203df2c72e77e843f61cd846cc08055ee1040',
  ],
 };
 

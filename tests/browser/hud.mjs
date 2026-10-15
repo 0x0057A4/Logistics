@@ -50,22 +50,23 @@ for(const [width,height] of [[1920,1080],[1280,800]]){
  try{await page.waitForFunction(()=>!document.querySelector('#welcome').open,null,{timeout:4000});log.push(`${label}: Start über data-action="start"`);}
  catch{const reason=await page.textContent('#statusText');log.push(`${label}: HINWEIS – Start mit lokaler Speicherung verweigert („${reason}“); Ersatzweg temporärer Modus`);
   await page.click('#welcome [data-action="temporary"]');await page.click('#confirm [data-action="confirmOk"]');await page.waitForFunction(()=>!document.querySelector('#welcome').open);}
- // Echte Bedienpfade: Startbetrieb über die Zentrale, Material über Einkauf, Auftrag annehmen, Zeitraffer.
+ // Echte Bedienpfade: Startbetrieb (Depot-Grundausstattung, A02 W1b) über die Zentrale, danach öffnet das Vertragsfenster:
+ // Startvertrag annehmen, Zeitraffer.
  await page.click('.rail [data-panel="overview"]');await page.click('#panelBody [data-action="starter"]');
- await page.click('#panelBody [data-action="buy-kit"]');
- await page.click('.rail [data-panel="orders"]');await page.click('#panelBody [data-action="accept"]');
+ await page.click('#panelBody [data-action="acceptContract"]');
  await page.click('[data-action="close"]');
  await page.click('[data-speed="12"]');await page.waitForTimeout(6000);await page.click('[data-speed="0"]');await page.waitForTimeout(400);
  const hud=await page.evaluate(()=>Object.fromEntries(['siteCode','siteName','siteStatus','clock','shiftName','kpiDelivered','kpiVehicles','kpiPunctual','st-inbound-sub','st-production-n','sbDocks','sbStaff','bellCount','vbarCount'].map(id=>[id,document.getElementById(id).textContent])));
  log.push(`${label}: HUD ${JSON.stringify(hud)}`);
- check(hud.sbStaff==='Personal 5/5 im Dienst',`${label}: Statuszeile Personal aus Zustand`);
- check(hud.vbarCount==='1'&&await page.locator('#vbarList .vrow').count()===1,`${label}: Fahrzeugleiste zeigt das gekaufte Fahrzeug`);
+ check(hud.sbStaff==='Personal 2/2 im Dienst',`${label}: Statuszeile Personal aus Zustand`);
+ // Nach Vertragsannahme kann im Zeitraffer bereits der erste Fremd-Lkw in der Leiste stehen; geprüft wird das eigene Fahrzeug.
+ check(Number(hud.vbarCount)>=1&&await page.locator('#vbarList .vrow:not(.foreign)').count()===1,`${label}: Fahrzeugleiste zeigt das gekaufte Fahrzeug`);
  check(/^Tag 1 · \d\d:\d\d$/.test(hud.clock)&&hud.clock!=='Tag 1 · 08:00',`${label}: Uhr läuft im Zeitraffer`);
  await overlapCheck(page,label,false);
  fs.mkdirSync(outDir,{recursive:true});await page.screenshot({path:path.join(outDir,`hud-0.9-${width}.png`)});
  // Suche „/“ → Treffer → Akte.
  await page.keyboard.press('/');check(await page.evaluate(()=>document.activeElement?.id==='cmd'),`${label}: Taste / fokussiert die Suche`);
- await page.keyboard.type('Montage');await page.waitForSelector('#cmdResults [data-hit]');await page.keyboard.press('Enter');
+ await page.keyboard.type('Laderampe');await page.waitForSelector('#cmdResults [data-hit]');await page.keyboard.press('Enter');
  check(await page.evaluate(()=>!document.querySelector('#panel').hidden&&document.querySelector('#panelTitle').textContent==='Objektakte'),`${label}: Suchtreffer öffnet Objektakte`);
  await overlapCheck(page,label+' Akte',true);
  // Breites Fachfenster (Finanzen) neben dem HUD.

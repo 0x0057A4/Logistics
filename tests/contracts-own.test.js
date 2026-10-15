@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {Simulation,validateState} from '../dist/core.js';
 import * as yard from '../dist/yard.js';
-import {splitParcels,SCHEDULE_LEAD,MAX_OFFERS} from '../dist/contracts.js';
+import {splitParcels,SCHEDULE_LEAD,MAX_OFFERS,TERMS} from '../dist/contracts.js';
 const cmd=(s,c)=>{const r=s.command(c);assert.equal(r.ok,true,r.message);return r;};
 const hubOrders=(s,id)=>s.state.orders.filter(o=>o.contractId===id);
 const offer=s=>s.state.contracts.find(k=>k.status==='offer');
@@ -12,7 +12,9 @@ const clone=x=>JSON.parse(JSON.stringify(x));
 test('Neues Spiel bietet genau einen kleinen gültigen Vertrag an',()=>{
  const s=new Simulation(),k=s.state.contracts;
  assert.equal(k.length,1);assert.equal(k[0].status,'offer');
- assert.equal(k[0].arrivals.length,1);assert.ok(k[0].arrivals[0].parcels>=60&&k[0].arrivals[0].parcels<=90);
+ // Spannen aus TERMS (Balancing A02 W1b, docs/BALANCING-0.9-W1.md): Startvertrag 100–130 Pakete, 1 Ankunft am Vormittag.
+ assert.equal(k[0].arrivals.length,1);assert.ok(k[0].arrivals[0].parcels>=TERMS.start.parcels[0]*10&&k[0].arrivals[0].parcels<=TERMS.start.parcels[1]*10);
+ assert.ok(TERMS.start.minutes.includes(k[0].arrivals[0].minute));assert.equal(k[0].pricePerParcel,TERMS.start.price);
  assert.ok(k[0].lanes.length>=1&&k[0].lanes.length<=2);
  assert.equal(k[0].laneShare.reduce((a,b)=>a+b,0),1);assert.ok(k[0].pricePerParcel>0&&k[0].slaMinutes>0);
  assert.equal(hubOrders(s,k[0].id).length,0);assert.doesNotThrow(()=>validateState(s.state));
@@ -80,7 +82,7 @@ test('Neue Angebote periodisch, höchstens drei offen, abgelaufene entfallen',()
  const s=new Simulation();let max=0,seen=new Set();
  for(let d=0;d<10*24;d++){s.step(60);const open=s.state.contracts.filter(k=>k.status==='offer');max=Math.max(max,open.length);open.forEach(k=>{seen.add(k.id);assert.ok(s.state.t<k.expiresAt);});}
  assert.ok(max<=MAX_OFFERS);assert.ok(seen.size>3);assert.doesNotThrow(()=>validateState(s.state));
- for(const k of s.state.contracts)assert.ok(k.lanes.length<=3&&k.arrivals.length<=2&&k.arrivals.every(a=>a.parcels>=60&&a.parcels<=120));
+ for(const k of s.state.contracts)assert.ok(k.lanes.length<=3&&k.arrivals.length<=2&&k.arrivals.every(a=>a.parcels>=TERMS.offer.parcels[0]*10&&a.parcels<=TERMS.offer.parcels[1]*10&&a.minute>=480&&a.minute<=720));
 });
 
 test('Determinismus: gleicher Seed ergibt gleiche Angebote und Aufträge',()=>{

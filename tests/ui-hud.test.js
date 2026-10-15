@@ -4,7 +4,11 @@ import {boot} from './ui-harness.js';
 // Leitstand-HUD 0.9: Kennzahlen, Suche „/“, Meldungsglocke und Fahrzeugleiste zeigen nur echten Zustand.
 const text=(ui,id)=>ui.nodes.get('#'+id).textContent;
 const press=(ui,dataset)=>ui.listeners.click({target:{closest:()=>({dataset,matches:()=>false})}});
-async function line(){const ui=await boot();await ui.click('start');ui.click('starter');return ui;}
+// Seit A02 W1b baut „Startbetrieb einrichten“ nur die Depot-Grundausstattung (Dock, Regal, Lager, Fahrer, Lieferwagen).
+// Diese HUD-Prüfungen brauchen zusätzlich eine Fertigungslinie (Mehrwertdienste); sie wird über dieselben regulären
+// Bau-/Einstellbefehle ergänzt wie der frühere Aufbauassistent. Ergebnis: wieder 5 Anlagen, 5 Beschäftigte, 1 Fahrzeug.
+const LINE="for(const [buildingType,x,y]of [['assembly',5,3],['testing',9,3],['packing',13,3]])send({type:'build',buildingType,x,y,rotation:0},true);for(const role of ['production','production','production'])send({type:'hire',role},true);render(true)";
+async function line(){const ui=await boot();await ui.click('start');ui.click('starter');ui.run(LINE);return ui;}
 function deliver(ui,qty,{late=false}={}){
  const o=ui.run("sim.state.orders.find(o=>o.kind==='manufacturing'&&o.status!=='fulfilled').id");
  if(ui.run(`sim.state.orders.find(o=>o.id==='${o}').status`)==='offer')ui.click('accept',o);
@@ -20,6 +24,8 @@ test('HUD: Kopfzeile, Statuszeile und Standortfluss zeigen Werte aus echten Befe
  const ui=await boot();await ui.click('start');
  assert.equal(text(ui,'sbDocks'),'Rampen 0/0');assert.equal(text(ui,'sbStaff'),'Personal 0/0 im Dienst');assert.equal(text(ui,'kpiPunctual'),'—');assert.equal(text(ui,'kpiPunctualSub'),'Noch keine Zustellung');
  ui.click('starter');
+ assert.equal(text(ui,'sbDocks'),'Rampen 0/1');assert.equal(text(ui,'sbStaff'),'Personal 2/2 im Dienst');assert.equal(ui.run("sim.state.buildings.map(b=>b.type).join()"),'dock,rack');
+ ui.run(LINE);
  assert.equal(text(ui,'siteCode'),'WM-01');assert.equal(text(ui,'siteName'),'Werk Morgenfeld');
  assert.equal(text(ui,'sbDocks'),'Rampen 0/1');assert.equal(text(ui,'sbVehicles'),'Fahrzeuge 1');assert.equal(text(ui,'sbStaff'),'Personal 5/5 im Dienst');
  const cap=ui.run("sim.api.inventory.capacity('site-1')");assert.equal(text(ui,'sbStock'),`Lager 0/${cap}`);assert.equal(text(ui,'siteStatus'),`Rampen 0/1 · Lager 0/${cap}`);
