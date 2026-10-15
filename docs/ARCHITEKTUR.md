@@ -18,6 +18,7 @@ Beispiel: „Lieferung starten“ reserviert vorhandene Ware. Erst nach echter L
 | transport.js | Einzellieferung, Standorttransfer, Flotte, Wartung und Rampen |
 | rental.js | Mietverträge, tägliche Kosten, sichere Rückgabe und historische Referenzen |
 | tours.js | Atomare Gesamtladung, mehrere Kundenstopps, Restmengenbindung und Teilrechnungen |
+| customer-service.js | Tickets, Serviceantworten, Personalzeit, Friständerungen und einmalige Kulanzkosten |
 | service.js | Rücktransport, Prüfung, Erstattung, Reparatur/Verwertung, Rückruf |
 | management.js | Forschung und lokale budgetierte Delegationsregeln |
 | network.js | Standortkauf und feste Unternehmensgeografie |
@@ -56,3 +57,5 @@ Beim Import wird zunächst vollständig geparst und validiert. Erst danach erset
 ## Erweiterungsregeln
 
 Neue Funktionen erhalten eigenes Modul oder erweitern zuständigen Eigentümer. Initialisierung, handle, step und validate werden gemeinsam integriert. Vor Änderung gemeinsamer Zustände Schnittstellen dokumentieren. Tests sollen fachliche Risiken prüfen: doppelte Ware, verlorene Ladung, vorzeitiges Geld, unterbrochene Arbeit und beschädigte Importe. UI- oder Grafikänderungen dürfen diese Zustände nicht verändern.
+
+HTML-Downloads bündeln alle Spielmodule über scripts/build-portable.py in dist/portable.html. passive JSON-Slots enthalten Stand und Einstellungen, portable-save.js maskiert Daten beim Export. Neue Fachmodule werden aus den Imports automatisch aufgenommen.

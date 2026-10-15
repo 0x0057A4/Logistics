@@ -44,3 +44,6 @@ Nutzer fordert Abschluss 0.7 und Behebung des als JSON-Schreibschutz bezeichnete
 
 ## Folgeauftrag HTML-Speicherung
 Nutzer möchte Speicherung in HTML. Bestätigte Variante: vollständiges Spiel samt aktuellem Stand als herunterladbare HTML; Öffnen setzt Stand fort. Am 15.10.2026 fortgesetzt nach Unterbrechung. Dateimodus verändert keine gespeicherten Browserunternehmen. Weiteren Fortschritt durch erneuten Download sichern.
+
+## Folgeauftrag 0.8
+„Weiter“ am 15.10.2026 setzt vereinbarten Entwicklungsplan fort: Kundendiensttickets und Terminänderungen. Bestehende HTML-Speicherung, Mietflotte, Rückladetouren und GitHub-Veröffentlichung einschließlich Root-index.html bleiben erhalten. 0.9 Ergebnisrechnung/Abschreibung und 1.0 verbleibende Konzeptfunktionen bleiben nächste Ziele.

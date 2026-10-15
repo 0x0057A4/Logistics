@@ -23,8 +23,8 @@
     },
     {
       "path": "CHANGELOG.md",
-      "bytes": 2980,
-      "sha256": "c9b72925873f3e0a399749a8e0b23cfe2f0435657fa7f2e4894fb84d3972ace6"
+      "bytes": 3510,
+      "sha256": "6c66ad277fbc36aa9ac3061518ecc6284e9285f07f776c41672ba64832905bc5"
     },
     {
       "path": "CONTRACT.md",
@@ -33,8 +33,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 11209,
-      "sha256": "49598a7debfa1dcf2d5db7a3e96a70959deac0d0b4f8309650e9d310afee5a25"
+      "bytes": 12271,
+      "sha256": "7f84630655e14a192b6eb4d0dd3859ba2237f2c5a49fc2aa1261792e7ae0af08"
     },
     {
       "path": "dist/accounting.js",
@@ -43,8 +43,8 @@
     },
     {
       "path": "dist/app.js",
-      "bytes": 71050,
-      "sha256": "907de41da8a5a25cb790c24177cf7438a7d8fe586d7524879293a260e6e8380b"
+      "bytes": 76692,
+      "sha256": "03f2e618c0395860e39bc8b22fe0b4ecf7bfb58874c35087ed56d536abafe36d"
     },
     {
       "path": "dist/catalog.js",
@@ -53,8 +53,13 @@
     },
     {
       "path": "dist/core.js",
-      "bytes": 13793,
-      "sha256": "253025d8793e6951acb1f41c7dd86e3bada14a6e5ca35cccda77cb9172b7f40c"
+      "bytes": 13897,
+      "sha256": "d13636aeedf90a6f485c652ca0d67fd47c40c04e4542304d1ff4a949c7671deb"
+    },
+    {
+      "path": "dist/customer-service.js",
+      "bytes": 7566,
+      "sha256": "6e050824f2e6add93a317cbdc7d86af4f6c5f7afc2e7b265ab67eebffe87ef2b"
     },
     {
       "path": "dist/economy.js",
@@ -63,8 +68,8 @@
     },
     {
       "path": "dist/index.html",
-      "bytes": 7835,
-      "sha256": "e62680738f08bdf0bdf5214135f2249203372f46a6b414d83dadb06cdb59eb8d"
+      "bytes": 7833,
+      "sha256": "00c2ca1fb17b02f0993cd864cd8645fec9f225450d79a2b090096dafc68acfe8"
     },
     {
       "path": "dist/inventory.js",
@@ -93,8 +98,8 @@
     },
     {
       "path": "dist/portable.html",
-      "bytes": 255442,
-      "sha256": "0140d3425e8c5ba22a79caa7ddd8677be0ab30f85d9518474c7e7b6a161b8c3b"
+      "bytes": 268974,
+      "sha256": "69794bd703ab02253543abb97b5fd4cbf04f19235dd2387380e6aa8c4351cf5e"
     },
     {
       "path": "dist/production.js",
@@ -153,23 +158,23 @@
     },
     {
       "path": "docs/ARCHITEKTUR.md",
-      "bytes": 5113,
-      "sha256": "01bc7c4d0c0af24f8baad0955f56894037fc32f7c5451a2dac007d7ebd8ba37a"
+      "bytes": 5484,
+      "sha256": "3c77bea1eeb1ab155e715973704689f25e01a1c02ac741c4a18addb8af0edfba"
     },
     {
       "path": "docs/CHATKONTEXT.md",
-      "bytes": 4635,
-      "sha256": "48d7cc4bf8d9744dd7d327a622f30eff19ea720e0a3f7231fe7cd850dfd7a1a8"
+      "bytes": 5001,
+      "sha256": "514a3f13cd0146ab352a19b1599b2c9960bce36efa692f4e58bced4c8ac76f68"
     },
     {
       "path": "docs/FORTSETZUNG.md",
-      "bytes": 2582,
-      "sha256": "16db81990634bf1120a4f43e84f366a5633c274aad0cff271b402b9f521a55ff"
+      "bytes": 3612,
+      "sha256": "e41e84c6f4a44461e4adf90cc457ee0ee59d1c33a6e90e43ed56a8b22326f748"
     },
     {
       "path": "docs/FUNKTIONSSTATUS.md",
-      "bytes": 5915,
-      "sha256": "d3d9a4e20c8ccc7b8f1b7958a063d105e0a22c628ac7f0df0fffd529e0379b0f"
+      "bytes": 6016,
+      "sha256": "9aa62be8917cca7a32c176612b9ebd7cf0fdf1f25ee9b5aa350acbfcdb7153c8"
     },
     {
       "path": "docs/Logistik-Spielkonzept-und-Masterprompt.md",
@@ -178,13 +183,18 @@
     },
     {
       "path": "docs/PRUEFUNG.md",
-      "bytes": 13650,
-      "sha256": "b233df765bc51f80a4888c4a197ebdc1c82eec01e4c1dcda45e66e946c499ed5"
+      "bytes": 14052,
+      "sha256": "b0e6c2e9604ec0dad7101ac02cb75458757a78ff4bbfc34622e8a7af8d876763"
     },
     {
       "path": "docs/QS-0.7.md",
       "bytes": 3047,
       "sha256": "d81fd21efad24b2ce49eeb0c901effb080fa802adca50b52370d8cb369bf7ee9"
+    },
+    {
+      "path": "docs/QS-0.8.md",
+      "bytes": 2819,
+      "sha256": "5b02933d149c54e2e37d3d7864a8d2da0dc8b9b44d10d1aada56b3b8b9ebc34a"
     },
     {
       "path": "docs/QS-HTML-SPEICHERN.md",
@@ -215,6 +225,11 @@
       "path": "docs/TESTERGEBNIS-0.7.txt",
       "bytes": 14313,
       "sha256": "f7ed655f016a48e258533906506cacb9f6fe09554d977eefb1ad65200dd2db85"
+    },
+    {
+      "path": "docs/TESTERGEBNIS-0.8.txt",
+      "bytes": 17566,
+      "sha256": "602defc1992184bddd82e5f50fd12348dfb63a6e280a6edae46b017c2e6c471d"
     },
     {
       "path": "docs/UMSETZUNGSPLAN.md",
@@ -248,8 +263,8 @@
     },
     {
       "path": "index.html",
-      "bytes": 7856,
-      "sha256": "aa925761405362292c800cd999cc75b5fa065493fc3afed055779cb1529a93c4"
+      "bytes": 7854,
+      "sha256": "785b59b45847e9be6786dd9a5d4c9ee6f8218c2ad43f56f3887e573eae0e0f42"
     },
     {
       "path": "package.json",
@@ -285,6 +300,11 @@
       "path": "tests/core-own.test.js",
       "bytes": 2306,
       "sha256": "524c3097b7da0d058981b600d873e3460ca35f958614b1cc5051849061c60bd5"
+    },
+    {
+      "path": "tests/customer-service.test.js",
+      "bytes": 5571,
+      "sha256": "d1bb97cf273abaac8fca3c5b8587d0ae99b2755994c2aa559d0d8e0ccdefdb96"
     },
     {
       "path": "tests/economy-own.test.js",
@@ -340,6 +360,11 @@
       "path": "tests/qa-rental.test.js",
       "bytes": 3857,
       "sha256": "a52b3bfd8e8428bccaa58a91d0aa71fcb0fcbb3f93ee442314a1f958fc411ba5"
+    },
+    {
+      "path": "tests/qa-service08.test.js",
+      "bytes": 6735,
+      "sha256": "8b6430259ac7c0278abf7253691902b2963f49d4fa59709785f492fd353633f8"
     },
     {
       "path": "tests/qa-storage.test.js",
@@ -405,6 +430,11 @@
       "path": "tests/ui-rental.test.js",
       "bytes": 2199,
       "sha256": "868d6b9f62103259b38ec38aad4d63d966e1e12a65a9ba8830fa2270ef2ae175"
+    },
+    {
+      "path": "tests/ui-service.test.js",
+      "bytes": 4728,
+      "sha256": "c4e86e416e73fe0b6bf86fc22a629c710ecf134c0357367240c9636511d72cd3"
     },
     {
       "path": "tests/ui-smoke.test.js",

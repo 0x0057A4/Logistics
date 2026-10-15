@@ -1,4 +1,4 @@
-# Übergabestand 0.7.1 – 15.10.2026
+# Übergabestand 0.8 – 15.10.2026
 
 AGENTS.md, Spielkonzept, UMSETZUNGSPLAN.md und FUNKTIONSSTATUS.md bleiben verbindlich. Deutsch, knapp (Caveman). Parallelrollen und unabhängige QS gemäß AGENTS.md.
 
@@ -12,13 +12,13 @@ Frühere Patches vollständig integriert; Originale unter archiv/integriert-0.7 
 
 ## Prüfung und Veröffentlichung
 
-Siehe QS-0.7.md und TESTERGEBNIS-0.7.txt für tatsächliche Ergebnisse. Browser-/Touch-/Layoutprüfung offen; UI-Harness ersetzt keinen Browser. Root-index.html lädt dist/ über relative Basis für GitHub Pages. scripts/package.py aktualisiert Root-Einstieg und Quellpaket.
+Siehe QS-0.8.md und TESTERGEBNIS-0.8.txt für tatsächliche Ergebnisse. Browser-/Touch-/Layoutprüfung offen; UI-Harness ersetzt keinen Browser. Root-index.html lädt dist/ über relative Basis für GitHub Pages. scripts/package.py aktualisiert Root-Einstieg und Quellpaket.
 
 Ziel GitHub: 0x0057A4/Logistics. Bestehende Site: https://industrie-logistik.calmsiren9.chatgpt.site (Zugang privat erhalten). Veröffentlichungserfolg nur anhand Remote-Rückmeldung behaupten.
 
 ## Preview – nächste Ziele
 
-- 0.8: Kundendiensttickets und Terminänderungen.
+- 0.8: Kundendiensttickets und Terminänderungen integriert; siehe QS-0.8.md.
 - 0.9: Ergebnisrechnung und Abschreibung vertiefen.
 - 1.0: verbleibende Konzeptfunktionen und Gesamtabnahme; kein zugesicherter Vollumfang allein durch Versionsnummer.
 
@@ -27,3 +27,9 @@ Nutzer autorisiert sämtliche zugehörigen Projektunterlagen/Ergebnisse auf GitH
 ## HTML-Speicherung 0.7.1
 
 Nutzer hat vollständige HTML-Datei samt eingebettetem Spielstand ausdrücklich bestätigt. Funktion in Einstellungen → Spiel als HTML speichern. Offline-Datei öffnet denselben validierten Stand pausiert; Start mit 1×. Weitere Änderungen erneut herunterladen. Kein automatisches Überschreiben der Originaldatei. CSS/JS vollständig eingebettet, kein Server erforderlich. Website und GitHub bleiben mit root index.html. scripts/package.py erzeugt zusätzlich dist/portable.html. docs/QS-HTML-SPEICHERN.md dokumentiert unabhängige Prüfung; Browserprüfung bleibt offen.
+
+## Kundendienst 0.8
+
+Statusanfragen, Fristverlängerungen und Beschwerden im Servicefenster. Je Auftrag/Art ein Ticket; automatische Beschwerde bei Überfälligkeit. Antwortwahl startet 15/30/20 Minuten echte Servicearbeit. Schichten, Pausen und konkurrierende Retouren beachten. Verlängerung um 60–1440 Minuten, erst bei Abschluss; Kosten 2 % offenen Auftragswerts bei Antwortbeginn. Kulanz 5 % bezahlter Auftragssumme, höchstens 50 €. Kosten einmalig, fehlendes Kapital blockiert Abschluss. Überholte Terminänderungen ohne Wirkung/Kosten geschlossen. Kein Rücksetzen früheren Rufverlusts, keine rückwirkende Änderung alter Rechnungen. Antworttext dokumentiert Abschluss.
+
+Speicherformat 1: alte Stände erhalten tickets=[]. HTML-Bundle enthält Kundendienstmodul. Adresskorrektur, individuelle Kundennachrichten und umfangreichere Kundenbeziehungen bleiben offene Konzeptteile. Nächste Entwicklung: 0.9 Ergebnisrechnung und Abschreibung. Vollständige 1.0-Konzeptabnahme weiterhin offen.

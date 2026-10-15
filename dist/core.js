@@ -10,10 +10,11 @@ import * as tours from './tours.js';
 import * as special from './special.js';
 import * as multimodal from './multimodal.js';
 import * as rental from './rental.js';
+import * as customerService from './customer-service.js';
 import { BUILDINGS, ITEMS, RECIPES, VEHICLES, ROLES } from './catalog.js';
 import { reachable, footprint } from './world.js';
-const MODULES=[inventory,workforce,economy,transport,production,management,service,network,tours,special,multimodal,rental];
-const ARRAYS=['sites','buildings','workers','batches','reservations','jobs','purchases','orders','vehicles','shipments','ledger','events','research','rules','returns','milestones','transfers','tours','freights'];
+const MODULES=[inventory,workforce,economy,transport,production,management,service,network,tours,special,multimodal,rental,customerService];
+const ARRAYS=['sites','buildings','workers','batches','reservations','jobs','purchases','orders','vehicles','shipments','ledger','events','research','rules','returns','milestones','transfers','tours','freights','tickets'];
 const clone=x=>JSON.parse(JSON.stringify(x));
 const fail=m=>{throw new Error('Spielstand ungültig: '+m);};
 function finite(n,min=-Infinity,max=Infinity){return typeof n==='number'&&Number.isFinite(n)&&n>=min&&n<=max;}
@@ -27,7 +28,7 @@ export function validateState(s){
  if(!s.settings||typeof s.settings.incidents!=='boolean'||!s.stats||!['produced','delivered','revenue','costs'].every(k=>finite(s.stats[k],0)))fail('Einstellungen oder Statistik beschädigt.');
  // Reject non-finite values and prototype-shaped keys anywhere, including extensions.
  function walk(v,depth=0){if(depth>60)fail('Verschachtelung zu tief.');if(typeof v==='number'&&!Number.isFinite(v))fail('Ungültiger Zahlenwert.');if(v&&typeof v==='object')for(const [k,x]of Object.entries(v)){if(['__proto__','constructor','prototype'].includes(k))fail('Verbotener Schlüssel.');walk(x,depth+1);}}walk(s);
- const ids=new Set();let maxSeq=0;for(const k of ['sites','buildings','workers','batches','reservations','jobs','purchases','orders','vehicles','shipments','ledger','events','returns','research','rules','transfers','tours','freights','rentals'])for(const row of s[k]||[]){if(!row||typeof row!=='object'||typeof row.id!=='string'||!row.id||ids.has(row.id))fail('Fehlende oder doppelte ID in '+k+'.');ids.add(row.id);const m=row.id.match(/-(\d+)$/);if(m)maxSeq=Math.max(maxSeq,+m[1]);}
+ const ids=new Set();let maxSeq=0;for(const k of ['sites','buildings','workers','batches','reservations','jobs','purchases','orders','vehicles','shipments','ledger','events','returns','research','rules','transfers','tours','freights','rentals','tickets'])for(const row of s[k]||[]){if(!row||typeof row!=='object'||typeof row.id!=='string'||!row.id||ids.has(row.id))fail('Fehlende oder doppelte ID in '+k+'.');ids.add(row.id);const m=row.id.match(/-(\d+)$/);if(m)maxSeq=Math.max(maxSeq,+m[1]);}
  if(s.seq<=maxSeq)fail('ID-Zähler beschädigt.');
  const sites=new Set(s.sites.map(x=>x.id));if(!sites.has(s.selectedSite)||!sites.size)fail('Standortauswahl ungültig.');
  for(const a of s.sites)if(!Number.isInteger(a.width)||!Number.isInteger(a.height)||a.width<2||a.height<2||a.width>200||a.height>200||!finite(a.energy,0)||!finite(a.x)||!finite(a.y))fail('Standortwerte beschädigt.');
@@ -89,6 +90,6 @@ export class Simulation{
  }
  step(minutes=1){if(!Number.isInteger(minutes)||minutes<0||minutes>100000)throw new Error('Spielschritte müssen ganze Minuten sein.');for(let n=0;n<minutes;n++){this.state.t++;for(const mod of MODULES)mod.step?.(this.state,this.api);}return this.state;}
  serialize(){return JSON.stringify(this.state);}
- static fromJSON(text){if(typeof text!=='string'||text.length>30000000)throw new Error('Spielstand fehlt oder zu groß.');let state;try{state=JSON.parse(text);}catch{throw new Error('Spielstand enthält ungültiges JSON.');}if(state&&state.schema===1){for(const key of ['research','rules','transfers','tours','freights'])if(state[key]===undefined)state[key]=[];}validateState(state);const sim=Object.create(Simulation.prototype);sim.state=state;sim.makeAPI();return sim;}
+ static fromJSON(text){if(typeof text!=='string'||text.length>30000000)throw new Error('Spielstand fehlt oder zu groß.');let state;try{state=JSON.parse(text);}catch{throw new Error('Spielstand enthält ungültiges JSON.');}if(state&&state.schema===1){for(const key of ['research','rules','transfers','tours','freights','tickets'])if(state[key]===undefined)state[key]=[];}validateState(state);const sim=Object.create(Simulation.prototype);sim.state=state;sim.makeAPI();return sim;}
  forecast(minutes,commands=[]){const sim=Simulation.fromJSON(this.serialize());for(const c of commands){const r=sim.command(clone(c));if(!r.ok)throw new Error(r.message);}sim.step(minutes);return sim.state;}
 }

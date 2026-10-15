@@ -2,7 +2,7 @@
 
 **Projektübergabe:** [Aktueller Kontext und nächster Schritt](docs/FORTSETZUNG.md). [Projektentscheidungen](docs/CHATKONTEXT.md). Integrierte Originalpatches liegen in `docs/archiv/integriert-0.7/`.
 
-Version 0.7.1 · Entwicklungsfassung · 15. Oktober 2026
+Version 0.8 · Entwicklungsfassung · 15. Oktober 2026
 
 Eigenständige, deutschsprachige Unternehmenssimulation für PC-Browser. Vom leeren Werk über Arbeitsleuchtenfertigung bis zu mehreren Standorten, Sammeltouren und temperaturgeführter Fremdfracht. Alle Unternehmen, Personen und Wirtschaftswerte sind fiktiv.
 
@@ -110,3 +110,13 @@ Die Meldung betrifft den Browser-Speicher, nicht eine Sperre in der JSON-Datei. 
 ## Spiel und Spielstand als HTML
 
 Einstellungen → **Spiel als HTML speichern**. Die heruntergeladene HTML enthält Spielcode, Darstellung, aktuellen Spielstand und Darstellungseinstellungen. Datei im Browser öffnen, mit **1×** fortsetzen. Funktioniert ohne Internet und ohne lokalen Browserspeicher. Weitere Änderungen durch erneuten HTML-Download sichern; die ursprüngliche Datei wird nicht automatisch überschrieben. Die Website behält zusätzlich ihre bisherige Browserspeicherung und JSON-Funktion.
+
+## Kundendienst 0.8
+
+Unter **Service** Statusanfrage, Terminänderung oder Beschwerde zu einem angenommenen Auftrag anlegen. Je Auftrag und Art ein Ticket. Überfällige aktive Aufträge erzeugen einmalig ein Beschwerdeticket. Antwort wählen; Kundendienstpersonal am Auftragsstandort bearbeitet sie während seiner Schicht. Fehlendes Personal, Pause und fehlendes Geld erscheinen als Wartegrund.
+
+- Statusauskunft: 15 Arbeitsminuten, keine zusätzliche Gebühr.
+- Terminantwort: 30 Arbeitsminuten. Einmalige Verlängerung um 60–1.440 Spielminuten; Zusage kostet 2 % des beim Bearbeitungsbeginn offenen Auftragswerts. Änderung erst nach Abschluss. Bereits entstandener Rufverlust bleibt bestehen.
+- Beschwerde: 20 Arbeitsminuten. Entschuldigung kostenlos; Kulanz kostet 5 % bereits bezahlter Auftragssumme, höchstens 50 €. Löhne laufen zusätzlich.
+
+Erledigte beziehungsweise überholte Terminwünsche werden nicht nachträglich auf abgeschlossene Lieferungen angewendet. HTML- und JSON-Spielstände behalten Tickets einschließlich laufender Bearbeitung.

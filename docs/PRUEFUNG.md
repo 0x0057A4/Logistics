@@ -117,3 +117,6 @@ Integrierter Stand erneut mit `node --test tests/*.test.js` geprüft: **137 best
 
 ## 0.7.1 – HTML-Speicherung
 15.10.2026: 171 Tests bestanden, null fehlgeschlagen. Acht unabhängige HTML-Prüfungen inklusive tatsächlicher Ausführung des vollständigen Bundles mit echter Scene und DOM-/Canvas-Stubs. Netzwerk und lokaler Speicher dabei verboten. Browserprüfung bleibt offen. Details: QS-HTML-SPEICHERN.md.
+
+## 0.8 – Kundendienst
+15.10.2026: 194 Tests bestanden, null fehlgeschlagen. Tickets, Personalzeiten, Kapitalblockade, Friständerungen, Kulanz, Antworttexte und Speichermigration geprüft. Unabhängige Integration unter QS-0.8.md, Rohprotokoll TESTERGEBNIS-0.8.txt. Vollständiges Offline-HTML neu gebündelt und bisherige HTML-/JSON-Regressionen grün. Browser-/Layout-/Touchprüfung bleibt offen.

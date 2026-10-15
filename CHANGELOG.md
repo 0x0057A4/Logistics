@@ -1,5 +1,9 @@
 # Änderungen
 
+## 0.8 – 15.10.2026
+
+Kundendiensttickets für Lieferstatus, Terminänderung und Beschwerden. Bearbeitung belegt Kundendienstpersonal mit Schichten und Pausen. Einmalige Terminverlängerung greift erst nach Bearbeitung; Kosten und Kulanz eindeutig gebucht. Automatische Beschwerde bei überfälligem aktivem Auftrag. Ticketverlauf, Wartegründe und kostenpflichtige Bestätigung in Serviceoberfläche. HTML-Speicherung und bisherige Retouren bleiben erhalten. Adresskorrektur und individuelle Kundennachrichten weiterhin offen.
+
 ## 0.7.1 – 15.10.2026
 
 Eigenständiger HTML-Download mit Spiel und Spielstand. CSS und Spielmodule vollständig eingebettet. Öffnen setzt eingebetteten Stand pausiert fort; lokaler Browserspeicher wird im Dateimodus nicht verändert. Erneuter HTML-Download sichert weitere Fortschritte. JSON-Daten gegen Script-Injection maskiert. Versionsanzeigen vereinheitlicht. Browserabnahme weiterhin offen.

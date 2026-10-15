@@ -1,6 +1,6 @@
-# Funktionsstatus 0.7
+# Funktionsstatus 0.8
 
-Stand: 14.10.2026. „Implementiert“ bedeutet vorhandene fachliche Funktion und Bedienung, nicht vollständige Abnahme sämtlicher Ausprägungen des ursprünglichen Konzepts. Kapitel sind bewusst nicht pauschal als fertig markiert.
+Stand: 15.10.2026. „Implementiert“ bedeutet vorhandene fachliche Funktion und Bedienung, nicht vollständige Abnahme sämtlicher Ausprägungen des ursprünglichen Konzepts. Kapitel sind bewusst nicht pauschal als fertig markiert.
 
 | Kapitel | Implementierter Umfang | Offene Tiefe / Einschränkung |
 |---|---|---|
@@ -10,7 +10,7 @@ Stand: 14.10.2026. „Implementiert“ bedeutet vorhandene fachliche Funktion un
 | K03 Lieferkette | Einkauf, Annahme, Prüfung, Lager, Montage, Prüfung, Verpackung, Beladung, Zustellung, Forderung/Zahlung | Packmittel beschränken sich auf Kartons; keine Leergutkreisläufe |
 | K04 Fertigung | Drei Produktfamilien, spezialisierte Stationen, Versionen, Rüsten, Qualität, Nacharbeit, Forschung | Keine freie Produktkonstruktion/Parametervarianten, keine komplexen Losgrößen und Werkzeuginventare |
 | K05 Betrieb | Schichten, Müdigkeit/Pausen, Training, Standortreisen, Energie, Werkstatt-/Fahrzeugwartung | Keine Urlaubsplanung, Zufriedenheitsmodellierung, Solar-/Speicheranlagen, Ladeinfrastruktur oder physische Netze |
-| K06 Rückläufe | Tatsächliche Abholung, Quarantäne, Serviceprüfung, einmalige Erstattung, Reparatur/Verwertung, Chargenrückruf | Kein allgemeines Ticketsystem für Adressen/Terminänderungen. Kalte Retouren werden verwertet, nicht repariert |
+| K06 Kundendienst | Status-, Termin- und Beschwerdetickets mit Personalzeit, Kosten, Kulanz und einmaliger Friständerung; Abholung, Quarantäne, Serviceprüfung, Erstattung, Reparatur/Verwertung und Chargenrückruf | Je Auftrag/Art ein Ticket; keine Adresskorrektur oder individuellen Nachrichten. Kalte Retouren werden verwertet, nicht repariert |
 | K07 Regeln | Nachbestellung, Versand, Wartung, Priorität, Budget, Sperrfrist, Gründe | Keine frei formulierte Regelsprache, Personalhilfe-/Expressregeln oder umfassende Störungs- und Wetterereignisse |
 | K08 Standorte | Bis acht Hallen, eigene Anlagen/Personal/Lager, echte Transfers, Netzkarte, kein interner Umsatz | Feste fiktive Standorte, keine frei formbare Straßenkarte oder Standortflächenvergrößerung |
 | K09 Disposition | Gewicht/Volumen, Rampenkonkurrenz, Fahrerpausen, 2–4 echte Tourstopps, Retouren-Rückladung, Quarantäneentladung, Transfers, Fahrzeugwartung, Mietfahrzeuge mit Tageskosten und Rückgabe | Rückladungen nur früher gelieferter Ware desselben aktiven Auftrags; kein Reichweiten-/Tankmodell, individuelle Rampentermine oder Straßenverkehrssimulation |
@@ -22,7 +22,7 @@ Stand: 14.10.2026. „Implementiert“ bedeutet vorhandene fachliche Funktion un
 
 ## Offene Abnahme
 
-Der Spielstand umfasst Funktionskerne aus allen vier Phasen. Die vollständige Konzernfassung des ursprünglichen Auftrags ist mit Version 0.7 noch nicht erreicht. Insbesondere Darstellung und räumliche Materialbewegung, fortgeschrittene Disposition, vertiefte Unternehmensrechnung sowie End-to-End-Browserprüfung müssen weitergeführt werden. Ein bestandener automatisierter Testlauf ersetzt diese Arbeiten nicht.
+Der Spielstand umfasst Funktionskerne aus allen vier Phasen. Die vollständige Konzernfassung des ursprünglichen Auftrags ist mit Version 0.8 noch nicht erreicht. Insbesondere Darstellung und räumliche Materialbewegung, fortgeschrittene Disposition, vertiefte Unternehmensrechnung sowie End-to-End-Browserprüfung müssen weitergeführt werden. Ein bestandener automatisierter Testlauf ersetzt diese Arbeiten nicht.
 
 ## Praktische Grenzen
 
