@@ -2,7 +2,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import {cellToWorld,worldToCell,buildingBox,buildingTone,sceneSignature,yardLayout,slotPose,vehiclePath,pointOnPath,phaseDuration,phaseProgress,vehiclePlan,vehicleT,vehicleTag,rackPallets,workerSpots,selectLabels,adaptResolution,rayBox,rayGround,networkLayout,MAX_LABELS,FOREIGN_LEN,QUEUE_PLACES,QUEUE_DRIVE,PHASE_LABEL,queueOrder,queuePlace,gatePose,dockPoseFor,makePath,pathPose,approachPath,toDockPath,dockingPath,arrivalTone,arrivalLabel,carrierColor,arrivalPlan,arrivalPose,arrivalMoving,parcelLoads,PARCELS_PER_CAGE,PARCELS_PER_STACK,MAX_CAGES,MAX_STACKS} from '../dist/scene3d.js';
+import {cellToWorld,worldToCell,buildingBox,buildingTone,sceneSignature,yardLayout,slotPose,vehiclePath,pointOnPath,phaseDuration,phaseProgress,vehiclePlan,vehicleT,vehicleTag,rackPallets,workerSpots,selectLabels,adaptResolution,rayBox,rayGround,networkLayout,MAX_LABELS,FOREIGN_LEN,QUEUE_PLACES,QUEUE_DRIVE,PHASE_LABEL,queueOrder,queuePlace,gatePose,dockPoseFor,makePath,pathPose,approachPath,toDockPath,dockingPath,arrivalTone,arrivalLabel,carrierColor,arrivalPlan,arrivalPose,arrivalMoving,parcelLoads,PARCELS_PER_CAGE,PARCELS_PER_STACK,MAX_CAGES,MAX_STACKS,dockSlots,freeBays,parkPose,fleetPlans,FLEET_PARK,DOCK_GAP,PARK_GAP,VEH_LEN} from '../dist/scene3d.js';
+import {Simulation} from '../dist/core.js';
+import {hubProbe} from './ui-hub-probe.js';
 import {chooseRenderer,hasWebGL} from '../dist/scene-select.js';
 const frozen=value=>{if(value&&typeof value==='object'){Object.freeze(value);Object.values(value).forEach(frozen);}return value;};
 function fixture(){return {t:600,selectedSite:'a',sites:[{id:'a',name:'Morgenfeld',x:0,y:0,width:20,height:16,energy:30},{id:'b',name:'Lindenhain',x:44,y:18,width:20,height:16,energy:30}],buildings:[],workers:[],jobs:[],research:[],batches:[],vehicles:[],transfers:[],shipments:[],returns:[],tours:[],freights:[]};}
@@ -32,7 +34,7 @@ test('Hoflayout: Tor an der Hallenkante bei Zeile 8, Andockplätze vor der Südw
  const L=yardLayout({width:20,height:16});assert.equal(L.gate,8);assert.equal(L.bays.length,5);assert.ok(L.bays.every(x=>x>0&&x<20));
  assert.equal(yardLayout({width:20,height:6}).gate,5);
  const dock=slotPose(L,1);assert.ok(dock.z>16);assert.equal(dock.heading,Math.PI/2);
- const wait=slotPose(L,7);assert.ok(wait.x<0,'Überzählige Fahrzeuge auf Wartefläche');
+ const park=slotPose(L,7);assert.ok(park.x>20&&park.z>16,'Überzählige Fahrzeuge im Fuhrpark östlich, nicht auf der Fremd-Wartefläche');
  assert.equal(slotPose(L,0,4.2,30).x,19,'Rampenposition wird auf Hallenbreite begrenzt');
  const out=vehiclePath(L,dock,'out'),inn=vehiclePath(L,dock,'in');assert.deepEqual(out[0],{x:dock.x,z:dock.z});assert.deepEqual(inn.at(-1),{x:dock.x,z:dock.z});assert.ok(out.at(-1).x<-40&&inn[0].x<-40);
 });
@@ -199,4 +201,42 @@ test('W1 Darstellungslogik verändert eingefrorenen Hofzustand nicht',()=>{
  s.yard=[arr('arrival-1','queue'),arr('arrival-2','toDock',{phaseEnd:602,dock:'d1'}),arr('arrival-3','gone')];const before=JSON.stringify(s);frozen(s);
  const order=queueOrder(s.yard,'a'),dock=dockPoseFor(L1,s.buildings,'d1');for(const a of s.yard){const p=arrivalPlan(L1,a,{rank:order.indexOf(a.id),dock});if(p)arrivalPose(p,601.5,p);}parcelLoads(s,'a');
  assert.equal(JSON.stringify(s),before);
+});
+
+// W1b: eigene Flotte am tatsächlich belegten Dock, Fremd-Lkw und eigene Fahrzeuge ohne optische Überlappung.
+const rect=(p,len,w=1.3)=>{const along=Math.abs(Math.sin(p.heading))>.5;return along?{x0:p.x-w/2,x1:p.x+w/2,z0:p.z-len/2,z1:p.z+len/2}:{x0:p.x-len/2,x1:p.x+len/2,z0:p.z-w/2,z1:p.z+w/2};};
+const hits=(a,b)=>a.x0<b.x1&&b.x0<a.x1&&a.z0<b.z1&&b.z0<a.z1;
+const inQueue=(L,r)=>r.x1>L.queue.x0&&r.x0<L.queue.x1&&r.z1>L.queue.z0&&r.z0<L.queue.z1;
+test('W1b Probe-Zustand (Hub, Import): Fremd-Lkw am Dock 1 sichtbar positioniert, eigener Lieferwagen überlappt nicht',()=>{
+ const {sim,ids}=hubProbe(Simulation),s=sim.state,site=s.sites.find(x=>x.id===s.selectedSite),L=yardLayout(site),buildings=s.buildings.filter(b=>b.site===site.id);
+ const a=s.yard.find(x=>x.id===ids.arrival);assert.equal(a.phase,'unloading');assert.equal(a.dock,ids.docks[0]);
+ const dock=dockPoseFor(L,buildings,a.dock),plan=arrivalPlan(L,a,{dock});assert.ok(plan,'Plan vorhanden');
+ const box=buildingBox(buildings.find(b=>b.id===a.dock));assert.equal(plan.x,(box.x0+box.x1)/2,'Lkw in der Spalte seines Docks');assert.ok(plan.z>L.H&&plan.z<L.laneZ,'vor der Südwand, nicht in der Halle');
+ const own=fleetPlans(s,site.id,buildings,L);assert.equal(own.length,1);assert.equal(own[0].dock,null,'Lieferwagen bereit, ohne Dock');
+ assert.ok(!hits(rect(own[0].pose,own[0].len),rect(dock,FOREIGN_LEN)),'keine Überlappung eigener/Fremd-Lkw');
+ assert.ok(!inQueue(L,rect(own[0].pose,own[0].len)),'eigenes Fahrzeug nicht auf der Fremd-Wartefläche');
+ const st=Simulation.fromJSON(sim.serialize()).state,b2=st.buildings.filter(b=>b.site===site.id);assert.deepEqual(dockPoseFor(L,b2,st.yard[0].dock),dock,'nach Import (fromJSON) gleiche Dockpose');assert.deepEqual(fleetPlans(st,site.id,b2,L).map(p=>p.pose),own.map(p=>p.pose),'nach Import gleiche Stellplätze');
+});
+test('W1b Eigenes Fahrzeug steht am tatsächlich belegten Dock (b.task = Sendung/Tour), nicht an bays[k]',()=>{
+ const s=fixture(),L=yardLayout(s.sites[0]);
+ s.buildings.push({id:'d1',type:'dock',site:'a',x:1,y:13,rotation:0,task:'arrival-1'},{id:'d2',type:'dock',site:'a',x:9,y:11,rotation:0,task:'sh1'},{id:'d3',type:'dock',site:'a',x:13,y:13,rotation:0,task:'tour-1'});
+ s.vehicles.push({id:'vehicle-1',type:'truck',site:'a',status:'loading',shipment:'sh1'},{id:'vehicle-2',type:'van',site:'a',status:'tour',tour:'tour-1'},{id:'vehicle-3',type:'van',site:'a',status:'idle'},{id:'vehicle-4',type:'truck',site:'a',status:'idle'});
+ s.shipments.push({id:'sh1',vehicleId:'vehicle-1',status:'loading',remaining:3,dock:'d2'});s.tours.push({id:'tour-1',vehicleId:'vehicle-2',status:'loading',remaining:2,dock:'d3'});
+ const before=JSON.stringify(s);frozen(s);
+ const slots=dockSlots(L,s.buildings),plans=fleetPlans(s,'a',s.buildings,L),by=id=>plans.find(p=>p.v.id===id);
+ assert.equal(by('vehicle-1').dock,'d2');assert.equal(by('vehicle-1').pose.x,slots.get('d2'));assert.equal(by('vehicle-1').pose.x,10.5,'Dock innerhalb der Halle (y=11): Spalte des Docks');
+ assert.equal(by('vehicle-2').dock,'d3');assert.equal(by('vehicle-2').pose.x,14.5);
+ const foreign=dockPoseFor(L,s.buildings,'d1');assert.equal(foreign.x,2.5);
+ for(const p of plans){const r=rect(p.pose,p.len);assert.ok(!hits(r,rect(foreign,FOREIGN_LEN)),`${p.v.id} überlappt Fremd-Lkw nicht`);assert.ok(!inQueue(L,r),`${p.v.id} nicht auf Wartefläche`);}
+ for(let i=0;i<plans.length;i++)for(let j=i+1;j<plans.length;j++)assert.ok(!hits(rect(plans[i].pose,plans[i].len),rect(plans[j].pose,plans[j].len)),`${plans[i].v.id}/${plans[j].v.id} getrennt`);
+ assert.equal(JSON.stringify(s),before,'Zustand unverändert');
+});
+test('W1b Stellplätze: nie vor einem Dock, Docks in gleicher Spalte getrennt, Überlauf im Fuhrpark statt Wartefläche',()=>{
+ const L=yardLayout({width:20,height:16}),docks=[{id:'d1',type:'dock',x:1,y:13},{id:'d2',type:'dock',x:1,y:9},{id:'d3',type:'dock',x:9,y:13,rotation:90}];
+ const slots=dockSlots(L,docks),xs=[...slots.values()];for(let i=1;i<xs.length;i++)assert.ok(Math.abs(xs[i]-xs[i-1])>=DOCK_GAP-1e-9,'Andockplätze getrennt');
+ const free=freeBays(L,slots);assert.ok(free.every(x=>xs.every(d=>Math.abs(d-x)>=PARK_GAP)));
+ const foreign=xs.map(x=>({x,z:L.bayZ+FOREIGN_LEN/2,heading:Math.PI/2}));
+ const poses=[];for(let k=0;k<FLEET_PARK+free.length;k++){const p=parkPose(L,free,k,VEH_LEN.truck);poses.push(p);const r=rect(p,VEH_LEN.truck);assert.ok(!inQueue(L,r),'nicht auf Wartefläche');for(const f of foreign)assert.ok(!hits(r,rect(f,FOREIGN_LEN)),'nicht vor einem Dock');}
+ for(let i=0;i<poses.length;i++)for(let j=i+1;j<poses.length;j++)assert.ok(!hits(rect(poses[i],4.2),rect(poses[j],4.2)),'Stellplätze überlappen nicht');
+ for(let k=0;k<6;k++){const q=rect(queuePlace(L,k),FOREIGN_LEN);for(const p of poses)assert.ok(!hits(q,rect(p,4.2)),'Warteplatz frei von eigener Flotte');}
 });

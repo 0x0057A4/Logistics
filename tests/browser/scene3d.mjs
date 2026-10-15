@@ -5,12 +5,17 @@
 import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
 import { existsSync, readdirSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
 const require = createRequire(import.meta.url);
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 function load() { for (const p of ['playwright', '/opt/node22/lib/node_modules/playwright']) { try { return require(p); } catch {} } throw new Error('Playwright nicht gefunden'); }
 function chrome() { const base = '/opt/pw-browsers'; for (const d of existsSync(base) ? readdirSync(base) : []) { const p = path.join(base, d, 'chrome-linux/chrome'); if (d.startsWith('chromium-') && existsSync(p)) return p; } return undefined; }
+// Messung im Browser: Fremd-Lkw (Pose, Dockspalte, im Bild) und eigene Fahrzeuge der Szene. Nur lesend.
+const SCENE_YARD = `window.sceneYard = async s => { const { buildingBox } = await import('./scene3d.js'); const st = s.state, b = st.buildings || [];
+  const yard = s.yardFleet.map(p => { const a = (st.yard || []).find(y => y.id === p.id), d = b.find(o => o.id === a?.dock), box = d ? buildingBox(d) : null, q = s.cellToScreen(p.x - .5, p.z - .5);
+    return { id: p.id, phase: p.phase, x: +p.x.toFixed(3), z: +p.z.toFixed(3), dockX: p.dock ? p.dock.x : null, dockCol: box ? (box.x0 + box.x1) / 2 : null, dockId: a?.dock || null, onScreen: q.x > 0 && q.y > 60 && q.x < s.width && q.y < s.height - 30 }; });
+  return { trailers: s.inst.ftrailer.count, yard, fleet: s.fleet.map(p => ({ id: p.v.id, x: +p.x.toFixed(3), z: +p.z.toFixed(3), shown: p.shown })) }; };`;
 const { chromium } = load();
 const port = 8700 + Math.floor(Math.random() * 200);
 const server = spawn('python3', ['-m', 'http.server', String(port), '--bind', '127.0.0.1'], { cwd: root, stdio: 'ignore' });
@@ -21,7 +26,8 @@ let browser;
 try {
   await wait(800);
   browser = await chromium.launch({ executablePath: chrome(), args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--disable-background-networking', '--no-first-run'] });
-  const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } }); await ctx.addInitScript(SCENE_YARD);
+  const page = await ctx.newPage();
   // Fehlendes /favicon.ico (Browser-Standardanfrage) ist kein Spielfehler; alle anderen 4xx/5xx zählen.
   page.on('response', r => { if (r.status() >= 400 && !r.url().endsWith('/favicon.ico')) report.errors.push(`HTTP ${r.status()} ${r.url()}`); });
   page.on('console', m => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) report.errors.push(m.text()); });
@@ -125,8 +131,9 @@ try {
     await new Promise(r => setTimeout(r, 1500));
     const pose = () => s.yardFleet.map(p => `${p.id}:${p.x.toFixed(2)},${p.z.toFixed(2)},${p.heading.toFixed(2)}`);
     const p0 = pose();
-    clock += .5; s.setClock(clock); await new Promise(r => setTimeout(r, 500));
-    const p1 = pose();
+    clock += .5; s.setClock(clock);
+    // Unter SwiftShader-Last kann ein Frame länger als 500 ms dauern: bis zu 4 s auf den nächsten gezeichneten Frame warten.
+    let p1 = pose(); for (let i = 0; i < 40 && p1[0] === p0[0]; i++) { await new Promise(r => setTimeout(r, 100)); p1 = pose(); }
     const chips = [...host.querySelectorAll('.scene3d-chip')].filter(c => c.style.display !== 'none').map(c => c.textContent);
     window.__hof = { s, host };
     return { p0, p1, chips, labels: s.yardFleet.map(p => `${p.label}|${p.tone}`), trucks: s.inst.ftrailer.count, cabs: s.inst.fcab.count, cages: s.inst.cage.count, stacks: s.inst.stack.count, info: s.renderInfo(), unchanged: JSON.stringify(state) === before };
@@ -141,6 +148,54 @@ try {
   check('Hof: unter 150 Draw Calls', hof.info.drawCalls < 150, String(hof.info.drawCalls));
   check('Hof: Spielzustand unverändert', hof.unchanged);
   await page.evaluate(() => { window.__hof.s.destroy(); window.__hof.host.remove(); });
+  // W1b: Probe-Zustand aus tests/ui-hub-probe.js über den echten Importweg (Befund A01: Fremd-Lkw an Dock 1 unsichtbar).
+  {
+    const { Simulation } = await import(pathToFileURL(path.join(root, 'dist/core.js')).href);
+    const { hubProbe } = await import(pathToFileURL(path.join(root, 'tests/ui-hub-probe.js')).href);
+    const json = hubProbe(Simulation).sim.serialize();
+    await page.setInputFiles('#importFile', { name: 'hub-probe.json', mimeType: 'application/json', buffer: Buffer.from(json) });
+    await page.waitForSelector('#confirm[open]'); await page.click('#confirm [data-action="confirmOk"]'); await wait(1200);
+    await page.click('[data-view="hall"]'); await page.click('[data-camera="home"]'); await wait(900);
+    if (!(await page.$eval('#flow', e => e.hidden || getComputedStyle(e).display === 'none'))) await page.click('#sceneOnlyBtn');
+    await wait(900);
+    const imp = await page.evaluate(() => sceneYard(document.querySelector('#world').__scene));
+    report.hofImport = imp;
+    const tr = imp.yard[0], own = imp.fleet[0];
+    check('Import: Fremd-Lkw instanziert und an seinem Dock (Spalte der Laderampe)', imp.trailers === 1 && tr && tr.phase === 'unloading' && Math.abs(tr.x - tr.dockX) < 1e-3 && Math.abs(tr.x - tr.dockCol) < 1e-3 && tr.onScreen, JSON.stringify(imp));
+    check('Import: eigener Lieferwagen getrennt vom Fremd-Lkw', own && own.shown && Math.abs(own.x - tr.x) >= 2.9 - 1e-6, JSON.stringify({ own, tr }));
+    await page.screenshot({ path: path.join(root, 'docs/assets/hof-probe-0.9.png') });
+    await page.click('#sceneOnlyBtn'); await wait(300);
+  }
+  // W1b: echter Ablauf über die Oberfläche – Freies Bauen, Dock + Regal bauen, Lagerkraft einstellen, Startvertrag annehmen, 12× bis Lkw am Dock.
+  {
+    const ctx3 = await browser.newContext({ viewport: { width: 1440, height: 900 } }); await ctx3.addInitScript(SCENE_YARD); const p3 = await ctx3.newPage(); const err3 = [];
+    p3.on('console', m => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) err3.push(m.text()); }); p3.on('pageerror', e => err3.push(String(e)));
+    await p3.goto(`http://127.0.0.1:${port}/index.html`, { waitUntil: 'load' }); await p3.waitForSelector('#welcome[open]', { timeout: 10000 });
+    await p3.check('input[name=mode][value=sandbox]'); await p3.click('[data-action="start"]'); await wait(2000);
+    if (await p3.$('#welcome[open]')) { await p3.click('#welcome [data-action="temporary"]'); await wait(300); await p3.click('[data-action="confirmOk"]'); await wait(1200); }
+    const clickCell = async (x, y) => { const q = await p3.evaluate(([x, y]) => { const c = document.querySelector('#world'), r = c.getBoundingClientRect(), p = c.__scene.cellToScreen(x, y); return { x: r.left + p.x, y: r.top + p.y }; }, [x, y]); await p3.mouse.move(q.x, q.y); await wait(200); await p3.mouse.click(q.x, q.y); await wait(500); };
+    await p3.click('.rail [data-action="build"]'); await wait(300); await p3.click('[data-build="dock"]'); await wait(300); await clickCell(4, 13);
+    await p3.click('[data-build="rack"]'); await wait(300); await clickCell(3, 3); await p3.keyboard.press('Escape'); await wait(300);
+    await p3.click('.rail [data-panel="staff"]'); await p3.selectOption('#panelBody [data-form="hire"] select[name=role]', 'warehouse'); await p3.click('#panelBody [data-form="hire"] button.primary'); await wait(400);
+    await p3.click('.rail [data-panel="contracts"]'); await p3.click('#panelBody [data-action="acceptContract"]'); await wait(400); await p3.click('[data-action="close"]');
+    const setup = await p3.evaluate(() => { const st = document.querySelector('#world').__scene.state; return { docks: st.buildings.filter(b => b.type === 'dock').length, racks: st.buildings.filter(b => b.type === 'rack').length, warehouse: st.workers.filter(w => w.role === 'warehouse').length, active: (st.contracts || []).filter(c => c.status === 'active').length, t: st.t }; });
+    check('Echt: Dock, Regal, Lagerkraft und aktiver Startvertrag über die Oberfläche', setup.docks >= 1 && setup.racks >= 1 && setup.warehouse >= 1 && setup.active === 1, JSON.stringify(setup));
+    // 12× bis der Lkw am Tor ist, dann 1×; Halt bei „Entladen“. Der Wächter läuft in der Seite (50 ms, zwischen den 100-ms-Simulationstakten),
+    // weil Entladen nur wenige Spielminuten dauert und eine Abfrage von außen (SwiftShader-Last) es sonst überspringt. Bedienung nur über die Tempotasten.
+    await p3.evaluate(() => { window.__dockWatch = setInterval(() => { const yard = document.querySelector('#world').__scene.state.yard || [];
+      if (yard.some(a => a.phase === 'unloading')) { document.querySelector('[data-speed="0"]').click(); clearInterval(window.__dockWatch); window.__docked = true; }
+      else if (!window.__slow && yard.some(a => ['gate', 'queue', 'toDock', 'docking'].includes(a.phase))) { window.__slow = true; document.querySelector('[data-speed="1"]').click(); } }, 50); });
+    await p3.click('[data-speed="12"]');
+    let docked = false; try { await p3.waitForFunction(() => window.__docked === true, null, { timeout: 120000, polling: 250 }); docked = true; } catch (e) { report.hofEchtWait = String(e).slice(0, 300); }
+    await p3.click('[data-camera="home"]'); await wait(900); await p3.click('#sceneOnlyBtn'); await wait(1200);
+    const real = await p3.evaluate(() => sceneYard(document.querySelector('#world').__scene));
+    report.hofEcht = { setup, docked, t: await p3.evaluate(() => document.querySelector('#world').__scene.state.t), ...real };
+    const tr = real.yard.find(a => a.phase === 'unloading');
+    check('Echt: 12× bis Lkw am Dock, Lkw sichtbar an seiner Laderampe', docked && tr && Math.abs(tr.x - tr.dockX) < 1e-3 && Math.abs(tr.x - tr.dockCol) < 1e-3 && tr.onScreen && real.trailers >= 1, JSON.stringify(real));
+    await p3.screenshot({ path: path.join(root, 'docs/assets/hof-echt-0.9.png') });
+    check('Echt: keine Konsolenfehler', err3.length === 0, err3.join(' | '));
+    await ctx3.close();
+  }
   check('Keine Konsolenfehler (3D)', report.errors.length === 0, report.errors.join(' | '));
   // 2D-Rückfall per URL-Parameter
   const p2 = await browser.newPage({ viewport: { width: 1200, height: 800 } }); const err2 = [];
