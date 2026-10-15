@@ -2,6 +2,7 @@ import {injectPortableSave,portableTemplate} from './portable-save.js';
 import {RENTAL_RATES} from './rental.js';
 import {planTour} from './tours.js';
 import {createSaveGuard} from './save-guard.js';
+import {createSaveStore} from './storage.js';
 import {report} from './accounting.js';
 import {Simulation} from './core.js';
 import {ITEMS,BUILDINGS,RECIPES,ROLES,VEHICLES,RESEARCH} from './catalog.js';
@@ -28,6 +29,9 @@ let started=false, dirty=false, uiStamp=0, lastTick=performance.now(), accumulat
 const STORE='industrie-logistik-v1', prefsKey=STORE+'-prefs';
 const VERSION='0.9 · ENTWICKLUNG';{const v=document.getElementById('appVersion');if(v)v.textContent=VERSION;}
 const guard=createSaveGuard({prefix:STORE,onLost(){writable=false;speed=0;$('#statusText').textContent=lockMessage();}});
+// QS-W0-03 (W1b): Spielstände in IndexedDB (storage.js), Rückfall localStorage ohne IndexedDB. Sperre/Einstellungen bleiben in localStorage.
+const store=createSaveStore({prefix:STORE,onWriteError:writeFailed,onCommit:writeCommitted});
+const saveKeys=mode=>store.keysFor(mode);
 let writable=false, switching=false, temporary=false, storageFailure=false;
 const temporaryMessage='Dateimodus · Änderungen NICHT GESPEICHERT · Vor Schließen als HTML oder JSON speichern.';
 const embeddedSave=document.getElementById('embedded-save');
@@ -39,8 +43,9 @@ const portableSource=(()=>{if(!portableMode)return null;
  const slot=document.getElementById('portable-template'),style=document.getElementById('portable-style'),runtime=document.getElementById('portable-runtime');
  if(slot&&style&&runtime)try{const shell=JSON.parse(slot.textContent);if(typeof shell==='string')return {shell,style,runtime};}catch{}
  return {legacy:'<!doctype html>\n'+document.documentElement.outerHTML};})();
-const lockMessage=()=>guard.reason==='storage-error'?'Schreibschutz: Lokaler Speicher nicht verfügbar. Vorhandenen Stand als JSON exportieren.':guard.reason==='unsupported'?'Schreibschutz: Browser unterstützt keine sichere Tab-Sperre. JSON-Export bleibt möglich.':'Schreibschutz: Spielstand in anderem Tab geöffnet oder Sperre verloren. Anderen Tab schließen und hier neu laden.';
-function canWrite(){if(temporary)return true;if(writable&&guard.owns(sim.state.mode))return true;writable=false;speed=0;$('#statusText').textContent=lockMessage();return false;}
+const loadingMessage='Spielstand wird geladen …';
+const lockMessage=()=>store.kind==='error'?'Schreibschutz: Spielstandspeicher (IndexedDB) nicht erreichbar. Browserdaten zulassen, Seite neu laden oder JSON exportieren.':!portableMode&&!temporary&&(store.kind==='pending'||guard.reason==='unclaimed'||guard.reason==='pending')?loadingMessage:guard.reason==='storage-error'?'Schreibschutz: Lokaler Speicher nicht verfügbar. Vorhandenen Stand als JSON exportieren.':guard.reason==='unsupported'?'Schreibschutz: Browser unterstützt keine sichere Tab-Sperre. JSON-Export bleibt möglich.':'Schreibschutz: Spielstand in anderem Tab geöffnet oder Sperre verloren. Anderen Tab schließen und hier neu laden.';
+function canWrite(){if(temporary)return true;if(writable&&store.kind!=='error'&&guard.owns(sim.state.mode))return true;writable=false;speed=0;$('#statusText').textContent=lockMessage();return false;}
 function resetView(){tourDraft={};endBuild();closePanel();selected=null;forecast=null;search='';accumulator=0;scene.home();}
 async function activate(mode,{candidate=null,reset=false}={}){
  if(switching)return false;switching=true;
@@ -50,12 +55,19 @@ async function activate(mode,{candidate=null,reset=false}={}){
    sim=candidate||new Simulation({mode});prefs.mode=sim.state.mode;started=true;dirty=true;resetView();$('#welcome').close();setSpeed(0);render(true);return true;
   }
   if(started&&writable&&!save())return false;
+  if(store.kind==='error'){writable=false;speed=0;toast(lockMessage(),true);render();return false;}
+  // Eigene ausstehende IndexedDB-Schreibvorgänge vor Sperrwechsel bestätigen.
+  if(store.lazy)await store.flush();
   if(!await guard.acquire(mode)){writable=false;speed=0;toast(lockMessage(),true);render();return false;}
   writable=true;
-  const raw=localStorage.getItem(STORE+'-'+mode);
-  if(reset&&raw&&!candidate)keepBackup(STORE+'-'+mode);
-  const next=candidate||(reset?new Simulation({mode}):raw?Simulation.fromJSON(raw):new Simulation({mode}));
-  sim=next;prefs.mode=sim.state.mode;started=true;dirty=!!candidate||reset||!raw;resetView();
+  const key=STORE+'-'+mode;
+  if(store.lazy)await store.load(saveKeys(mode));
+  adoptLegacyHold(key);
+  const raw=store.get(key);
+  if(reset&&!candidate&&!await keepPrevious(key))return false;
+  const rescued=!candidate&&!reset?takeEmergency(key):null;
+  const next=candidate||rescued||(reset?new Simulation({mode}):raw?Simulation.fromJSON(raw):new Simulation({mode}));
+  sim=next;prefs.mode=sim.state.mode;started=true;dirty=!!candidate||!!rescued||reset||!raw;resetView();
   $('#welcome').close();setSpeed(0);render(true);
   if(dirty){if(!save())return false;}else localStorage.setItem(prefsKey,JSON.stringify(prefs));
   toast(reset?'Neues Unternehmen gegründet. Betrieb pausiert.':'Spielstand geladen. Betrieb pausiert.');return true;
@@ -70,9 +82,28 @@ async function bootstrap(){
   else {$('#welcome').close();toast('HTML-Spielstand geladen. Betrieb pausiert.');}
   return;
  }
- try{writable=await guard.acquire(sim.state.mode);if(writable&&started){const raw=localStorage.getItem(STORE+'-'+sim.state.mode);if(raw)sim=Simulation.fromJSON(raw);}}
+ $('#statusText').textContent=loadingMessage;
+ try{
+  const kind=await store.open();
+  if(kind==='error'){writable=false;storageFailure=true;}
+  else{
+   // Lesen ohne Sperre (Lesezugriff in zweitem Tab), danach als Sperrinhaber frisch nachladen.
+   if(store.lazy)await store.load(saveKeys(prefs.mode));
+   loadStored(STORE+'-'+prefs.mode);
+   writable=await guard.acquire(sim.state.mode);
+   if(writable){
+    const key=STORE+'-'+sim.state.mode;
+    if(store.lazy)await store.load(saveKeys(sim.state.mode));
+    adoptLegacyHold(key);
+    if(started){const raw=store.get(key);if(raw)sim=Simulation.fromJSON(raw);}
+    const rescued=takeEmergency(key);
+    if(rescued){sim=rescued;started=true;dirty=true;save();}
+   }
+  }
+ }
  catch(e){writable=false;toast('Speicher nicht verfügbar: '+e.message,true);}
- if(!writable){speed=0;$('#statusText').textContent=lockMessage();}render();if(!started)showWelcome();
+ if(!writable){speed=0;$('#statusText').textContent=lockMessage();}else if($('#statusText').textContent===loadingMessage)$('#statusText').textContent=started?'Spielstand geladen':'Speicher bereit · Unternehmen gründen';
+ render(true);if(!started)showWelcome();
 }
 
 let prefs={mode:'guided',large:false,reduced:matchMedia('(prefers-reduced-motion: reduce)').matches,mission:true,flowCollapsed:false,vbarCollapsed:false};
@@ -81,7 +112,11 @@ if(portableMode){
  const savedPrefs=JSON.parse(document.getElementById('embedded-prefs')?.textContent||'null')||{};
  for(const key of ['large','reduced','mission'])if(typeof savedPrefs[key]==='boolean')prefs[key]=savedPrefs[key];prefs.mode=sim.state.mode;
  }catch(e){embeddedError=e;started=false;temporary=true;speed=0;}
-}else try{prefs={...prefs,...JSON.parse(localStorage.getItem(prefsKey)||'{}')};const saved=localStorage.getItem(STORE+'-'+prefs.mode);if(saved){sim=Simulation.fromJSON(saved);started=true;}}catch(e){setTimeout(()=>toast('Gespeicherter Stand nicht geladen: '+e.message,true),500);}
+}else try{prefs={...prefs,...JSON.parse(localStorage.getItem(prefsKey)||'{}')};}catch{/* Einstellungen optional; Spielstand lädt bootstrap() über store. */}
+/** Gespeicherten Hauptstand übernehmen (bootstrap). Fehler wie bisher als verzögerte Meldung, Willkommensdialog folgt. */
+function loadStored(key){try{const saved=store.get(key);if(saved){sim=Simulation.fromJSON(saved);started=true;}}catch(e){setTimeout(()=>toast('Gespeicherter Stand nicht geladen: '+e.message,true),500);}}
+/** Notfall-Kopie (nur IndexedDB, beim Verlassen abgelegt) übernehmen, falls neuer als der gespeicherte Stand. */
+function takeEmergency(key){const em=store.takeEmergency(key);if(!em)return null;try{const rescued=Simulation.fromJSON(em.value);setTimeout(()=>toast('Letzter Stand aus Notfall-Kopie übernommen (Speichern beim Schließen war nicht bestätigt).'),600);return rescued;}catch{store.dropEmergency(key);return null;}}
 applyPrefs();
 // Szenenwahl S1; der Node-UI-Harness stellt nur einen Scene-Stub bereit.
 const scene=(typeof createScene==='function'?createScene:(canvas,callbacks)=>new Scene(canvas,callbacks))($('#world'),{onSelect(id){if(!id)return;if(sim.state.sites.some(x=>x.id===id)){send({type:'selectSite',id});scene.home();return;}selected=id;openPanel('detail');scene.focus?.(id);},onPlace(x,y){if(moving){const r=send({type:'move',id:moving,x,y,rotation});if(r.ok){moving=null;endBuild();}}else if(build)send({type:'build',buildingType:build,x,y,rotation,site:sim.state.selectedSite});},onHover(x,y){if(build)$('#buildHint').textContent=`${name(BUILDINGS,build)} · Raster ${x+1}/${y+1} · ${rotation}° · ${euro(BUILDINGS[build].cost)}`;}});
@@ -92,24 +127,39 @@ function send(c,quiet=false){if(!canWrite()){toast(lockMessage(),true);return {o
 // vollständig geprüft, wenn er weder von diesem Tab geschrieben noch zuletzt fehlerfrei geladen wurde.
 // So landet ein beschädigter Hauptstand nie über einer intakten Sicherung, ohne alle 20 s zu blockieren.
 const lastWritten=new Map();
-function backupCandidate(key){const old=localStorage.getItem(key);if(!old)return null;if(old===lastWritten.get(key)||Simulation.wasValidated?.(old))return old;try{Simulation.fromJSON(old);return old;}catch{return null;}}
-// QS-W0-05: Gründen über einem vorhandenen Unternehmen hält dessen letzte gültige Sicherung fest (Marker
-// `<key>-backup-hold`). Solange der Marker steht, rotiert save() nicht in die Sicherung. Freigabe nur durch
-// ausdrückliches „Alte Sicherung verwerfen“ oder erfolgreiches „Letzte Sicherung laden“.
-const backupInfo=new Map();
-function holdMeta(key){try{const raw=localStorage.getItem(key+'-backup-hold');return raw===null?null:(JSON.parse(raw)||{});}catch{return null;}}
-function validBackup(key){const text=localStorage.getItem(key+'-backup');if(!text)return null;if(Simulation.wasValidated?.(text))return text;try{Simulation.fromJSON(text);return text;}catch{return null;}}
-function keepBackup(key){
- if(holdMeta(key)&&localStorage.getItem(key+'-backup')!==null)return;
- let kept=backupCandidate(key);if(kept)localStorage.setItem(key+'-backup',kept);else kept=validBackup(key);
- if(!kept)return;let t=null;try{t=JSON.parse(kept).t??null;}catch{}
- localStorage.setItem(key+'-backup-hold',JSON.stringify({t}));backupInfo.set(key,{ok:true,t});
+function backupCandidate(key){const old=store.get(key);if(!old)return null;if(old===lastWritten.get(key)||Simulation.wasValidated?.(old))return old;try{Simulation.fromJSON(old);return old;}catch{return null;}}
+// QS-W0-05/11 (W1b): Gründen über einem vorhandenen Unternehmen legt dessen letzten gültigen Stand in einen eigenen
+// Platz `<key>-backup-prev`. Die laufende Sicherung `<key>-backup` rotiert danach normal für das neue Unternehmen.
+// Freigabe des Platzes nur durch „Alte Sicherung verwerfen“; „Vorheriges Unternehmen laden“ tauscht beide Unternehmen.
+// Altbestand: Marker `<key>-backup-hold` (W0) wird beim ersten Schreibzugriff in den eigenen Platz überführt; gelingt das
+// nicht (z. B. localStorage voll), gilt das alte Festhalten weiter.
+const backupInfo=new Map(),prevInfo=new Map();
+function holdMeta(key){try{const raw=store.get(key+'-backup-hold');return raw===null?null:(JSON.parse(raw)||{});}catch{return null;}}
+function validBackup(key){const text=store.get(key+'-backup');if(!text)return null;if(Simulation.wasValidated?.(text))return text;try{Simulation.fromJSON(text);return text;}catch{return null;}}
+function validPrevious(key){const text=store.get(key+'-backup-prev');if(!text)return null;if(Simulation.wasValidated?.(text))return text;try{Simulation.fromJSON(text);return text;}catch{return null;}}
+const stateTime=text=>{try{return JSON.parse(text).t??null;}catch{return null;}};
+function previousTime(key){if(!prevInfo.has(key)){let t=null;try{t=stateTime(store.get(key+'-backup-prev'));}catch{}prevInfo.set(key,{t});}return prevInfo.get(key).t;}
+/** Schreibt mehrere Schlüssel; IndexedDB: wartet auf Commit. false + Meldung bei Fehler. */
+async function writeNow(entries,what){
+ try{const result=store.write(entries);if(store.lazy){const r=await result;if(!r.ok)throw r.error||Error('Schreiben nicht bestätigt.');}return true;}
+ catch(e){toast(what+' nicht möglich: '+(e?.message||e)+' Zuerst JSON exportieren.',true);return false;}
 }
-function releaseHold(key){try{localStorage.removeItem(key+'-backup-hold');}catch{}}
-/** Gültige Sicherung für Willkommensdialog und Einstellungen; je Schlüssel einmal geprüft, danach aus Schreibwissen. */
+async function keepPrevious(key){
+ const kept=backupCandidate(key)||validBackup(key);if(!kept)return true;
+ const entries={[key+'-backup-prev']:kept};if(holdMeta(key))entries[key+'-backup-hold']=null;
+ if(!await writeNow(entries,'Sicherung des bisherigen Unternehmens'))return false;
+ prevInfo.set(key,{t:stateTime(kept)});backupInfo.delete(key);return true;
+}
+function adoptLegacyHold(key){
+ try{if(!holdMeta(key)||store.has(key+'-backup-prev'))return;const kept=validBackup(key);
+  store.write(kept?{[key+'-backup-prev']:kept,[key+'-backup-hold']:null}:{[key+'-backup-hold']:null});prevInfo.delete(key);}
+ catch{/* Platz voll: Marker bleibt, save() hält die Sicherung wie in W0 fest. */}
+}
+function releaseHold(key){try{if(holdMeta(key))store.write({[key+'-backup-hold']:null});}catch{}}
+/** Gültige Sicherung (laufend oder vorheriges Unternehmen) für Willkommensdialog und Einstellungen; je Schlüssel einmal geprüft. */
 function backupAvailable(mode){
  if(temporary||portableMode)return false;const key=STORE+'-'+mode;
- if(!backupInfo.has(key)){let ok=false;try{ok=!!validBackup(key);}catch{}backupInfo.set(key,{ok,t:null});}
+ if(!backupInfo.has(key)){let ok=false;try{ok=!!validBackup(key)||!!validPrevious(key);}catch{}backupInfo.set(key,{ok,t:null});}
  return backupInfo.get(key).ok;
 }
 const recoveryMode=()=>started?sim.state.mode:prefs.mode;
@@ -117,17 +167,61 @@ function showWelcome(){const b=$('#welcomeBackup');if(b)b.hidden=!backupAvailabl
 function loadBackup(){
  const mode=recoveryMode(),key=STORE+'-'+mode;
  return confirm('Letzte Sicherung laden?','Aktueller Fortschritt wird durch letzte Sicherung ersetzt.',async()=>{
-  try{const text=localStorage.getItem(key+'-backup');if(!text)throw Error('Keine Sicherung vorhanden.');const restored=Simulation.fromJSON(text);
+  try{let text=store.get(key+'-backup');let restored=null;
+   try{if(text)restored=Simulation.fromJSON(text);}catch(e){if(!store.get(key+'-backup-prev'))throw e;}
+   if(!restored){text=store.get(key+'-backup-prev');if(!text)throw Error('Keine Sicherung vorhanden.');restored=Simulation.fromJSON(text);}
    const ok=await activate(restored.state.mode,{candidate:restored});if(ok&&restored.state.mode===mode)releaseHold(key);return ok;}
   catch(e){toast('Sicherung nicht geladen: '+e.message,true);return false;}
  });
 }
-function discardBackup(){
- confirm('Alte Sicherung verwerfen?','Sicherung des vorherigen Unternehmens wird durch den aktuellen Stand ersetzt. Vorher bei Bedarf laden und als JSON exportieren.',()=>{
-  if(!started)return false;if(!canWrite()){toast(lockMessage(),true);return false;}releaseHold(STORE+'-'+sim.state.mode);dirty=true;return save(true);
+/** Tausch: vorheriges Unternehmen wird Hauptstand, aktuelles Unternehmen belegt den Platz „vorheriges Unternehmen“. */
+function loadPrevious(){
+ const mode=recoveryMode(),key=STORE+'-'+mode;
+ return confirm('Vorheriges Unternehmen laden?','Aktuelles Unternehmen wird dafür als Sicherung des vorherigen Unternehmens abgelegt (Tausch).',async()=>{
+  try{if(!started||!canWrite()){toast(lockMessage(),true);return false;}
+   const text=store.get(key+'-backup-prev');if(!text)throw Error('Keine Sicherung vorhanden.');const restored=Simulation.fromJSON(text);
+   if(!await writeNow({[key+'-backup-prev']:sim.serialize()},'Ablage des aktuellen Unternehmens'))return false;
+   prevInfo.set(key,{t:sim.state.t});return await activate(restored.state.mode,{candidate:restored});}
+  catch(e){toast('Sicherung nicht geladen: '+e.message,true);return false;}
  });
 }
-function save(show=false){if(temporary){$('#statusText').textContent=temporaryMessage;if(show)toast('Nicht gespeichert. Bitte JSON exportieren.',true);return false;}if(!canWrite()){if(show)toast(lockMessage(),true);return false;}try{const key=STORE+'-'+sim.state.mode,held=holdMeta(key)&&localStorage.getItem(key+'-backup')!==null,old=held?null:backupCandidate(key),text=sim.serialize();if(old){localStorage.setItem(key+'-backup',old);backupInfo.set(key,{ok:true,t:null});}localStorage.setItem(key,text);lastWritten.set(key,text);localStorage.setItem(prefsKey,JSON.stringify({...prefs,mode:sim.state.mode}));dirty=false;storageFailure=false;$('#statusText').textContent='Gesichert · '+time(sim.state.t)+' · Keine Offlinefortschritte';if(show)toast('Spielstand gesichert.');return true;}catch(e){storageFailure=true;$('#statusText').textContent='NICHT GESPEICHERT · Speicher blockiert oder voll. JSON exportieren; Speichern erneut versuchen.';toast('Speichern fehlgeschlagen. Bitte Spielstand exportieren.',true);return false;}}
+function discardBackup(){
+ confirm('Alte Sicherung verwerfen?','Sicherung des vorherigen Unternehmens wird gelöscht. Vorher bei Bedarf laden und als JSON exportieren.',async()=>{
+  if(!started)return false;if(!canWrite()){toast(lockMessage(),true);return false;}const key=STORE+'-'+sim.state.mode;
+  if(!await writeNow({[key+'-backup-prev']:null,[key+'-backup-hold']:null},'Verwerfen'))return false;
+  prevInfo.delete(key);backupInfo.delete(key);dirty=true;return save(true);
+ });
+}
+let savedAt=null,saveSeq=0;
+const sizeNote=text=>{const h=Simulation.headroom?.(sim.state,text.length);if(!h||h.ratio<0.6)return '';return h.limit==='chars'?` · Spielstand groß: ${fmt(text.length/1e6,1)} MB (${fmt(h.ratio*100)} % der Ladegrenze)`:` · Liste ${h.limit} bei ${fmt(h.ratio*100)} % der Ladegrenze`;};
+function save(show=false){if(temporary){$('#statusText').textContent=temporaryMessage;if(show)toast('Nicht gespeichert. Bitte JSON exportieren.',true);return false;}if(!canWrite()){if(show)toast(lockMessage(),true);return false;}
+ try{const key=STORE+'-'+sim.state.mode,text=sim.serialize();
+  // Ladegrenze (core SAVE_LIMITS): nie einen Stand schreiben, der sich nicht mehr laden ließe.
+  const h=Simulation.headroom?.(sim.state,text.length);
+  if(h&&h.ratio>1){storageFailure=true;$('#statusText').textContent=`NICHT GESPEICHERT · Spielstand überschreitet Ladegrenze (${h.limit}). Letzter gespeicherter Stand bleibt. JSON exportieren.`;toast('Spielstand zu groß zum Speichern. Bitte exportieren.',true);return false;}
+  const held=!!holdMeta(key)&&!store.has(key+'-backup-prev')&&store.get(key+'-backup')!==null,old=held?null:backupCandidate(key);
+  const entries={};if(old)entries[key+'-backup']=old;entries[key]=text;
+  store.write(entries);saveSeq=store.seq||0;savedAt=sim.state.t;
+  if(old)backupInfo.set(key,{ok:true,t:null});lastWritten.set(key,text);
+  try{localStorage.setItem(prefsKey,JSON.stringify({...prefs,mode:sim.state.mode}));}catch{/* Einstellungen optional */}
+  dirty=false;storageFailure=false;
+  $('#statusText').textContent=(store.lazy?'Wird gesichert · ':'Gesichert · ')+time(sim.state.t)+' · Keine Offlinefortschritte'+sizeNote(text);
+  if(show)toast('Spielstand gesichert.');return true;}
+ catch(e){storageFailure=true;$('#statusText').textContent='NICHT GESPEICHERT · Speicher blockiert oder voll. JSON exportieren; Speichern erneut versuchen.';toast('Speichern fehlgeschlagen. Bitte Spielstand exportieren.',true);return false;}}
+function writeCommitted({seq}){if(seq!==saveSeq||storageFailure||temporary)return;const st=$('#statusText');if(st.textContent.startsWith('Wird gesichert · '))st.textContent='Gesichert · '+st.textContent.slice(17);}
+function writeFailed({keys,error}){
+ const key=STORE+'-'+sim.state.mode;if(!keys.includes(key))return;
+ lastWritten.delete(key);dirty=true;storageFailure=true;
+ $('#statusText').textContent='NICHT GESPEICHERT · Speicher blockiert oder voll ('+(error?.name||'IndexedDB')+'). JSON exportieren; Speichern erneut versuchen.';
+ toast('Speichern fehlgeschlagen. Bitte Spielstand exportieren.',true);
+}
+/** Verlassen (hidden/beforeunload): 'saved' = bestätigt oder Notfall-Kopie liegt vor; 'pending' = IndexedDB-Commit offen ohne Kopie; 'failed'. */
+function leaveSave(){
+ if(!started||temporary)return 'saved';const key=STORE+'-'+sim.state.mode;
+ if(dirty&&!save())return 'failed';
+ if(!store.lazy||!store.pendingFor(key))return 'saved';
+ return store.emergency(key,lastWritten.get(key))?'saved':'pending';
+}
 let htmlExporting=false;
 async function exportHtml(){
  if(htmlExporting)return false;
@@ -158,6 +252,7 @@ async function retryStorage(){
  if(temporary){toast('Temporären Stand zuerst als JSON exportieren. Danach Seite neu laden und JSON importieren.',true);return false;}
  if(switching)return false;switching=true;speed=0;
  try{
+  if(store.kind==='error'&&await store.retry()==='error')throw Error(store.reason);
   writable=await guard.acquire(sim.state.mode);
   if(!writable){toast(lockMessage(),true);return false;}
   if(started&&dirty){
@@ -170,7 +265,8 @@ async function retryStorage(){
     finally{switching=false;render(true);}
    });return false;
   }
-  const raw=localStorage.getItem(STORE+'-'+sim.state.mode);
+  if(store.lazy)await store.load(saveKeys(sim.state.mode));
+  const raw=store.get(STORE+'-'+sim.state.mode);
   if(raw){sim=Simulation.fromJSON(raw);started=true;resetView();$('#welcome').close();}
   storageFailure=false;$('#statusText').textContent=started?'Spielstand geladen · Betrieb pausiert':'Speicher verfügbar · Unternehmen gründen';
   return true;
@@ -395,24 +491,26 @@ function help(){return `<p class="fine">Betriebshandbuch · Version ${VERSION}</
  ['Steuerung und Zugänglichkeit','/: Suche nach Anlagen, Fahrzeugen, Kennzeichen, Verträgen, Aufträgen und Beschäftigten; Pfeiltasten und Eingabe öffnen die Akte. Glocke: aktuelle Wartegründe und Warnungen. Standortfluss und Fahrzeugleiste lassen sich einklappen; ▢ blendet alle Panels aus. Leertaste: Pause. B: Bauen. R: Bauobjekt drehen. Escape: Fenster schließen. Ziehen: Kamera bewegen. Mausrad: Zoom. Grundriss liefert ebene Ersatzansicht. Alle Anlagen auch über Fertigungstabelle auswählen. Schrift und Bewegung in Einstellungen.'],
  ['Darstellung und Umfang','Die aktuelle räumliche Ansicht verwendet lokal gezeichnete Canvas-Isometrie. Sie benötigt kein WebGL. Phasenstatus und konkrete Grenzen sind in der ausgelieferten Dokumentation nachgehalten.']
  ].map(([h,t])=>`<details><summary>${h}</summary><p>${t}</p></details>`).join('')}`;}
-function backupNotice(){if(portableMode||temporary)return '';const meta=holdMeta(STORE+'-'+recoveryMode());if(!meta)return '';return `<div class="notice">Sicherung des vorherigen Unternehmens${typeof meta.t==='number'?' ('+esc(time(meta.t))+')':''} bleibt erhalten. Bis zum Verwerfen erhält der aktuelle Stand keine eigene Sicherung.</div>${started?`<div class="actions">${button('Alte Sicherung verwerfen','discardBackup','','danger')}</div>`:''}`;}
+function backupNotice(){if(portableMode||temporary)return '';const key=STORE+'-'+recoveryMode();let prev=false;try{prev=store.has(key+'-backup-prev');}catch{}
+ if(prev){const t=previousTime(key);return `<div class="notice">Sicherung des vorherigen Unternehmens${typeof t==='number'?' ('+esc(time(t))+')':''} bleibt erhalten (eigener Platz). Der aktuelle Stand hat seine eigene laufende Sicherung.</div>${started?`<div class="actions">${button('Vorheriges Unternehmen laden','loadPrevious')}${button('Alte Sicherung verwerfen','discardBackup','','danger')}</div>`:''}`;}
+ const meta=holdMeta(key);if(!meta)return '';return `<div class="notice">Sicherung des vorherigen Unternehmens${typeof meta.t==='number'?' ('+esc(time(meta.t))+')':''} bleibt erhalten. Bis zum Verwerfen erhält der aktuelle Stand keine eigene Sicherung.</div>${started?`<div class="actions">${button('Alte Sicherung verwerfen','discardBackup','','danger')}</div>`:''}`;}
 function settings(){return `<section class="section"><h3>Spielstand</h3><p class="fine">HTML-Download enthält Spiel und aktuellen Stand. Datei im Browser öffnen, dann 1× drücken. Für späteren Fortschritt erneut als HTML speichern. Keine Installation nötig.</p>${temporary?`<div class="notice">${temporaryMessage}</div>`:''}${!portableMode?`<div class="actions">${button('Speicher erneut prüfen','retryStorage')}${!temporary?button('Ohne lokale Speicherung spielen','temporary'):''}</div>`:''}${!writable&&!temporary?`<div class="notice">${esc(lockMessage())}</div>`:''}${!portableMode?`<form data-form="loadMode" class="form-grid">${field('Gespeichertes Unternehmen','<select name="mode"><option value="guided">Geführter Einstieg</option><option value="economy">Wirtschaftsbetrieb</option><option value="sandbox">Freies Bauen</option></select>')}<button>Modus laden</button></form>`:''}<p class="fine">Version ${VERSION}. Vollständiger Funktionsstatus und Quellcode im Download.</p>${!portableMode?'<p style="margin:10px 0"><a href="./Industrie-Logistik.zip" download>Spielpaket & Quellcode herunterladen ↗</a></p>':''}<p class="fine" style="margin-top:8px">Aktiver Modus: ${sim.state.mode==='guided'?'Geführter Einstieg':sim.state.mode==='sandbox'?'Freies Bauen':'Wirtschaftsbetrieb'}</p><div class="actions">${button('Spiel als HTML speichern','exportHtml','','primary')}${!portableMode?button('Im Browser speichern','save'):''}${button('JSON exportieren','export')}${button('JSON importieren','import')}${!portableMode&&backupAvailable(recoveryMode())?button('Letzte Sicherung laden','backup'):''}</div>${backupNotice()}</section><section class="section"><h3>Darstellung</h3><div class="list-row"><span>Größere Schrift</span><input type="checkbox" data-pref="large" ${prefs.large?'checked':''} aria-label="Größere Schrift"></div><div class="list-row"><span>Bewegung reduzieren</span><input type="checkbox" data-pref="reduced" ${prefs.reduced?'checked':''} aria-label="Bewegung reduzieren"></div><div class="list-row"><span>Einstiegshinweise</span><input type="checkbox" data-pref="mission" ${prefs.mission?'checked':''} aria-label="Einstiegshinweise"></div></section><section class="section"><h3>Unternehmen</h3><div class="actions">${button('Neues Unternehmen','new','','danger')}${button('Handbuch','panel-help')}</div><p class="fine" style="margin-top:10px">Neustart erfolgt erst nach Bestätigung. Vorheriger Stand kann exportiert werden.</p></section><div class="notice">Browserprüfung dieser Veröffentlichung noch offen. Fachliche Simulation wird automatisiert geprüft.</div>`;}
 function confirm(title,text,action){$('#confirmTitle').textContent=title;$('#confirmText').textContent=text;confirmAction=action;$('#confirm').showModal();}
 function starter(){const plans=[['rack',2,2],['assembly',5,3],['testing',9,3],['packing',13,3],['dock',3,11]];for(const [buildingType,x,y]of plans)if(!sim.state.buildings.some(b=>b.type===buildingType)){if(!send({type:'build',buildingType,x,y,rotation:0},true).ok)return;}for(const role of ['production','production','production','warehouse','driver'])if(!send({type:'hire',role},true).ok)return;if(!sim.state.vehicles.some(v=>v.status!=='rentalReturned'))send({type:'buyVehicle',vehicleType:'van'},true);toast('Startbetrieb eingerichtet. Nächster Schritt: Material bestellen.');openPanel('purchasing');}
 document.addEventListener('click',e=>{if(!e.target.closest?.('.cmd,.site-pick,.bell-wrap'))closeMenus();const b=e.target.closest('button,a.brand');if(!b)return;if(b.matches('a.brand')){e.preventDefault();openPanel('overview');return;}if(b.dataset.panel){closeMenus();openPanel(b.dataset.panel);return;}if(b.dataset.toggle){hudToggle(b.dataset.toggle);return;}if(b.dataset.site){closeMenus();if(b.dataset.site!==sim.state.selectedSite){send({type:'selectSite',id:b.dataset.site},true);scene.home();}return;}if(b.dataset.hit){openHit(b.dataset.hit);return;}if(b.dataset.alert){const a=hudData?.alerts.find(x=>x.key===b.dataset.alert);if(a)openRef(a.ref,a.target);return;}if(b.dataset.station){openStation(b.dataset.station);return;}if(b.dataset.vehicle){openRef(b.dataset.vehicle);return;}if(b.dataset.arrival){openArrival(b.dataset.arrival);return;}if(b.dataset.labels){labelMode=b.dataset.labels;scene.setLabels?.(labelMode);$$('[data-labels]').forEach(x=>x.classList.toggle('active',x===b));return;}if(b.dataset.speed!==undefined){setSpeed(+b.dataset.speed);return;}if(b.dataset.view){scene.setView(b.dataset.view);$$('[data-view]').forEach(x=>x.classList.toggle('active',x===b));return;}if(b.dataset.camera){({plus:()=>scene.zoom(1),minus:()=>scene.zoom(-1),rotate:()=>scene.rotate(),home:()=>scene.home()})[b.dataset.camera]();return;}if(b.dataset.build){build=b.dataset.build;scene.setBuild(build,rotation,moving);renderBuild();return;}const a=b.dataset.action,id=b.dataset.id;if(!a)return;if(a.startsWith('panel-')){openPanel(a.slice(6));return;}
- const actions={'ticket-inform':()=>ticketRespond(id,'inform'),'ticket-approve':()=>ticketRespond(id,'approve'),'ticket-reject':()=>ticketRespond(id,'reject'),'ticket-goodwill':()=>ticketRespond(id,'goodwill'),'ticket-apologize':()=>ticketRespond(id,'apologize'),exportHtml,retryStorage,temporary:chooseTemporary,returnRental:()=>confirm('Mietfahrzeug zurückgeben?','Rückgabe beendet weitere Mietkosten. Angebrochene Miettage werden nicht erstattet. Fahrzeug muss leer und frei am Mietstandort stehen.',()=>send({type:'returnRental',id})),cancelTour:()=>send({type:'cancelTour',id}),disposeBatch:()=>confirm('Geschädigte Ware entsorgen?','Entsorgung kostet 2 € je Stück. Ware wird endgültig entfernt.',()=>send({type:'disposeBatch',batchId:id})),approveDocuments:()=>send({type:'approveDocuments',id}),cancelFreight:()=>confirm('Fracht stornieren?','Bereits gezahlte Fracht verfällt. Ware kehrt nur bei freier Lagerkapazität zurück.',()=>send({type:'cancelFreight',id})),recallBatch:()=>confirm('Charge zurückrufen?','Betroffene Charge und ihre nachverfolgbaren Nachfolger werden gesperrt. Bereits gelieferte Ware wird im Rückruf erfasst.',()=>send({type:'recallBatch',batchId:id})),acceptContract:()=>hubSend({type:'acceptContract',id},'Vertragsannahme'),cancelContract:()=>cancelContract(id),prioritizeArrival:()=>hubSend({type:'prioritizeArrival',id},'Vorziehen'),close:closePanel,refresh:()=>renderPanel(true),build:()=>startBuild(BUILDINGS[id]?id:undefined),endBuild,rotateBuild:()=>{rotation=(rotation+90)%360;scene.setBuild(build,rotation,moving);toast('Anlage gedreht: '+rotation+'°');},select:()=>{selected=id;openPanel('detail');scene.focus?.(id);},toggle:()=>send({type:'toggleBuilding',id}),maintain:()=>send({type:'maintain',id}),move:()=>{const o=sim.state.buildings.find(b=>b.id===id);if(o){moving=id;rotation=o.rotation;startBuild(o.type);toast('Neue Position auf Karte wählen.');}},demolish:()=>confirm('Anlage zurückbauen?','Rückbau gibt 35 % Anschaffungskosten zurück. Belegte Anlagen bleiben geschützt.',()=>send({type:'demolish',id})),accept:()=>send({type:'acceptOrder',id}),cancelOrder:()=>confirm('Auftrag stornieren?','Unvollständige Aufträge senken Reputation.',()=>send({type:'cancelOrder',id})),cancelShipment:()=>send({type:'cancelShipment',id}),train:()=>send({type:'train',id}),fire:()=>confirm('Person entlassen?','Aktive Tätigkeit muss vorher abgeschlossen werden.',()=>send({type:'fire',id})),vehicleMaintain:()=>send({type:'maintainVehicle',id}),research:()=>send({type:'startResearch',key:id}),toggleRule:()=>send({type:'toggleRule',id}),deleteRule:()=>send({type:'deleteRule',id}),site:()=>{send({type:'selectSite',id});scene.home();closePanel();},networkView:()=>{scene.setView('network');closePanel();},repairReturn:()=>send({type:'resolveReturn',id,resolution:'repair'}),recycleReturn:()=>send({type:'resolveReturn',id,resolution:'recycle'}),starter, 'buy-kit':()=>{for(const item of ['housing','board','carton'])if(!send({type:'buy',item,qty:12,supplier:'standard'},true).ok)return;toast('Drei getrennte Materiallieferungen bestellt.');},save:()=>save(true),export:()=>{const blob=new Blob([sim.serialize()],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`Industrie-Logistik-Tag-${Math.floor(sim.state.t/1440)+1}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);},import:()=>$('#importFile').click(),backup:loadBackup,welcomeBackup:loadBackup,discardBackup,new:()=>confirm('Neues Unternehmen?','Vorherigen Spielstand bei Bedarf zuerst exportieren. Moduswahl öffnet sich danach.',()=>{showWelcome();setSpeed(0);}),hideMission:()=>{prefs.mission=false;applyPrefs();},start:()=>{const mode=$('input[name=mode]:checked').value;if(temporary)return confirm('Temporäres Unternehmen ersetzen?','Aktuellen Stand vorher als JSON exportieren.',()=>activate(mode,{reset:true}));let existing;try{existing=localStorage.getItem(STORE+'-'+mode);}catch{toast(lockMessage(),true);return false;}if(existing){confirm('Vorhandenen Spielstand ersetzen?','Dieser Modus besitzt bereits ein Unternehmen. Vorher bei Bedarf laden und exportieren. Letzte gültige Sicherung bleibt erhalten, bis du sie in den Einstellungen verwirfst.',()=>activate(mode,{reset:true}));return;}return activate(mode,{reset:true});},confirmCancel:()=>$('#confirm').close(),confirmOk:()=>{$('#confirm').close();const fn=confirmAction;confirmAction=null;return fn?.();}};return actions[a]?.();});
+ const actions={'ticket-inform':()=>ticketRespond(id,'inform'),'ticket-approve':()=>ticketRespond(id,'approve'),'ticket-reject':()=>ticketRespond(id,'reject'),'ticket-goodwill':()=>ticketRespond(id,'goodwill'),'ticket-apologize':()=>ticketRespond(id,'apologize'),exportHtml,retryStorage,temporary:chooseTemporary,returnRental:()=>confirm('Mietfahrzeug zurückgeben?','Rückgabe beendet weitere Mietkosten. Angebrochene Miettage werden nicht erstattet. Fahrzeug muss leer und frei am Mietstandort stehen.',()=>send({type:'returnRental',id})),cancelTour:()=>send({type:'cancelTour',id}),disposeBatch:()=>confirm('Geschädigte Ware entsorgen?','Entsorgung kostet 2 € je Stück. Ware wird endgültig entfernt.',()=>send({type:'disposeBatch',batchId:id})),approveDocuments:()=>send({type:'approveDocuments',id}),cancelFreight:()=>confirm('Fracht stornieren?','Bereits gezahlte Fracht verfällt. Ware kehrt nur bei freier Lagerkapazität zurück.',()=>send({type:'cancelFreight',id})),recallBatch:()=>confirm('Charge zurückrufen?','Betroffene Charge und ihre nachverfolgbaren Nachfolger werden gesperrt. Bereits gelieferte Ware wird im Rückruf erfasst.',()=>send({type:'recallBatch',batchId:id})),acceptContract:()=>hubSend({type:'acceptContract',id},'Vertragsannahme'),cancelContract:()=>cancelContract(id),prioritizeArrival:()=>hubSend({type:'prioritizeArrival',id},'Vorziehen'),close:closePanel,refresh:()=>renderPanel(true),build:()=>startBuild(BUILDINGS[id]?id:undefined),endBuild,rotateBuild:()=>{rotation=(rotation+90)%360;scene.setBuild(build,rotation,moving);toast('Anlage gedreht: '+rotation+'°');},select:()=>{selected=id;openPanel('detail');scene.focus?.(id);},toggle:()=>send({type:'toggleBuilding',id}),maintain:()=>send({type:'maintain',id}),move:()=>{const o=sim.state.buildings.find(b=>b.id===id);if(o){moving=id;rotation=o.rotation;startBuild(o.type);toast('Neue Position auf Karte wählen.');}},demolish:()=>confirm('Anlage zurückbauen?','Rückbau gibt 35 % Anschaffungskosten zurück. Belegte Anlagen bleiben geschützt.',()=>send({type:'demolish',id})),accept:()=>send({type:'acceptOrder',id}),cancelOrder:()=>confirm('Auftrag stornieren?','Unvollständige Aufträge senken Reputation.',()=>send({type:'cancelOrder',id})),cancelShipment:()=>send({type:'cancelShipment',id}),train:()=>send({type:'train',id}),fire:()=>confirm('Person entlassen?','Aktive Tätigkeit muss vorher abgeschlossen werden.',()=>send({type:'fire',id})),vehicleMaintain:()=>send({type:'maintainVehicle',id}),research:()=>send({type:'startResearch',key:id}),toggleRule:()=>send({type:'toggleRule',id}),deleteRule:()=>send({type:'deleteRule',id}),site:()=>{send({type:'selectSite',id});scene.home();closePanel();},networkView:()=>{scene.setView('network');closePanel();},repairReturn:()=>send({type:'resolveReturn',id,resolution:'repair'}),recycleReturn:()=>send({type:'resolveReturn',id,resolution:'recycle'}),starter, 'buy-kit':()=>{for(const item of ['housing','board','carton'])if(!send({type:'buy',item,qty:12,supplier:'standard'},true).ok)return;toast('Drei getrennte Materiallieferungen bestellt.');},save:()=>save(true),export:()=>{const blob=new Blob([sim.serialize()],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`Industrie-Logistik-Tag-${Math.floor(sim.state.t/1440)+1}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);},import:()=>$('#importFile').click(),backup:loadBackup,welcomeBackup:loadBackup,discardBackup,loadPrevious,new:()=>confirm('Neues Unternehmen?','Vorherigen Spielstand bei Bedarf zuerst exportieren. Moduswahl öffnet sich danach.',()=>{showWelcome();setSpeed(0);}),hideMission:()=>{prefs.mission=false;applyPrefs();},start:()=>{const mode=$('input[name=mode]:checked').value;if(temporary)return confirm('Temporäres Unternehmen ersetzen?','Aktuellen Stand vorher als JSON exportieren.',()=>activate(mode,{reset:true}));let existing,prevExists=false;try{existing=store.has(STORE+'-'+mode);prevExists=store.has(STORE+'-'+mode+'-backup-prev');}catch{toast(lockMessage(),true);return false;}if(existing){confirm('Vorhandenen Spielstand ersetzen?','Dieser Modus besitzt bereits ein Unternehmen. Vorher bei Bedarf laden und exportieren. Letzte gültige Sicherung bleibt erhalten (eigener Platz „vorheriges Unternehmen“), bis du sie in den Einstellungen verwirfst.'+(prevExists?' Eine dort liegende ältere Sicherung wird dabei ersetzt.':''),()=>activate(mode,{reset:true}));return;}return activate(mode,{reset:true});},confirmCancel:()=>$('#confirm').close(),confirmOk:()=>{$('#confirm').close();const fn=confirmAction;confirmAction=null;return fn?.();}};return actions[a]?.();});
 document.addEventListener('change',e=>{const t=e.target;if(t.closest?.('[data-form="tour"]'))updateTourDraft(t.closest('[data-form="tour"]'));if(t.dataset.relocate&&t.value)send({type:'moveWorker',id:t.dataset.relocate,toSite:t.value});if(t.dataset.shift)send({type:'setShift',id:t.dataset.shift,shift:t.value});if(t.dataset.recipe)send({type:'setRecipe',id:t.dataset.recipe,recipe:t.value});if(t.dataset.pref){prefs[t.dataset.pref]=t.checked;applyPrefs();dirty=true;try{if(!temporary)localStorage.setItem(prefsKey,JSON.stringify({...prefs,mode:sim.state.mode}));}catch{}}});
 document.addEventListener('input',e=>{const f=e.target.closest?.('[data-form="tour"]');if(f)updateTourDraft(f);});
 $('#search').addEventListener('input',e=>{search=e.target.value.toLowerCase();renderPanel();});
 document.addEventListener('submit',e=>{const f=e.target.closest('[data-form]');if(!f)return;e.preventDefault();const d=Object.fromEntries(new FormData(f));const t=f.dataset.form;for(const k of ['qty','threshold','budget','cooldown','minutes','amount','qty1','qty2','qty3','priority','extensionMinutes'])if(k in d)d[k]=Number(d[k]);const commands={ticket:{type:'createTicket',...d},rental:{type:'rentVehicle',vehicleType:d.vehicleType,site:sim.state.selectedSite},freight:{type:'bookFreight',...d},tour:tourCommand(d),loan:{type:d.operation,amount:d.amount},buy:{type:'buy',...d},hire:{type:'hire',...d},vehicle:{type:'buyVehicle',...d},dispatch:{type:'dispatch',orderId:f.dataset.id,...d},rule:{type:'addRule',kind:'reorder',...d},site:{type:'buySite',...d},transfer:{type:'transfer',...d},return:{type:'createReturn',...d}};if(t==='loadMode'){return activate(d.mode);}if(t==='forecast'){try{forecast=sim.forecast(d.minutes,d.alternative==='worker'?[{type:'hire',role:'production'}]:[]);renderPanel();toast('Vorschau berechnet. Echter Betrieb unverändert.');}catch(err){toast(err.message,true);}}else{const result=send(commands[t]);if(t==='tour'&&result.ok)tourDraft={};renderPanel();}});
 $('#importFile').addEventListener('change',async e=>{const file=e.target.files[0];e.target.value='';if(!file)return;try{if(file.size>30000000)throw Error('Datei zu groß.');const candidate=Simulation.fromJSON(await file.text());confirm('Spielstand importieren?',`${time(candidate.state.t)} · ${euro(candidate.state.money)} · ${candidate.state.buildings.length} Anlagen. Aktuellen Stand ersetzen?`,()=>activate(candidate.state.mode,{candidate}));}catch(err){toast(err.message,true);}});
 document.addEventListener('keydown',e=>{if(e.target.matches('input,select,textarea')||$('dialog[open]'))return;if(e.key==='/'&&!e.ctrlKey&&!e.metaKey&&!e.altKey){e.preventDefault();closeMenus();$('#cmd').focus?.();return;}if(e.code==='Space'){e.preventDefault();setSpeed(speed?0:1);}if(e.key.toLowerCase()==='b')startBuild();if(e.key.toLowerCase()==='r'&&!$('#buildTray').hidden){rotation=(rotation+90)%360;scene.setBuild(build,rotation,moving);}if(e.key==='Escape'){if(menuOpen('siteMenu')||menuOpen('bellMenu')){closeMenus();return;}endBuild();closePanel();}});
-document.addEventListener('visibilitychange',()=>{accumulator=0;lastTick=performance.now();if(document.hidden&&started)save();render();});
-window.addEventListener('beforeunload',e=>{if(started&&dirty&&(temporary||!save())){e.preventDefault();e.returnValue='';}});
+document.addEventListener('visibilitychange',()=>{accumulator=0;lastTick=performance.now();if(document.hidden&&started)leaveSave();render();});
+window.addEventListener('beforeunload',e=>{if(!started)return;if(temporary?dirty:leaveSave()!=='saved'){e.preventDefault();e.returnValue='';}});
 window.addEventListener('pagehide',()=>guard.release());
 window.addEventListener('pageshow',e=>{if(e.persisted){writable=false;speed=0;toast('Ansicht wiederhergestellt. Für sicheres Fortsetzen Seite neu laden.',true);render();}});
 setInterval(()=>{const now=performance.now(),dt=Math.min(1000,now-lastTick);lastTick=now;if(!started||switching||document.hidden||$('dialog[open]')||!speed||!canWrite()){accumulator=0;scene.setClock?.(sim.state.t);return;}accumulator+=dt*speed;const n=Math.floor(accumulator/1000);if(n){accumulator-=n*1000;try{sim.step(n);dirty=true;render();}catch(e){setSpeed(0);toast('Simulation angehalten: '+e.message,true);}}scene.setClock?.(sim.state.t+accumulator/1000);},100);
-// Autosave im Leerlauf; Verlassen (visibilitychange/beforeunload) speichert weiterhin synchron.
+// Autosave im Leerlauf; Verlassen (visibilitychange/beforeunload) speichert sofort (localStorage synchron; IndexedDB: Transaktion sofort + Notfall-Kopie).
 let idleSave=0;
 function requestIdleSave(){if(idleSave)return;const run=()=>{idleSave=0;if(started&&dirty)save();};idleSave=typeof requestIdleCallback==='function'?requestIdleCallback(run,{timeout:5000}):setTimeout(run,0);}
 setInterval(()=>{if(started&&dirty)requestIdleSave();},20000);

@@ -127,3 +127,59 @@ Gemessen mit `npm run perf:browser -- --state-mb=2.4` (automatische Wahl, also 3
 - **W0-05 Sicherung:** Gründen über vorhandenem Unternehmen hält dessen letzte gültige Sicherung fest (Marker `<key>-backup-hold` mit Spielzeit). Solange er steht, schreibt `save()` keine Sicherung. Freigabe nur über „Alte Sicherung verwerfen“ (Einstellungen, mit Rückfrage) oder erfolgreiches „Letzte Sicherung laden“. Willkommensdialog und Einstellungen zeigen „Letzte Sicherung laden“ nur bei gültiger Sicherung des betroffenen Modus. Vorbestehend: 0.8 (`bf76e22`) rotierte ebenso beim zweiten Speichern (Codelesung).
 - **W0-09:** `smoke.mjs` speichert Downloads immer in ein eigenes tmp-Verzeichnis, auch mit `--repo`.
 - Folgen für Spielstände: Format unverändert (`schema:1`). Neuer localStorage-Schlüssel `industrie-logistik-v1-<modus>-backup-hold` (klein). Während des Festhaltens hat der neue Stand keine eigene Sicherung (im Einstellungsfenster angezeigt).
+
+## Nachtrag Welle 1b: Spielstände in IndexedDB (QS-W0-03), eigener Sicherungsplatz (QS-W0-11), Listengrenze
+
+Stand: 15.10.2026, Basis `claude/loving-wozniak-56yxt7` @ `8a02509`.
+
+### Speicherort (QS-W0-03)
+
+- Neu `dist/storage.js` (`createSaveStore`). Backends hinter einer Schnittstelle: `idb` (IndexedDB, Datenbank `industrie-logistik-v1`, Objektspeicher `saves` mit Datensatz `{value,at}` und `meta`), `local` (bisheriges localStorage-Verhalten), `error`.
+- Lesen bleibt synchron: `load(keys)` holt Hauptstand, `-backup`, `-backup-prev`, `-backup-hold` eines Modus nach Sperrerwerb in einen Cache. `write({key:text|null})` aktualisiert den Cache sofort und schreibt alle Schlüssel in **einer** Transaktion (`tx.commit()` sofort). `save()` bleibt synchron (Prüfung `owns()` → Schreiben ohne `await`). Statuszeile „Wird gesichert …“ bis zum Commit, danach „Gesichert …“. Commit-Fehler → „NICHT GESPEICHERT …“, `dirty` bleibt, Cache wird aus IndexedDB nachgeladen (danach wird der Altstand vor einer Rotation wieder geprüft).
+- Reihenfolge: IndexedDB führt readwrite-Transaktionen mit gleichem Bereich in Erzeugungsreihenfolge aus, auch über Verbindungen. Vor Moduswechsel wartet `activate()` auf eigene offene Schreibvorgänge (`flush`); nach Sperrerwerb wird frisch geladen.
+- Tab-Sperre (Web Lock + Lease), Einstellungen (`-prefs`) und Backend-Marker (`-backend`) bleiben in localStorage. `SPIELSTAND-SPERRE.md` gilt unverändert.
+- Ohne IndexedDB (nicht vorhanden, Öffnen scheitert, 5 s ohne Antwort) und ohne Marker: Rückfall auf localStorage = bisheriges Verhalten inkl. temporärem Modus. Mit Marker `idb` aber unerreichbarer IndexedDB: **kein** stiller Rückfall auf veraltete localStorage-Daten; Schreibschutz mit Hinweis „Spielstandspeicher (IndexedDB) nicht erreichbar“, „Speicher erneut prüfen“ versucht erneut, temporärer Modus und Export bleiben.
+- portableMode (file://) unverändert: kein Browserspeicher, `store` wird nie geöffnet.
+- Startablauf: Spielstand wird jetzt in `bootstrap()` geladen (asynchron), nicht mehr beim Modul-Laden. Statuszeile zeigt bis dahin „Spielstand wird geladen …“. Klicks auf die Geschwindigkeit in diesem Moment (wenige ms bis ≈ 1 s bei 5 MB) werden ignoriert.
+
+### Migration localStorage → IndexedDB
+
+- Erster Start: alle Altschlüssel aller Modi (Haupt, `-backup`, `-backup-hold`) in **einer** Transaktion mit `durability:'strict'`, nur wenn `meta/migrated` fehlt (Prüfen und Schreiben in derselben Transaktion → zwei gleichzeitig startende Tabs migrieren genau einmal). Danach Rücklesen in neuer Transaktion und Vergleich; bei Abweichung Marker zurücknehmen und Rückfall localStorage.
+- Originale bleiben bis zum **nächsten** Start. Entfernt werden sie erst, wenn `meta/migrated` in IndexedDB und der Marker `-backend=idb` in localStorage aus einem früheren Start vorliegen (Schutz gegen nicht dauerhaft geschriebene Daten, Chromium-Standard „relaxed“). Ab dann ist IndexedDB allein maßgeblich.
+- W0-Marker `-backup-hold` wird beim ersten Schreibzugriff in den neuen Platz `-backup-prev` überführt (Sicherung → Platz, Marker gelöscht). Gelingt das nicht (z. B. localStorage voll im Rückfallmodus), gilt das W0-Festhalten weiter.
+- Grenzen: Eine noch offene **alte** App-Version (vor W1b) schreibt weiter localStorage; deren Schreibvorgänge nach der Migration werden beim nächsten Start verworfen. Ein Zurückgehen auf eine alte Version findet ab dem zweiten Start keine localStorage-Stände mehr (Abhilfe: JSON-Export).
+
+### Speichern beim Verlassen – Restrisiko
+
+- `visibilitychange:hidden` und `beforeunload` rufen `leaveSave()`: bei Änderungen sofort `save()` (Transaktion + `commit()` noch im Ereignis). Steht ein Commit des Hauptstands aus, wird der zuletzt geschriebene Text zusätzlich als **Notfall-Kopie** `<key>-emergency` (`<at>\n<text>`) synchron in localStorage abgelegt, wenn ≤ 2,4 Mio. Zeichen. Sie wird nach bestätigtem Commit entfernt; passt sie nicht, wird eine ältere Kopie vorher entfernt (nie eine veraltete Kopie über einem neueren Stand).
+- Nächster Start (als Sperrinhaber): Kopie neuer als der IndexedDB-Datensatz (`at`) → übernommen, Hinweis, sofort gespeichert (alter IndexedDB-Hauptstand rotiert in die Sicherung). Sonst verworfen.
+- Ohne Kopie (Stand > 2,4 Mio. Zeichen) und offenem Commit fragt `beforeunload` nach (Browserdialog); der Commit läuft währenddessen weiter.
+- **Restrisiko:** Bei Ständen > 2,4 Mio. Zeichen, die beim Schließen geändert sind, kann der Browser die Seite beenden, bevor der Commit bestätigt ist (Absturz, mobiles Beenden, Nutzer bestätigt den Dialog sofort). Dann gilt der letzte bestätigte Stand (Autosave ≤ 20 s alt). Bei kleineren Ständen deckt die Notfall-Kopie das ab, solange localStorage nicht voll ist. Im ersten Start nach der Migration belegen die Originale localStorage; die Notfall-Kopie passt dann oft nicht.
+
+### Eigener Platz für das vorherige Unternehmen (QS-W0-11)
+
+- Gründen über vorhandenem Unternehmen legt dessen letzten gültigen Stand (Hauptstand, sonst gültige Sicherung) in `<key>-backup-prev` (IndexedDB: Commit wird abgewartet; Fehler bricht das Gründen mit Meldung ab). Die laufende Sicherung `-backup` rotiert danach normal für das neue Unternehmen.
+- Erneutes Gründen ersetzt den Platz durch das zuletzt ersetzte Unternehmen; die Rückfrage nennt das („Eine dort liegende ältere Sicherung wird dabei ersetzt.“).
+- Einstellungen: Hinweis mit Spielzeit, „Vorheriges Unternehmen laden“ (Tausch: aktuelles Unternehmen belegt danach den Platz) und „Alte Sicherung verwerfen“ (löscht den Platz). „Letzte Sicherung laden“ nutzt die laufende Sicherung, bei ungültiger Sicherung den Platz.
+- Kosten: drei Kopien je Modus. In IndexedDB unkritisch; im localStorage-Rückfall sinkt die Grenze aus 03 auf ≈ 1,7 MB, Gründen scheitert dann mit Meldung statt still Daten zu verlieren.
+- Änderung an A11-Prüfungen: Befundtest 11 aktiv und grün. Befundtest 05 prüft jetzt den Platz `-backup-prev` statt `-backup` (alte Sicherung bleibt erhalten, liegt aber nicht mehr in der rotierenden Sicherung). **Bitte A11 nachprüfen.** `tests/browser/qa-w0.mjs` und `qa-w0-recheck.mjs` lesen Spielstände noch aus localStorage und müssen für IndexedDB angepasst werden (nicht geändert, A11-Bereich).
+
+### Listengrenze in `validateState`
+
+- Messung (`P.large`, 3 Spieltage, Node): je Tag +650 bis +970 Chargen (A03 maß bis ≈ 1.770 mit Spielerpolitik), Ledger +67 bis +78, Chronik auf 3.000 begrenzt, übrige Listen einstellig. Eine Charge ≈ 212 Zeichen, davon 69 % Nullchargen (Herkunft).
+- Folge: Bei 100.000 Chargen wäre der Stand nach ≈ 55–150 Spieltagen nicht mehr ladbar, obwohl er erst ≈ 21 MB groß ist. Ledger erreicht 100.000 erst nach > 1.000 Tagen, Chronik nie.
+- Umgesetzt (`core.js`): `SAVE_LIMITS={chars:30 Mio.,list:100.000,lists:{batches:1.000.000}}`, exportiert mit `saveHeadroom()` und `Simulation.LIMITS/headroom()`. Für Chargen greift damit praktisch zuerst die Textgrenze (≈ 140.000 Chargen). `save()` zeigt ab 60 % einer Grenze „Spielstand groß: x MB (y % der Ladegrenze)“ in der Statuszeile und **verweigert** das Schreiben eines Stands über einer Grenze („NICHT GESPEICHERT · Spielstand überschreitet Ladegrenze“), damit nie ein nicht mehr ladbarer Stand den ladbaren ersetzt. Format unverändert `schema:1`.
+- Vorschlag A05/A03 (nicht umgesetzt): Nullchargen älter als N Tage verdichten, ohne Herkunft zu verlieren, z. B. Herkunftskette in eine kompakte Tabelle `lineage` (id → parents, item, created) überführen und die Charge entfernen; Rückruf (`recallBatch`) und `perf-index`-Prüfungen müssen dann über `lineage` laufen. Alternativ Tageszusammenfassung je Artikel/Standort für Chargen ohne Rückrufbezug. Danach Schemaschritt 1→2 über `MIGRATIONS` (A12).
+
+### Prüfungen
+
+| Prüfung | Ergebnis |
+|---|---|
+| `npm test` (2×) | 346 von 346 bestanden, 0 todo (neu: `tests/storage-idb.test.js` 13, `save-backup-hold` 2 zusätzlich; Befund 11 aktiv) |
+| `npm run test:browser` | 32 von 32 bestanden, keine Konsolenfehler. Neu: Spielstand nur in IndexedDB (localStorage ohne Spielstand), zweiter Tab schreibgeschützt (IndexedDB unverändert, Uhr steht), Schließen mit ungespeicherter Änderung → Neustart lädt letzten Stand, **5,00-MB-Stand** gespeichert und nach Neuladen geladen (localStorage 272 Zeichen), Migration erster Start (Original bleibt, W0-Marker → Platz) und zweiter Start (Original entfernt) |
+| `node tests/browser/perf.mjs --seconds=5 --state-mb=5 --renderer=2d` | Szenario „gross“ 5,0 MB aus IndexedDB, Autosave im Fenster: 60,1 fps, 0 Long Tasks, Sicherung geschrieben |
+
+- IndexedDB-Ersatz für Node: `tests/idb-stub.js` (eigene Minimalumsetzung: Transaktionsreihenfolge, Auto-Commit, Atomarität, Fehlerinjektion `failPut`/`failOpen`/`hangOpen`/`freeze` = Tab beendet vor Commit). Keine Indizes/Cursor. Der UI-Harness erhält optional `indexedDB`; ohne Option läuft er im localStorage-Rückfall (alle bisherigen Prüfungen unverändert).
+- `tests/browser/perf.mjs` spielt den großen Stand jetzt direkt in IndexedDB ein.
+- Nicht geprüft: Firefox/Safari (IndexedDB-Transaktionsverhalten bei `beforeunload`, `tx.commit()` fehlt in älteren Safari-Versionen → Auto-Commit), Privatfenster mit gesperrter IndexedDB im echten Browser (nur Node-Stub), echter Browserabsturz während eines Commits, Speicherdruck/Eviction.
+- Folgen für Spielstände: Format unverändert `schema:1`. Speicherort wechselt beim ersten Start automatisch nach IndexedDB. Neue Schlüssel: `-backup-prev` (IndexedDB), `-emergency` und `-backend` (localStorage).

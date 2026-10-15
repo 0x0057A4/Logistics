@@ -3,6 +3,7 @@ import {RENTAL_RATES} from '../dist/rental.js';
 import * as tours from '../dist/tours.js';
 // Isolierte JavaScript-/Bindungsprüfung. Kein Browser, kein Layouttest.
 import {createSaveGuard as realGuard} from '../dist/save-guard.js';
+import {createSaveStore as realStore} from '../dist/storage.js';
 import {report} from '../dist/accounting.js';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
@@ -24,7 +25,10 @@ export async function boot(options={}){
  const locks=options.locks||makeLocks();
  const storage=options.storage||{getItem:k=>memory.get(k)||null,setItem:(k,v)=>memory.set(k,v),removeItem:k=>memory.delete(k)};
  const createSaveGuard=opts=>realGuard({...opts,storage:options.storageGetterError?null:storage,locks,setInterval:()=>1,clearInterval:()=>{}});
- const context=vm.createContext({...catalog,injectPortableSave,portableTemplate,fetch:options.fetch,RENTAL_RATES,planTour:tours.planTour,createSaveGuard,report,Simulation,onShift,Scene,document,window:{addEventListener(){}},localStorage:storage,matchMedia:()=>({matches:false}),performance:{now:()=>1000},setTimeout(){},clearTimeout(){},setInterval(){},Blob,URL,FormData:class{constructor(f){return Object.entries(f.values);}}});
+ // Spielstandspeicher: ohne options.indexedDB Rückfall localStorage (bisheriges Verhalten); mit Stub IndexedDB-Pfad.
+ let context;
+ const createSaveStore=opts=>realStore({...opts,storage:()=>context.localStorage,indexedDB:options.indexedDB??null,...(options.storeOptions||{})});
+ context=vm.createContext({...catalog,injectPortableSave,portableTemplate,fetch:options.fetch,RENTAL_RATES,planTour:tours.planTour,createSaveGuard,createSaveStore,report,Simulation,onShift,Scene,document,window:{addEventListener(){}},localStorage:storage,matchMedia:()=>({matches:false}),performance:{now:()=>1000},setTimeout(){},clearTimeout(){},setInterval(){},Blob,URL,FormData:class{constructor(f){return Object.entries(f.values);}}});
  if(options.storageGetterError)Object.defineProperty(context,'localStorage',{get(){throw new DOMException('Access denied','SecurityError');}});
  vm.runInContext(code,context);await vm.runInContext('ready',context);
  const run=source=>vm.runInContext(source,context);

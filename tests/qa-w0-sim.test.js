@@ -190,7 +190,8 @@ test('QS-W0 Befund 05: alte gültige Sicherung übersteht Weiterspielen nach „
  memory.set(K,good.slice(0,good.length-40));memory.set(K+'-backup',good);
  const ui=await boot({memory});await ui.click('start');await ui.click('confirmOk');
  ui.run('sim.step(5)');ui.run('dirty=true');ui.run('save()');ui.run('guard.dispose()');
- assert.equal(memory.get(K+'-backup'),good,'alte Sicherung (t=510) weiterhin vorhanden');
+ // A12 W1b (QS-W0-11): alte Sicherung liegt im eigenen Platz „vorheriges Unternehmen“; die laufende Sicherung rotiert für das neue Unternehmen.
+ assert.equal(memory.get(K+'-backup-prev'),good,'alte Sicherung (t=510) weiterhin vorhanden');
 });
 
 test('QS-W0 Speichern: Hauptstand wird während Betrieb von außen beschädigt → Sicherung behält letzten gültigen Stand',async()=>{
@@ -204,11 +205,11 @@ test('QS-W0 Speichern: Hauptstand wird während Betrieb von außen beschädigt �
  ui.run('guard.dispose()');
 });
 
-// Befund QS-W0-11 (niedrig, A12/A10, Nebenwirkung der Behebung 05): Solange die Sicherung des vorherigen Unternehmens
+// Befund QS-W0-11 (niedrig, A12/A10, Nebenwirkung der Behebung 05), behoben A12 W1b (eigener Platz `-backup-prev`): Solange die Sicherung des vorherigen Unternehmens
 // festgehalten ist, erhält das neue Unternehmen keine eigene Sicherung. Wird sein Hauptstand später beschädigt, ist es
 // nicht wiederherstellbar (in der Sicherung liegt nur das alte Unternehmen). Vor der Behebung lag ab dem 2. Speichern
 // eine Kopie des neuen Unternehmens vor.
-test('QS-W0 Befund 11: neues Unternehmen (gegründet über gültigem Stand) bleibt nach Beschädigung seines Hauptstands wiederherstellbar',{todo:'Befund QS-W0-11 (niedrig, A12/A10), siehe docs/QS-0.9-W0.md'},async()=>{
+test('QS-W0 Befund 11: neues Unternehmen (gegründet über gültigem Stand) bleibt nach Beschädigung seines Hauptstands wiederherstellbar',async()=>{
  const memory=new Map(),K='industrie-logistik-v1-guided';
  const valid=new Simulation({mode:'guided',seed:9});valid.step(30);const good=valid.serialize();memory.set(K,good);
  const ui=await boot({memory});
@@ -220,4 +221,6 @@ test('QS-W0 Befund 11: neues Unternehmen (gegründet über gültigem Stand) blei
  memory.set(K,'{kaputt');
  // Kopie des neuen Unternehmens = einer seiner eigenen geschriebenen Stände (nicht nur gleiche Uhrzeit wie das alte).
  assert.ok(written.has(memory.get(K+'-backup')),`Kopie des neuen Unternehmens erwartet; Sicherung = altes Unternehmen: ${memory.get(K+'-backup')===good}`);
+ // A12 W1b: altes Unternehmen bleibt zusätzlich im eigenen Platz erhalten.
+ assert.equal(memory.get(K+'-backup-prev'),good);
 });
