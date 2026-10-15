@@ -74,3 +74,12 @@ test('Globaler Storage-Getter erholt sich nach Freigabe; explizites null bleibt 
   assert.equal(await b.acquire('sandbox'),false);assert.equal(b.reason,'storage-error');
  }finally{a.dispose();b.dispose();if(descriptor)Object.defineProperty(globalThis,'localStorage',descriptor);else delete globalThis.localStorage;}
 });
+test('Standard-Timer ohne Injektion: kein „Illegal invocation“ wie im Browser',async()=>{
+ const h=harness(),orig=[globalThis.setInterval,globalThis.clearInterval];const ids=[];
+ // Browser-Timer werfen, wenn this weder globalThis noch undefined ist.
+ globalThis.setInterval=function(f,ms){if(this!==undefined&&this!==globalThis)throw new TypeError('Illegal invocation');const id=orig[0](f,ms);ids.push(id);return id;};
+ globalThis.clearInterval=function(id){if(this!==undefined&&this!==globalThis)throw new TypeError('Illegal invocation');return orig[1](id);};
+ try{const a=new SaveGuard({storage:h.storage,locks:{request:(k,o,cb)=>cb({name:k})},now:()=>0});
+  assert.equal(await a.acquire('guided'),true);assert.equal(a.owns('guided'),true);assert.equal(a.reason,'owned');a.dispose();}
+ finally{[globalThis.setInterval,globalThis.clearInterval]=orig;for(const id of ids)orig[1](id);}
+});
