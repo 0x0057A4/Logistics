@@ -182,9 +182,9 @@ test('QS-W0 Speichern: beschädigter Hauptstand + intakte Sicherung → „Letzt
  ui.run('guard.dispose()');
 });
 
-// Befund QS-W0-05 (mittel, A12/A10): Die Rückfrage verspricht „Letzte Sicherung bleibt erhalten“. Nach dem zweiten
-// Speichervorgang (Autosave nach 20 s) ist die einzige gültige Kopie des alten Unternehmens durch das neue ersetzt.
-test('QS-W0 Befund 05: alte gültige Sicherung übersteht Weiterspielen nach „Gründen“ bei beschädigtem Hauptstand',{todo:'Befund QS-W0-05 (mittel, A12/A10), siehe docs/QS-0.9-W0.md'},async()=>{
+// Befund QS-W0-05 (mittel, A12/A10): Die Rückfrage verspricht „Letzte Sicherung bleibt erhalten“. Bis 0.9-W0 war nach dem
+// zweiten Speichervorgang die einzige gültige Kopie ersetzt. Behoben durch A12 (Sicherung festgehalten bis „verwerfen“).
+test('QS-W0 Befund 05: alte gültige Sicherung übersteht Weiterspielen nach „Gründen“ bei beschädigtem Hauptstand',async()=>{
  const memory=new Map(),K='industrie-logistik-v1-guided';
  const valid=new Simulation({mode:'guided',seed:9});valid.step(30);const good=valid.serialize();
  memory.set(K,good.slice(0,good.length-40));memory.set(K+'-backup',good);
