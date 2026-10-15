@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {Simulation} from '../dist/core.js';
 import * as yard from '../dist/yard.js';
+import {lampGame, lampOffers, withManufacturing} from './fertigung-fixture.mjs';
 
 const cid=sim=>sim.state.contracts.find(c=>c.status==='ended')?.id??'vertrag-test';
 // Aufbau: Sandbox, Docks und Regale an festen Plätzen, eine Lagerkraft. Aufträge wie W1-S1 (contracts.js kommt parallel).
@@ -114,11 +115,11 @@ test('Dock deaktiviert oder abgerissen während Warten und Anfahrt',()=>{
 
 test('Eigene Lieferung und Fremd-Lkw konkurrieren ohne Doppelbelegung',()=>{
  const {sim,s,dockIds}=setup({workers:2,racks:3,drivers:1});
- assert.equal(sim.command({type:'buyVehicle',vehicleType:'van'}).ok,true);
+ assert.equal(sim.command({type:'buyVehicle',vehicleType:'van'}).ok,true);withManufacturing(sim);
  const o=s.orders.find(o=>o.kind==='manufacturing'&&o.status==='offer');assert.ok(o);assert.equal(sim.command({type:'acceptOrder',id:o.id}).ok,true);
  sim.api.inventory.add({item:o.item,qty:o.qty,quality:100,site:s.selectedSite,unitCost:10});
  // Fremd-Lkw belegt das Dock zuerst; eigene Lieferung wartet.
- const a=arrive(sim,[200],481);runUntil(sim,()=>a.phase==='toDock');
+ const a=arrive(sim,[200],s.t+1);runUntil(sim,()=>a.phase==='toDock');
  assert.equal(sim.command({type:'dispatch',vehicleId:s.vehicles[0].id,orderId:o.id,qty:Math.min(o.qty,5)}).ok,true);
  const sh=s.shipments.at(-1);sim.step(1);
  assert.match(sh.blocked||'',/Laderampe/);assert.equal(s.buildings.find(b=>b.id===dockIds[0]).task,a.id);
@@ -130,7 +131,7 @@ test('Eigene Lieferung und Fremd-Lkw konkurrieren ohne Doppelbelegung',()=>{
 
 test('Eigene Lieferung belegt Dock zuerst: Fremd-Lkw wartet',()=>{
  const {sim,s,dockIds}=setup({workers:2});
- assert.equal(sim.command({type:'buyVehicle',vehicleType:'van'}).ok,true);
+ assert.equal(sim.command({type:'buyVehicle',vehicleType:'van'}).ok,true);withManufacturing(sim);
  const o=s.orders.find(o=>o.kind==='manufacturing'&&o.status==='offer');assert.equal(sim.command({type:'acceptOrder',id:o.id}).ok,true);
  sim.api.inventory.add({item:o.item,qty:o.qty,quality:100,site:s.selectedSite,unitCost:10});
  assert.equal(sim.command({type:'dispatch',vehicleId:s.vehicles[0].id,orderId:o.id,qty:Math.min(o.qty,5)}).ok,true);

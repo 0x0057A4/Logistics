@@ -13,7 +13,9 @@ import {siteItemBatches} from './inventory.js';
 import {onShift, workRate} from './workforce.js';
 
 export const ITEM = 'parcel';
-export const HAND_RATE = 2;
+// 3 Pakete/min Grundleistung vor workRate (A01 W1c, vorher 2): eine Lagerkraft sortiert eine Startanlieferung
+// (100–130 Pakete) in 35–45 statt 50–65 Minuten; der Sortierplatz (4/min) bleibt schneller und damit ein Ausbau.
+export const HAND_RATE = 3;
 const HAND_STATES = new Set(['idle', 'working', 'staff', 'storage', 'off']);
 export const handKey = site => `${site}:handsort`;
 export const sorterKey = b => `${b.id}:sort`;
@@ -41,6 +43,25 @@ function unloadNeed(s, site) {
     if ((a.phase !== 'docking' && a.phase !== 'unloading') || a.unloaded >= a.parcels) continue;
     const key = `${a.id}:warehouse`;
     if (!s.workers.some(w => w.task === key) && s.buildings.some(b => b.id === a.dock && b.enabled && b.condition > 0)) n++;
+  }
+  return n;
+}
+// Beladen eigener Fahrzeuge hat denselben Vorrang (A01 W1c, Befund B1): Lieferung (transport.js, status loading),
+// Sammeltour (tours.js, loading bzw. returnUnloading) und Standorttransfer (loading am Start, unloading am Ziel), die
+// Rampe und Fahrpersonal schon gebunden haben, aber keine Lagerkraft `${id}:warehouse`. transport/tours laufen vor
+// sorting.step und binden die freigegebene Person in der nächsten Minute. So wartet kein Fahrzeug dauerhaft aufs Sortieren.
+let loadPriority = true; // nur für Gegenprobe-Tests abschaltbar
+export function setLoadPriority(on) { loadPriority = !!on; }
+function loadNeed(s, site) {
+  if (!loadPriority) return 0;
+  let n = 0;
+  const waits = (id, at) => !s.workers.some(w => w.task === `${id}:warehouse`) && s.workers.some(w => w.task === `${id}:driver`)
+    && s.buildings.some(b => b.task === id && b.type === 'dock' && b.site === at && b.enabled && b.condition > 0);
+  for (const sh of s.shipments || []) if (sh.status === 'loading' && sh.site === site && waits(sh.id, site)) n++;
+  for (const t of s.tours || []) if ((t.status === 'loading' || t.status === 'returnUnloading') && t.site === site && waits(t.id, site)) n++;
+  for (const tr of s.transfers || []) {
+    const at = tr.status === 'loading' ? tr.site : tr.status === 'unloading' ? tr.toSite : null;
+    if (at === site && waits(tr.id, site)) n++;
   }
   return n;
 }
@@ -91,8 +112,8 @@ export function step(s, api) {
       st.today += moved; st.total += moved;
       return moved;
     };
-    // Personalvergabe mit Vorrang fürs Entladen (s. unloadNeed).
-    const need = unloadNeed(s, id), yielded = new Set();
+    // Personalvergabe mit Vorrang fürs Entladen und Beladen (s. unloadNeed, loadNeed).
+    const need = unloadNeed(s, id) + loadNeed(s, id), yielded = new Set();
     let spare = Infinity;
     if (need) {
       spare = freeWarehouse(s, id) - need;

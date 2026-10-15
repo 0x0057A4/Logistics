@@ -134,7 +134,7 @@ test('QS-W0 Migration: Schema-1-Stand ohne optionale Listen lädt, gleicher Verl
 const text=(ui,id)=>ui.nodes.get('#'+id).textContent;
 const fmt=v=>Number(v).toLocaleString('de-DE',{maximumFractionDigits:0});
 test('QS-W0 HUD: Kennzahlen nach 600 Min. Betrieb gegen eigene Rechnung aus state (Kasse, Uhr, Lager, Personal, Rampen, Fahrzeuge, Glocke)',async()=>{
- const ui=await boot();await ui.click('start');ui.click('starter');ui.click('buy-kit');
+ const ui=await boot();await ui.click('start');ui.click('starter');ui.click('buy-kit');ui.run("sim.command({type:'build',buildingType:'assembly',x:5,y:3,rotation:0});sim.step(1)"); // Fertigungsanfragen erst mit Fertigungsanlage (A01 W1c)
  const o=ui.run("sim.state.orders.find(o=>o.kind==='manufacturing').id");ui.click('accept',o);
  for(let i=0;i<600;i++)ui.run('sim.step(1)');ui.run('render(true)');
  const s=JSON.parse(ui.run('sim.serialize()')),site=s.selectedSite;

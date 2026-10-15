@@ -9,6 +9,8 @@ const press=(ui,dataset)=>ui.listeners.click({target:{closest:()=>({dataset,matc
 // Bau-/Einstellbefehle ergänzt wie der frühere Aufbauassistent. Ergebnis: wieder 5 Anlagen, 5 Beschäftigte, 1 Fahrzeug.
 const LINE="for(const [buildingType,x,y]of [['assembly',5,3],['testing',9,3],['packing',13,3]])send({type:'build',buildingType,x,y,rotation:0},true);for(const role of ['production','production','production'])send({type:'hire',role},true);render(true)";
 async function line(){const ui=await boot();await ui.click('start');ui.click('starter');ui.run(LINE);return ui;}
+// Fertigungsanfragen erscheinen eine Minute nach dem Bau der Fertigungslinie (A01 W1c).
+const offers=ui=>{ui.run('sim.step(1)');ui.run('render(true)');return ui;};
 function deliver(ui,qty,{late=false}={}){
  const o=ui.run("sim.state.orders.find(o=>o.kind==='manufacturing'&&o.status!=='fulfilled').id");
  if(ui.run(`sim.state.orders.find(o=>o.id==='${o}').status`)==='offer')ui.click('accept',o);
@@ -26,7 +28,7 @@ test('HUD: Kopfzeile, Statuszeile und Standortfluss zeigen Werte aus echten Befe
  ui.click('starter');
  assert.equal(text(ui,'sbDocks'),'Rampen 0/1');assert.equal(text(ui,'sbStaff'),'Personal 2/2 im Dienst');assert.equal(ui.run("sim.state.buildings.map(b=>b.type).join()"),'dock,rack');
  ui.run(LINE);
- assert.equal(text(ui,'siteCode'),'WM-01');assert.equal(text(ui,'siteName'),'Werk Morgenfeld');
+ assert.equal(text(ui,'siteCode'),'DM-01');assert.equal(text(ui,'siteName'),'Depot Morgenfeld');
  assert.equal(text(ui,'sbDocks'),'Rampen 0/1');assert.equal(text(ui,'sbVehicles'),'Fahrzeuge 1');assert.equal(text(ui,'sbStaff'),'Personal 5/5 im Dienst');
  const cap=ui.run("sim.api.inventory.capacity('site-1')");assert.equal(text(ui,'sbStock'),`Lager 0/${cap}`);assert.equal(text(ui,'siteStatus'),`Rampen 0/1 · Lager 0/${cap}`);
  assert.equal(text(ui,'kpiVehicles'),'1 / 0');assert.equal(text(ui,'st-production-n'),'0/1');assert.equal(text(ui,'st-quality-n'),'0/2');assert.equal(text(ui,'st-unload-n'),'0/1');assert.equal(ui.nodes.get('#stl-production').hidden,false,'Fertigungsstationen sichtbar, sobald Fertigungsanlagen existieren');
@@ -36,7 +38,7 @@ test('HUD: Kopfzeile, Statuszeile und Standortfluss zeigen Werte aus echten Befe
 });
 
 test('HUD: Ausgeliefert heute, Fahrzeuge unterwegs und Pünktlichkeit folgen echten Zustellungen',async()=>{
- const ui=await line();
+ const ui=offers(await line());
  const o=ui.run("sim.state.orders.find(o=>o.kind==='manufacturing').id");ui.click('accept',o);
  ui.run("sim.api.inventory.add({item:'lamp',qty:3,quality:95,unitCost:50,site:'site-1',location:'stock',owner:'company'})");
  ui.submit('dispatch',{vehicleId:ui.run('sim.state.vehicles[0].id'),qty:'3'},o);
@@ -53,7 +55,7 @@ test('HUD: Ausgeliefert heute, Fahrzeuge unterwegs und Pünktlichkeit folgen ech
 });
 
 test('HUD: Suche „/“ findet reale Anlagen, Fahrzeuge, Aufträge und Personen und öffnet die Akte',async()=>{
- const ui=await line();const cmd=ui.nodes.get('#cmd');
+ const ui=offers(await line());const cmd=ui.nodes.get('#cmd');
  ui.listeners.keydown({key:'/',target:{matches:()=>false},preventDefault(){}});assert.equal(ui.run('document.activeElement'),cmd);
  cmd.value='montage';cmd.oninput();const box=ui.nodes.get('#cmdResults');assert.equal(box.hidden,false);
  const assembly=ui.run("sim.state.buildings.find(b=>b.type==='assembly').id");assert.match(box.innerHTML,new RegExp(`data-hit="${assembly}"`));assert.match(box.innerHTML,/Montageplatz/);
@@ -74,7 +76,7 @@ test('HUD: Glocke zählt echte Wartegründe, listet sie schlüsselbasiert und ö
  press(ui,{toggle:'bell'});assert.equal(ui.nodes.get('#bellMenu').hidden,false);
  const list=ui.nodes.get('#bellList'),rows=[...list.children];assert.equal(rows.length,alerts);assert.match(rows[0]._title.textContent,/Material fehlt/);
  ui.run('render(true)');assert.deepEqual([...list.children],rows,'Zeilen bleiben bei unverändertem Zustand dieselben DOM-Knoten');
- const o=ui.run("sim.state.orders[0].id");ui.click('accept',o);ui.run(`sim.state.orders[0].due=sim.state.t-1`);ui.run('render(true)');
+ const o=ui.run("sim.state.orders.find(o=>o.kind==='manufacturing').id");ui.click('accept',o);ui.run(`sim.state.orders.find(o=>o.id==='${o}').due=sim.state.t-1`);ui.run('render(true)');
  assert.equal(text(ui,'bellCount'),String(alerts+1));assert.equal(list.children.length,alerts+1);assert.ok(rows.every(r=>list.children.includes(r)),'bestehende Meldungen werden nicht neu erzeugt');
  const late=list.children.find(r=>r.dataset.alert==='o:'+o);assert.match(late._title.textContent,/Frist überschritten/);
  press(ui,{alert:'o:'+o});assert.equal(ui.run('panel'),'detail');assert.equal(ui.run('selected'),o);assert.equal(ui.nodes.get('#bellMenu').hidden,true);

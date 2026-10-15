@@ -3,9 +3,10 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {Simulation,validateState} from '../dist/core.js';
 import {injectPortableSave} from '../dist/portable-save.js';
+import {lampGame, lampOffers, withManufacturing} from './fertigung-fixture.mjs';
 const cmd=(sim,type,data={})=>{const result=sim.command({type,...data});assert.equal(result.ok,true,result.message);return result;};
 const ticket=(sim,order,kind,response)=>{const {id}=cmd(sim,'createTicket',{orderId:order.id,kind,extensionMinutes:120});if(response)cmd(sim,'respondTicket',{id,response});return sim.state.tickets.find(t=>t.id===id);};
-function setup(staff=true){const sim=new Simulation({mode:'sandbox',seed:873});const o=sim.state.orders.find(o=>o.kind==='manufacturing');cmd(sim,'acceptOrder',{id:o.id});if(staff)cmd(sim,'hire',{role:'service'});return {sim,o};}
+function setup(staff=true){const sim=lampGame({mode:'sandbox',seed:873});const o=sim.state.orders.find(o=>o.kind==='manufacturing');cmd(sim,'acceptOrder',{id:o.id});if(staff)cmd(sim,'hire',{role:'service'});return {sim,o};}
 const until=(sim,predicate,max=3000)=>{for(let i=0;i<max&&!predicate();i++)sim.step();assert.ok(predicate(),'Erwarteter Zustand erreicht');};
 const charges=(sim,id)=>sim.state.ledger.filter(l=>l.key==='ticket-cost:'+id);
 

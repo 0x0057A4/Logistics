@@ -12,6 +12,7 @@ test('UI übergibt Versand-/Wartungsregeln und Spezialfracht samt Dokumentprüfu
  const ui=await boot();await ui.click('start');ui.click('starter');
  for(const kind of ['dispatch','maintenance'])ui.submit('rule',{kind,item:'housing',threshold:'50',qty:'8',budget:'1000',cooldown:'120'});
  assert.equal(ui.run("sim.state.rules.map(r=>r.kind).join(',')"),'dispatch,maintenance');
+ ui.run("sim.command({type:'build',buildingType:'assembly',x:5,y:3,rotation:0});sim.step(1)"); // Fertigungsanfragen erst mit Fertigungsanlage (A01 W1c)
  const id=ui.run("sim.state.orders.find(o=>o.kind==='manufacturing').id");ui.click('accept',id);
  ui.run("sim.command({type:'build',buildingType:'terminal',x:9,y:9,site:'site-1',rotation:0});sim.api.inventory.add({item:'lamp',qty:2,quality:95,unitCost:50,site:'site-1',location:'stock',owner:'company'});");
  ui.submit('freight',{orderId:id,qty:'2',mode:'air'});assert.equal(ui.run('sim.state.freights.length'),1);

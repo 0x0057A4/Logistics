@@ -93,7 +93,7 @@ export function validateState(s){
 export class Simulation{
  constructor({mode='guided',seed=123}={}){
  if(!['guided','economy','sandbox'].includes(mode))throw new Error('Unbekannter Spielmodus.');
- this.state={schema:1,mode,seed:Number(seed)>>>0,t:480,seq:2,money:mode==='sandbox'?500000:85000,reputation:50,selectedSite:'site-1',sites:[{id:'site-1',name:'Werk Morgenfeld',x:0,y:0,width:20,height:16,energy:30}],buildings:[],workers:[],batches:[],reservations:[],jobs:[],purchases:[],orders:[],vehicles:[],shipments:[],ledger:[],events:[],research:[],rules:[],returns:[],stats:{produced:0,delivered:0,revenue:0,costs:0},settings:{incidents:true},milestones:[]};
+ this.state={schema:1,mode,seed:Number(seed)>>>0,t:480,seq:2,money:mode==='sandbox'?500000:85000,reputation:50,selectedSite:'site-1',sites:[{id:'site-1',name:'Depot Morgenfeld',x:0,y:0,width:20,height:16,energy:30}],buildings:[],workers:[],batches:[],reservations:[],jobs:[],purchases:[],orders:[],vehicles:[],shipments:[],ledger:[],events:[],research:[],rules:[],returns:[],stats:{produced:0,delivered:0,revenue:0,costs:0},settings:{incidents:true},milestones:[]};
  this.makeAPI();for(const mod of MODULES)mod.init?.(this.state,this.api);this.api.log('system','Unternehmen gegründet. Halle bereit.');
  }
  makeAPI(){const s=this.state;const api={command:c=>this.command(c),id:prefix=>`${prefix}-${s.seq++}`,random:()=>{s.seed=(Math.imul(s.seed,1664525)+1013904223)>>>0;return s.seed/4294967296;},log:(kind,text,refs=[])=>{s.events.push({id:api.id('event'),t:s.t,kind,text,refs});if(s.events.length>3000)s.events.splice(0,s.events.length-3000);},book:(...args)=>economy.book(s,...args),distance:b=>reachable(s,b.site).distances?.[b.id]??0,reachable:site=>reachable(s,site)};

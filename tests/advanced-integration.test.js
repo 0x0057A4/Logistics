@@ -1,10 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {Simulation} from '../dist/core.js';
+import {lampGame, lampOffers, withManufacturing} from './fertigung-fixture.mjs';
 const SITE='site-1';
 const cmd=(s,type,data={})=>{const r=s.command({type,...data});assert.equal(r.ok,true,`${type}: ${r.message}`);return r;};
 function until(s,fn,max=1000){for(let i=0;i<max&&!fn();i++)s.step(1);assert.ok(fn(),`Zeitlimit bei ${s.state.t}`);}
-function depot(){const s=new Simulation({mode:'sandbox',seed:83});cmd(s,'build',{buildingType:'dock',x:2,y:10,site:SITE,rotation:0});for(const role of ['warehouse','driver','service'])cmd(s,'hire',{role,site:SITE});cmd(s,'buyVehicle',{vehicleType:'van',site:SITE});return s;}
+function depot(){const s=new Simulation({mode:'sandbox',seed:83});cmd(s,'build',{buildingType:'dock',x:2,y:10,site:SITE,rotation:0});for(const role of ['warehouse','driver','service'])cmd(s,'hire',{role,site:SITE});cmd(s,'buyVehicle',{vehicleType:'van',site:SITE});return withManufacturing(s);}
 function copy(s,n){const before=s.serialize(),forecast=s.forecast(n);assert.equal(s.serialize(),before,'Prognose verändert Ursprung');const other=Simulation.fromJSON(before);s.step(n);other.step(n);assert.equal(s.serialize(),other.serialize());assert.equal(s.serialize(),JSON.stringify(forecast));}
 test('Sammeltour behält mehrere Aufträge und spätere Zahlungen bei Speicherung',()=>{
  const s=depot(),orders=s.state.orders.filter(o=>o.kind==='manufacturing').slice(0,2);for(const o of orders)cmd(s,'acceptOrder',{id:o.id});

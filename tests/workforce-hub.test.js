@@ -36,7 +36,7 @@ test('workRate: Standardkraft = Basis, Erfahrung bis ×1,5, Müdigkeit ab 50 bis
  assert.equal(workRate({skill:1,fatigue:0},20),20);assert.equal(workRate({skill:1,fatigue:50},20),20);
  assert.equal(workRate({skill:1.25,fatigue:0},20),25);assert.equal(workRate({skill:1.5,fatigue:0},20),30);assert.equal(workRate({skill:3,fatigue:0},20),30);
  assert.equal(workRate({skill:1,fatigue:65},20),18);assert.equal(workRate({skill:1,fatigue:80},20),16);
- assert.equal(workRate({skill:1,fatigue:0},HAND_RATE),HAND_RATE);assert.equal(workRate({skill:1.25,fatigue:0},HAND_RATE),3);
+ assert.equal(workRate({skill:1,fatigue:0},HAND_RATE),HAND_RATE);assert.equal(workRate({skill:1.25,fatigue:0},HAND_RATE),4);
  assert.equal(workRate({skill:0,fatigue:0},20),1,'mindestens 1');
  for(const w of [{skill:1.75,fatigue:63.3},{skill:1,fatigue:79.99}])assert.ok(Number.isInteger(workRate(w,UNLOAD_BASE)));
 });

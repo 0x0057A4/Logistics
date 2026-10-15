@@ -37,6 +37,8 @@ export function policy(sim,i,{buy=true,cold=null}={}){
 // Klein: Startbetrieb wie tests/balance-performance.mjs (ein Standort, Wirtschaftsmodus).
 export function small(seed=77){
  const sim=new Simulation({mode:'economy',seed});setupSite(sim,'site-1');
+// Fertigungsanfragen kommen erst mit der ersten Fertigungsanlage (economy.step, A01 W1c): eine Minute nach dem Aufbau.
+ sim.step(1);
  for(const o of sim.state.orders.filter(o=>o.kind!=='logistics'))cmd(sim,'acceptOrder',{id:o.id});
  return {sim,opts:{buy:true}};
 }
@@ -53,6 +55,8 @@ export function large(seed=4242,{warmup=600,history=25000}={}){
  cmd(sim,'buyVehicle',{vehicleType:'refrigerated',site:a});
  // Testaufbau (Fixture wie advanced-integration): Kühlware ohne Forschungsvorlauf.
  for(let k=0;k<6;k++)sim.api.inventory.add({item:'cold_module',qty:10,quality:95,unitCost:80,site:a,location:'stock',owner:'company'});
+// Fertigungsanfragen kommen erst mit der ersten Fertigungsanlage (economy.step, A01 W1c): eine Minute nach dem Aufbau.
+ sim.step(1);
  for(const o of s.orders.filter(o=>o.kind!=='logistics'))cmd(sim,'acceptOrder',{id:o.id});
  const opts={buy:true,cold:{toSite:b}};
  for(let i=0;i<warmup;i++){policy(sim,i,opts);sim.step(1);}
@@ -77,6 +81,8 @@ export function services(seed=83){
  cmd(sim,'build',{buildingType:'dock',x:2,y:10,site,rotation:0});cmd(sim,'build',{buildingType:'terminal',site,x:4,y:4,rotation:0});cmd(sim,'build',{buildingType:'workshop',site,x:9,y:4,rotation:0});cmd(sim,'build',{buildingType:'assembly',site,x:13,y:4,rotation:0});
  for(const role of ['warehouse','warehouse','driver','driver','service','technician','production'])cmd(sim,'hire',{role,site});
  cmd(sim,'buyVehicle',{vehicleType:'van',site});cmd(sim,'buyVehicle',{vehicleType:'van',site});
+// Fertigungsanfragen kommen erst mit der ersten Fertigungsanlage (economy.step, A01 W1c): eine Minute nach dem Aufbau.
+ sim.step(1);
  const orders=s.orders.filter(o=>o.kind==='manufacturing').slice(0,2);for(const o of orders)cmd(sim,'acceptOrder',{id:o.id});
  const lg=s.orders.find(o=>o.kind==='logistics');cmd(sim,'acceptOrder',{id:lg.id});
  // Fixture wie advanced-integration: Fertigware, Kühlmodul ohne Kühllager, Ersatzteil, Bauteile.

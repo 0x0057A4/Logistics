@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {Simulation} from '../dist/core.js';
 import {report} from '../dist/accounting.js';
+import {lampGame, lampOffers, withManufacturing} from './fertigung-fixture.mjs';
 const command=(s,c)=>assert.equal(s.command(c).ok,true);
 test('Geldfluss trennt Kredit, Tilgung, Anlagekauf und Betrieb ohne Stats-Schätzung',()=>{
  const sim=new Simulation(),initial=sim.state.money;
@@ -33,9 +34,9 @@ test('Sammelbuchungen nicht multiplizieren, Kontoüberziehung nicht doppelt als 
  const r=report(s);assert.equal(r.cash.outflows,20);assert.equal(r.cashflow.other,5);assert.deepEqual(r.liabilities,{loan:100,overdraft:20,terminalFees:4,total:124});
 });
 test('Auswertung bleibt rein und erhalten nach Speichern/Laden; reale Zahlung löst Forderung',()=>{
- let sim=new Simulation();command(sim,{type:'build',buildingType:'dock',x:10,y:6});
+ let sim=lampGame();command(sim,{type:'build',buildingType:'dock',x:10,y:6});
  for(const role of ['warehouse','driver'])command(sim,{type:'hire',role});
- command(sim,{type:'buyVehicle',vehicleType:'van'});const o=sim.state.orders[0];command(sim,{type:'acceptOrder',id:o.id});
+ command(sim,{type:'buyVehicle',vehicleType:'van'});const o=lampOffers(sim)[0];command(sim,{type:'acceptOrder',id:o.id});
  sim.api.inventory.add({item:'lamp',qty:3,site:'site-1',location:'stock',quality:95,unitCost:50});
  command(sim,{type:'dispatch',orderId:o.id,vehicleId:sim.state.vehicles[0].id,qty:3});sim.step(40);
  const before=sim.serialize(),r=report(sim.state);assert.equal(r.receivables.total,330);assert.equal(sim.serialize(),before);
