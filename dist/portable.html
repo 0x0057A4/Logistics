@@ -356,12 +356,12 @@ tr.selected td{background:#eef6e4}
 <div id="toast" role="status" aria-live="polite"></div>
 <footer class="statusbar"><span id="statusText">Keine Offlinefortschritte · Automatische Sicherung aktiv</span><span class="sb-stats"><span id="sbDocks">Rampen 0/0</span><span id="sbVehicles">Fahrzeuge 0</span><span id="sbStaff">Personal 0/0</span><span id="sbStock">Lager 0/40</span><span>INDUSTRIE &amp; LOGISTIK <b id="appVersion">0.9 · ENTWICKLUNG</b></span></span></footer>
 </main>
-<dialog id="welcome"><div class="welcome-art"><div class="welcome-symbol">il↗</div><span>BAUE, WAS<br>MORGEN BEWEGT.</span><small>Fertigung × Menschen × Materialfluss</small></div><div class="welcome-body"><span class="eyebrow">WILLKOMMEN IN MORGENFELD</span><h2>Große Unternehmen<br>fangen klein an.</h2><p>Deine Halle steht bereit. Baue eine Produktionslinie, stelle dein Team ein und bringe die erste Arbeitsleuchte zum Kunden.</p><div class="mode-options"><label><input type="radio" name="mode" value="guided" checked><span><b>Geführter Einstieg</b><small>Schritt für Schritt zum ersten Auftrag.</small></span></label><label><input type="radio" name="mode" value="economy"><span><b>Wirtschaftsbetrieb</b><small>85.000 € Startkapital. Deine Entscheidungen.</small></span></label><label><input type="radio" name="mode" value="sandbox"><span><b>Freies Bauen</b><small>Großes Budget, eigener Speicherstand.</small></span></label></div><button class="primary start" data-action="start">Unternehmen gründen <span>→</span></button><div class="actions"><button id="welcomeBackup" data-action="welcomeBackup" hidden title="Letzten gültigen Stand dieses Modus wiederherstellen">Letzte Sicherung laden</button><button data-action="retryStorage">Speicher erneut prüfen</button><button data-action="temporary">Ohne lokale Speicherung spielen</button></div><p class="fine">Temporärer Modus: Fortschritt vor Schließen als HTML oder JSON speichern.</p><p class="fine">Fiktive Welt. Echte Zusammenhänge. Fortschritt nur bei aktivem Spiel.</p></div></dialog>
+<dialog id="welcome"><div class="welcome-art"><div class="welcome-symbol">il↗</div><span>BAUE, WAS<br>MORGEN BEWEGT.</span><small>Verträge × Menschen × Materialfluss</small></div><div class="welcome-body"><span class="eyebrow">WILLKOMMEN IN MORGENFELD</span><h2>Große Unternehmen<br>fangen klein an.</h2><p>Dein Logistikunternehmen startet mit einem leeren Depot. Baue ein Dock, stelle dein Team ein, nimm den ersten Frachtvertrag an und stelle die Pakete der Versender pünktlich zu.</p><div class="mode-options"><label><input type="radio" name="mode" value="guided" checked><span><b>Geführter Einstieg</b><small>Schritt für Schritt zur ersten Zustellung.</small></span></label><label><input type="radio" name="mode" value="economy"><span><b>Wirtschaftsbetrieb</b><small>85.000 € Startkapital. Dein Depot, deine Entscheidungen.</small></span></label><label><input type="radio" name="mode" value="sandbox"><span><b>Freies Bauen</b><small>Großes Budget, eigener Speicherstand.</small></span></label></div><button class="primary start" data-action="start">Unternehmen gründen <span>→</span></button><div class="actions"><button id="welcomeBackup" data-action="welcomeBackup" hidden title="Letzten gültigen Stand dieses Modus wiederherstellen">Letzte Sicherung laden</button><button data-action="retryStorage">Speicher erneut prüfen</button><button data-action="temporary">Ohne lokale Speicherung spielen</button></div><p class="fine">Temporärer Modus: Fortschritt vor Schließen als HTML oder JSON speichern.</p><p class="fine">Fiktive Welt. Echte Zusammenhänge. Fortschritt nur bei aktivem Spiel.</p></div></dialog>
 <dialog id="confirm"><h2 id="confirmTitle">Neues Unternehmen?</h2><p id="confirmText"></p><div class="actions"><button data-action="confirmCancel">Abbrechen</button><button class="primary" data-action="confirmOk">Bestätigen</button></div></dialog>
 <input type="file" id="importFile" accept=".json,application/json" hidden>
 <script id="embedded-save" type="application/json">null</script>
 <script id="embedded-prefs" type="application/json">null</script>
-<script id="portable-template" type="application/json">"\u003c!doctype html\u003e\n\u003chtml lang=\"de\"\u003e\n\u003chead\u003e\u003cmeta charset=\"utf-8\"\u003e\u003cmeta name=\"viewport\" content=\"width=device-width,initial-scale=1\"\u003e\u003cmeta name=\"theme-color\" content=\"#f4f6f3\"\u003e\u003cmeta name=\"description\" content=\"Baue dein Industrieunternehmen. Fertigung, Personal und Logistik in einem gemeinsamen Wirtschaftskreislauf.\"\u003e\u003ctitle\u003eIndustrie \u0026 Logistik\u003c/title\u003e\u003cstyle id=\"portable-style\"\u003e@@PORTABLE-STYLE@@\u003c/style\u003e\u003c/head\u003e\n\u003cbody\u003e\n\u003cheader class=\"topbar\"\u003e\n\u003ca class=\"brand\" href=\"#\" aria-label=\"Betriebsübersicht\"\u003e\u003cspan class=\"brandmark\"\u003eil\u003cspan\u003e↗\u003c/span\u003e\u003c/span\u003e\u003cspan class=\"brand-text\"\u003eINDUSTRIE\u003cspan class=\"brand-sub\"\u003e\u0026 LOGISTIK\u003c/span\u003e\u003c/span\u003e\u003c/a\u003e\n\u003cdiv class=\"cmd\" role=\"search\"\u003e\u003csvg class=\"cmd-icon\" viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" aria-hidden=\"true\"\u003e\u003ccircle cx=\"10.5\" cy=\"10.5\" r=\"6\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\"/\u003e\u003cpath d=\"M15 15l5 5\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\"/\u003e\u003c/svg\u003e\u003cinput id=\"cmd\" type=\"search\" autocomplete=\"off\" spellcheck=\"false\" placeholder=\"Anlage, Fahrzeug, Kennzeichen, Vertrag suchen …\" aria-label=\"Suche nach Anlagen, Fahrzeugen, Kennzeichen, Verträgen, Aufträgen und Beschäftigten (Taste /)\" aria-controls=\"cmdResults\" aria-expanded=\"false\" aria-autocomplete=\"list\"\u003e\u003ckbd class=\"cmd-key\" aria-hidden=\"true\"\u003e/\u003c/kbd\u003e\u003cdiv id=\"cmdResults\" class=\"dropdown cmd-results\" role=\"listbox\" aria-label=\"Suchtreffer\" hidden\u003e\u003c/div\u003e\u003c/div\u003e\n\u003cdiv class=\"site-pick\"\u003e\u003cbutton id=\"siteBtn\" class=\"site-label\" data-toggle=\"sites\" aria-haspopup=\"true\" aria-expanded=\"false\" aria-controls=\"siteMenu\" title=\"Standort wählen\"\u003e\u003cspan class=\"site-code\" id=\"siteCode\"\u003eWM-01\u003c/span\u003e\u003cspan class=\"site-text\"\u003e\u003cb id=\"siteName\"\u003eWerk Morgenfeld\u003c/b\u003e\u003csmall id=\"siteStatus\"\u003eRampen 0/0 · Lager 0/40\u003c/small\u003e\u003c/span\u003e\u003cspan class=\"chevron\" aria-hidden=\"true\"\u003e⌄\u003c/span\u003e\u003c/button\u003e\u003cdiv id=\"siteMenu\" class=\"dropdown site-menu\" hidden\u003e\u003cdiv id=\"siteList\" class=\"drop-list\"\u003e\u003c/div\u003e\u003cbutton class=\"drop-foot\" data-panel=\"network\"\u003eStandorte verwalten →\u003c/button\u003e\u003c/div\u003e\u003c/div\u003e\n\u003cdiv id=\"speeds\" class=\"segmented\" role=\"group\" aria-label=\"Spielgeschwindigkeit\"\u003e\u003cbutton data-speed=\"0\" title=\"Pause · Leertaste\" aria-label=\"Pause\"\u003eⅡ\u003c/button\u003e\u003cbutton data-speed=\"1\" class=\"active\" aria-label=\"Normale Geschwindigkeit\"\u003e1×\u003c/button\u003e\u003cbutton data-speed=\"4\" aria-label=\"Vierfache Geschwindigkeit\"\u003e4×\u003c/button\u003e\u003cbutton data-speed=\"12\" aria-label=\"Zwölffache Geschwindigkeit\"\u003e12×\u003c/button\u003e\u003c/div\u003e\n\u003cdiv class=\"clock\" aria-live=\"off\"\u003e\u003cspan id=\"clock\"\u003eTag 1 · 08:00\u003c/span\u003e\u003csmall\u003e\u003cspan id=\"shiftName\"\u003eTagschicht\u003c/span\u003e · \u003cspan id=\"simState\"\u003eBetrieb läuft\u003c/span\u003e\u003c/small\u003e\u003c/div\u003e\n\u003cbutton id=\"storageWarning\" class=\"unsaved\" data-panel=\"settings\" role=\"status\" hidden title=\"Temporärer Modus · NICHT GESPEICHERT · Vor Schließen als HTML oder JSON speichern.\"\u003eTemporärer Modus · NICHT GESPEICHERT · Vor Schließen als HTML oder JSON speichern.\u003c/button\u003e\n\u003cbutton class=\"cash\" data-panel=\"finance\" title=\"Unternehmensrechnung öffnen\"\u003e\u003csmall\u003eLIQUIDITÄT\u003c/small\u003e\u003cstrong id=\"cash\"\u003e85.000 €\u003c/strong\u003e\u003c/button\u003e\n\u003cdiv class=\"bell-wrap\"\u003e\u003cbutton id=\"bellBtn\" class=\"square bell\" data-toggle=\"bell\" aria-haspopup=\"true\" aria-expanded=\"false\" aria-controls=\"bellMenu\" title=\"Meldungen\" aria-label=\"Meldungen\"\u003e\u003csvg viewBox=\"0 0 24 24\" width=\"18\" height=\"18\" aria-hidden=\"true\"\u003e\u003cpath d=\"M6 16.5V11a6 6 0 0 1 12 0v5.5l1.8 1.8H4.2zM10 20.5a2 2 0 0 0 4 0\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" stroke-linejoin=\"round\"/\u003e\u003c/svg\u003e\u003cb id=\"bellCount\" class=\"bell-count\" hidden\u003e0\u003c/b\u003e\u003c/button\u003e\u003cdiv id=\"bellMenu\" class=\"dropdown bell-menu\" hidden\u003e\u003cdiv class=\"drop-head\"\u003e\u003cb\u003eMeldungen \u0026amp; Wartegründe\u003c/b\u003e\u003csmall id=\"bellSummary\"\u003eKeine Meldungen\u003c/small\u003e\u003c/div\u003e\u003cdiv id=\"bellList\" class=\"drop-list\" role=\"list\"\u003e\u003c/div\u003e\u003c/div\u003e\u003c/div\u003e\n\u003cbutton class=\"square\" data-panel=\"settings\" title=\"Einstellungen\" aria-label=\"Einstellungen\"\u003e⚙\u003c/button\u003e\n\u003c/header\u003e\n\u003cmain id=\"game\"\u003e\u003ccanvas id=\"world\" tabindex=\"0\" aria-label=\"Interaktive Betriebskarte. Baumodus über B. Gebäude alternativ in Produktionsübersicht auswählen.\"\u003e\u003c/canvas\u003e\u003cdiv class=\"scene-vignette\"\u003e\u003c/div\u003e\n\u003cnav class=\"rail\" aria-label=\"Betriebsbereiche\"\u003e\u003cbutton data-panel=\"overview\" title=\"Betriebszentrale\"\u003e\u003ci\u003e◈\u003c/i\u003e\u003cspan\u003eZentrale\u003c/span\u003e\u003c/button\u003e\u003cbutton data-action=\"build\" title=\"Baumodus · B\"\u003e\u003ci\u003e⊞\u003c/i\u003e\u003cspan\u003eBauen\u003c/span\u003e\u003c/button\u003e\u003cdiv class=\"rail-line\"\u003e\u003c/div\u003e\u003cbutton data-panel=\"production\" title=\"Fertigung\"\u003e\u003ci\u003e⚒\u003c/i\u003e\u003cspan\u003eFertigung\u003c/span\u003e\u003c/button\u003e\u003cbutton data-panel=\"inventory\" title=\"Lager \u0026 Materialfluss\"\u003e\u003ci\u003e▤\u003c/i\u003e\u003cspan\u003eLager\u003c/span\u003e\u003c/button\u003e\u003cbutton data-panel=\"purchasing\" title=\"Einkauf\"\u003e\u003ci\u003e↓\u003c/i\u003e\u003cspan\u003eEinkauf\u003c/span\u003e\u003c/button\u003e\u003cbutton data-panel=\"staff\" title=\"Personal\"\u003e\u003ci\u003e♙\u003c/i\u003e\u003cspan\u003ePersonal\u003c/span\u003e\u003c/button\u003e\u003cbutton data-panel=\"orders\" title=\"Aufträge\"\u003e\u003ci\u003e≡\u003c/i\u003e\u003cspan\u003eAufträge\u003c/span\u003e\u003c/button\u003e\u003cbutton data-panel=\"contracts\" title=\"Frachtverträge\"\u003e\u003ci\u003e§\u003c/i\u003e\u003cspan\u003eVerträge\u003c/span\u003e\u003c/button\u003e\u003cbutton data-panel=\"yard\" title=\"Hof \u0026amp; Docks\"\u003e\u003ci\u003e⇆\u003c/i\u003e\u003cspan\u003eHof\u003c/span\u003e\u003c/button\u003e\u003cbutton data-panel=\"fleet\" title=\"Transport\"\u003e\u003ci\u003e▱\u003c/i\u003e\u003cspan\u003eTransport\u003c/span\u003e\u003c/button\u003e\u003cbutton data-panel=\"finance\" title=\"Finanzen\"\u003e\u003ci\u003e€\u003c/i\u003e\u003cspan\u003eFinanzen\u003c/span\u003e\u003c/button\u003e\u003cbutton data-panel=\"research\" title=\"Entwicklung\"\u003e\u003ci\u003e⌘\u003c/i\u003e\u003cspan\u003eEntwicklung\u003c/span\u003e\u003c/button\u003e\u003cbutton data-panel=\"rules\" title=\"Regeln\"\u003e\u003ci\u003e⇄\u003c/i\u003e\u003cspan\u003eRegeln\u003c/span\u003e\u003c/button\u003e\u003cbutton data-panel=\"network\" title=\"Standorte\"\u003e\u003ci\u003e⌁\u003c/i\u003e\u003cspan\u003eStandorte\u003c/span\u003e\u003c/button\u003e\u003cbutton data-panel=\"special\" title=\"Spezialfracht\"\u003e\u003ci\u003e❄\u003c/i\u003e\u003cspan\u003eSpezial\u003c/span\u003e\u003c/button\u003e\u003cbutton data-panel=\"service\" title=\"Service\"\u003e\u003ci\u003e↶\u003c/i\u003e\u003cspan\u003eService\u003c/span\u003e\u003c/button\u003e\u003cbutton data-panel=\"history\" title=\"Chronik\"\u003e\u003ci\u003e◷\u003c/i\u003e\u003cspan\u003eChronik\u003c/span\u003e\u003c/button\u003e\u003cdiv class=\"rail-bottom\"\u003e\u003cbutton data-panel=\"help\" title=\"Handbuch\"\u003e\u003ci\u003e?\u003c/i\u003e\u003cspan\u003eHandbuch\u003c/span\u003e\u003c/button\u003e\u003c/div\u003e\u003c/nav\u003e\n\u003csection class=\"kpis hud\" aria-label=\"Kennzahlen\"\u003e\n\u003cbutton class=\"kpi\" data-panel=\"orders\" title=\"Zustellungen aller Standorte am heutigen Spieltag\"\u003e\u003csmall\u003eAUSGELIEFERT HEUTE\u003c/small\u003e\u003cstrong id=\"kpiDelivered\"\u003e0\u003c/strong\u003e\u003cspan id=\"kpiDeliveredSub\" class=\"kpi-sub\"\u003eStück · gestern 0\u003c/span\u003e\u003c/button\u003e\n\u003cbutton class=\"kpi\" data-panel=\"fleet\" title=\"Fahrzeuge des aktiven Standorts\"\u003e\u003csmall\u003eVOR ORT / UNTERWEGS\u003c/small\u003e\u003cstrong id=\"kpiVehicles\"\u003e0 / 0\u003c/strong\u003e\u003cspan id=\"kpiVehiclesSub\" class=\"kpi-sub\"\u003eKeine Fahrzeuge\u003c/span\u003e\u003c/button\u003e\n\u003cbutton class=\"kpi\" data-panel=\"finance\" title=\"Zustellungen ohne und mit Verspätungsabschlag seit Gründung\"\u003e\u003csmall\u003ePÜNKTLICHKEIT\u003c/small\u003e\u003cstrong id=\"kpiPunctual\"\u003e—\u003c/strong\u003e\u003cspan id=\"kpiPunctualSub\" class=\"kpi-sub\"\u003eNoch keine Zustellung\u003c/span\u003e\u003c/button\u003e\n\u003cbutton id=\"kpiSortedBox\" class=\"kpi kpi-opt\" data-panel=\"inventory\" title=\"Am heutigen Spieltag sortierte Pakete aller Standorte\" hidden\u003e\u003csmall\u003eVERARBEITET HEUTE\u003c/small\u003e\u003cstrong id=\"kpiSorted\"\u003e0\u003c/strong\u003e\u003cspan id=\"kpiSortedSub\" class=\"kpi-sub\"\u003ePakete sortiert\u003c/span\u003e\u003c/button\u003e\n\u003c/section\u003e\n\u003csection id=\"flow\" class=\"flow hud\" aria-label=\"Standortfluss\"\u003e\u003cheader class=\"flow-head\"\u003e\u003cdiv\u003e\u003cspan class=\"eyebrow\"\u003eSTANDORTFLUSS\u003c/span\u003e\u003cb id=\"flowSite\"\u003eWerk Morgenfeld\u003c/b\u003e\u003c/div\u003e\u003cbutton id=\"flowToggle\" class=\"flow-toggle\" data-toggle=\"flow\" aria-expanded=\"true\" aria-controls=\"flowList\" title=\"Standortfluss ein-/ausklappen\" aria-label=\"Standortfluss ein- oder ausklappen\"\u003e‹\u003c/button\u003e\u003c/header\u003e\n\u003col id=\"flowList\" class=\"flow-list\"\u003e\n\u003cli id=\"stl-gate\"\u003e\u003cbutton class=\"station\" data-station=\"gate\" id=\"st-gate\"\u003e\u003cspan class=\"st-dot\"\u003e\u003c/span\u003e\u003cspan class=\"st-text\"\u003e\u003cb\u003eTor \u0026amp; Hof\u003c/b\u003e\u003csmall id=\"st-gate-sub\"\u003e—\u003c/small\u003e\u003c/span\u003e\u003cstrong id=\"st-gate-n\"\u003e0\u003c/strong\u003e\u003c/button\u003e\u003c/li\u003e\n\u003cli id=\"stl-unload\"\u003e\u003cbutton class=\"station\" data-station=\"unload\" id=\"st-unload\"\u003e\u003cspan class=\"st-dot\"\u003e\u003c/span\u003e\u003cspan class=\"st-text\"\u003e\u003cb\u003eEntladung\u003c/b\u003e\u003csmall id=\"st-unload-sub\"\u003e—\u003c/small\u003e\u003c/span\u003e\u003cstrong id=\"st-unload-n\"\u003e0\u003c/strong\u003e\u003c/button\u003e\u003c/li\u003e\n\u003cli id=\"stl-sort\"\u003e\u003cbutton class=\"station\" data-station=\"sort\" id=\"st-sort\"\u003e\u003cspan class=\"st-dot\"\u003e\u003c/span\u003e\u003cspan class=\"st-text\"\u003e\u003cb\u003eSortierung\u003c/b\u003e\u003csmall id=\"st-sort-sub\"\u003e—\u003c/small\u003e\u003c/span\u003e\u003cstrong id=\"st-sort-n\"\u003e0\u003c/strong\u003e\u003c/button\u003e\u003c/li\u003e\n\u003cli id=\"stl-out\"\u003e\u003cbutton class=\"station\" data-station=\"out\" id=\"st-out\"\u003e\u003cspan class=\"st-dot\"\u003e\u003c/span\u003e\u003cspan class=\"st-text\"\u003e\u003cb\u003eAusgang\u003c/b\u003e\u003csmall id=\"st-out-sub\"\u003e—\u003c/small\u003e\u003c/span\u003e\u003cstrong id=\"st-out-n\"\u003e0\u003c/strong\u003e\u003c/button\u003e\u003c/li\u003e\n\u003cli id=\"stl-delivery\"\u003e\u003cbutton class=\"station\" data-station=\"delivery\" id=\"st-delivery\"\u003e\u003cspan class=\"st-dot\"\u003e\u003c/span\u003e\u003cspan class=\"st-text\"\u003e\u003cb\u003eZustellung\u003c/b\u003e\u003csmall id=\"st-delivery-sub\"\u003e—\u003c/small\u003e\u003c/span\u003e\u003cstrong id=\"st-delivery-n\"\u003e0\u003c/strong\u003e\u003c/button\u003e\u003c/li\u003e\n\u003cli id=\"stl-stock\"\u003e\u003cbutton class=\"station\" data-station=\"stock\" id=\"st-stock\"\u003e\u003cspan class=\"st-dot\"\u003e\u003c/span\u003e\u003cspan class=\"st-text\"\u003e\u003cb\u003eLager\u003c/b\u003e\u003csmall id=\"st-stock-sub\"\u003e—\u003c/small\u003e\u003c/span\u003e\u003cstrong id=\"st-stock-n\"\u003e0\u003c/strong\u003e\u003c/button\u003e\u003c/li\u003e\n\u003cli id=\"stl-inbound\" hidden\u003e\u003cbutton class=\"station\" data-station=\"inbound\" id=\"st-inbound\"\u003e\u003cspan class=\"st-dot\"\u003e\u003c/span\u003e\u003cspan class=\"st-text\"\u003e\u003cb\u003eWareneingang\u003c/b\u003e\u003csmall id=\"st-inbound-sub\"\u003e—\u003c/small\u003e\u003c/span\u003e\u003cstrong id=\"st-inbound-n\"\u003e0\u003c/strong\u003e\u003c/button\u003e\u003c/li\u003e\n\u003cli id=\"stl-production\" hidden\u003e\u003cbutton class=\"station\" data-station=\"production\" id=\"st-production\"\u003e\u003cspan class=\"st-dot\"\u003e\u003c/span\u003e\u003cspan class=\"st-text\"\u003e\u003cb\u003eFertigung\u003c/b\u003e\u003csmall id=\"st-production-sub\"\u003e—\u003c/small\u003e\u003c/span\u003e\u003cstrong id=\"st-production-n\"\u003e0\u003c/strong\u003e\u003c/button\u003e\u003c/li\u003e\n\u003cli id=\"stl-quality\" hidden\u003e\u003cbutton class=\"station\" data-station=\"quality\" id=\"st-quality\"\u003e\u003cspan class=\"st-dot\"\u003e\u003c/span\u003e\u003cspan class=\"st-text\"\u003e\u003cb\u003ePrüfung \u0026amp; Verpackung\u003c/b\u003e\u003csmall id=\"st-quality-sub\"\u003e—\u003c/small\u003e\u003c/span\u003e\u003cstrong id=\"st-quality-n\"\u003e0\u003c/strong\u003e\u003c/button\u003e\u003c/li\u003e\n\u003cli id=\"stl-service\" hidden\u003e\u003cbutton class=\"station\" data-station=\"service\" id=\"st-service\"\u003e\u003cspan class=\"st-dot\"\u003e\u003c/span\u003e\u003cspan class=\"st-text\"\u003e\u003cb\u003eRetouren \u0026amp; Service\u003c/b\u003e\u003csmall id=\"st-service-sub\"\u003e—\u003c/small\u003e\u003c/span\u003e\u003cstrong id=\"st-service-n\"\u003e0\u003c/strong\u003e\u003c/button\u003e\u003c/li\u003e\n\u003c/ol\u003e\u003c/section\u003e\n\u003cdiv class=\"view-switch hud\" role=\"group\" aria-label=\"Ansicht\"\u003e\u003cbutton data-view=\"hall\" class=\"active\"\u003eHalle\u003c/button\u003e\u003cbutton data-view=\"site\"\u003eGelände\u003c/button\u003e\u003cbutton data-view=\"network\"\u003eNetzwerk\u003c/button\u003e\u003cbutton data-view=\"flat\"\u003eGrundriss\u003c/button\u003e\u003c/div\u003e\n\u003cdiv class=\"camera-controls tools\" role=\"toolbar\" aria-label=\"Kamera und Anzeige\" aria-orientation=\"vertical\"\u003e\u003cbutton data-camera=\"plus\" aria-label=\"Vergrößern\" title=\"Vergrößern\"\u003e+\u003c/button\u003e\u003cbutton data-camera=\"minus\" aria-label=\"Verkleinern\" title=\"Verkleinern\"\u003e−\u003c/button\u003e\u003cbutton data-camera=\"rotate\" aria-label=\"Kamera drehen\" title=\"Drehen\"\u003e↻\u003c/button\u003e\u003cbutton data-camera=\"home\" aria-label=\"Kamera zentrieren\" title=\"Ansicht zurücksetzen\"\u003e⌖\u003c/button\u003e\u003cdiv id=\"labelGroup\" class=\"tool-group\" role=\"group\" aria-label=\"Beschriftungen\" hidden\u003e\u003cspan class=\"tool-sep\"\u003e\u003c/span\u003e\u003cbutton data-labels=\"fleet\" title=\"Beschriftung: Flotte\" aria-label=\"Beschriftung Flotte\"\u003eF\u003c/button\u003e\u003cbutton data-labels=\"infra\" title=\"Beschriftung: Infrastruktur\" aria-label=\"Beschriftung Infrastruktur\"\u003eI\u003c/button\u003e\u003cbutton data-labels=\"all\" class=\"active\" title=\"Beschriftung: alle\" aria-label=\"Alle Beschriftungen\"\u003eA\u003c/button\u003e\u003cbutton data-labels=\"none\" title=\"Beschriftungen aus\" aria-label=\"Beschriftungen aus\"\u003e∅\u003c/button\u003e\u003c/div\u003e\u003cspan class=\"tool-sep\"\u003e\u003c/span\u003e\u003cbutton data-toggle=\"scene\" id=\"sceneOnlyBtn\" aria-pressed=\"false\" title=\"Panels ausblenden (nur Szene)\" aria-label=\"Panels ausblenden, nur Szene zeigen\"\u003e▢\u003c/button\u003e\u003c/div\u003e\n\u003caside id=\"panel\" class=\"panel\" hidden aria-label=\"Betriebsfenster\"\u003e\u003cheader class=\"panel-head\"\u003e\u003cdiv\u003e\u003cspan class=\"eyebrow\" id=\"panelEyebrow\"\u003eBETRIEBSZENTRALE\u003c/span\u003e\u003ch2 id=\"panelTitle\"\u003eÜbersicht\u003c/h2\u003e\u003c/div\u003e\u003cbutton data-action=\"close\" class=\"close\" aria-label=\"Fenster schließen\"\u003e×\u003c/button\u003e\u003c/header\u003e\u003cdiv class=\"panel-tools\"\u003e\u003cinput id=\"search\" type=\"search\" placeholder=\"In dieser Ansicht suchen …\" aria-label=\"Ansicht durchsuchen\"\u003e\u003cbutton data-action=\"refresh\" class=\"square\" title=\"Aktualisieren\"\u003e↻\u003c/button\u003e\u003c/div\u003e\u003cdiv id=\"panelBody\" class=\"panel-body\"\u003e\u003c/div\u003e\u003c/aside\u003e\n\u003csection id=\"buildTray\" class=\"build-tray\" hidden\u003e\u003cheader\u003e\u003cdiv\u003e\u003cspan class=\"eyebrow\"\u003eBETRIEB GESTALTEN\u003c/span\u003e\u003cstrong\u003ePlatzieren. Verbinden. Produzieren.\u003c/strong\u003e\u003c/div\u003e\u003cdiv\u003e\u003cbutton data-action=\"rotateBuild\"\u003e↻ Drehen \u003ckbd\u003eR\u003c/kbd\u003e\u003c/button\u003e\u003cbutton data-action=\"endBuild\" class=\"close\"\u003e×\u003c/button\u003e\u003c/div\u003e\u003c/header\u003e\u003cdiv id=\"buildItems\" class=\"build-items\"\u003e\u003c/div\u003e\u003cfooter\u003e\u003cspan id=\"buildHint\"\u003eAnlage wählen, freie Fläche anklicken.\u003c/span\u003e\u003cspan\u003eEsc · Abbrechen\u003c/span\u003e\u003c/footer\u003e\u003c/section\u003e\n\u003csection id=\"mission\" class=\"mission hud\"\u003e\u003cspan class=\"mission-number\" id=\"missionNumber\"\u003e01\u003c/span\u003e\u003cdiv\u003e\u003cspan class=\"eyebrow\"\u003eERSTER BETRIEB\u003c/span\u003e\u003cstrong id=\"missionTitle\"\u003eEine leere Halle. Tausend Möglichkeiten.\u003c/strong\u003e\u003csmall id=\"missionText\"\u003eRichte deine erste Produktionslinie ein.\u003c/small\u003e\u003c/div\u003e\u003cbutton id=\"missionAction\" data-action=\"build\"\u003eBetrieb aufbauen \u003cspan\u003e→\u003c/span\u003e\u003c/button\u003e\u003cbutton class=\"mission-collapse\" data-action=\"hideMission\" aria-label=\"Hinweis ausblenden\"\u003e×\u003c/button\u003e\u003c/section\u003e\n\u003csection id=\"vbar\" class=\"vbar hud\" aria-label=\"Fahrzeugleiste\"\u003e\u003cheader class=\"vbar-head\"\u003e\u003cbutton id=\"vbarToggle\" class=\"vbar-toggle\" data-toggle=\"vbar\" aria-expanded=\"true\" aria-controls=\"vbarScroll\"\u003e\u003cspan class=\"eyebrow\"\u003eFAHRZEUGE\u003c/span\u003e\u003cb id=\"vbarCount\"\u003e0\u003c/b\u003e\u003cspan class=\"chevron\" aria-hidden=\"true\"\u003e⌄\u003c/span\u003e\u003c/button\u003e\u003cspan id=\"vbarSummary\"\u003eKeine Fahrzeuge\u003c/span\u003e\u003c/header\u003e\u003cdiv id=\"vbarScroll\" class=\"vbar-scroll\"\u003e\u003cdiv class=\"vrow vhead\" aria-hidden=\"true\"\u003e\u003cspan\u003eKennung\u003c/span\u003e\u003cspan\u003eTyp\u003c/span\u003e\u003cspan\u003eStandort → Ziel\u003c/span\u003e\u003cspan\u003eStatus\u003c/span\u003e\u003cspan class=\"num\"\u003eRest\u003c/span\u003e\u003c/div\u003e\u003cdiv id=\"vbarList\" class=\"vbar-list\" role=\"list\"\u003e\u003c/div\u003e\u003cp id=\"vbarEmpty\" class=\"vbar-empty\"\u003eNoch keine Fahrzeuge. Fuhrpark im Transportfenster anschaffen oder mieten.\u003c/p\u003e\u003c/div\u003e\u003c/section\u003e\n\u003cdiv id=\"toast\" role=\"status\" aria-live=\"polite\"\u003e\u003c/div\u003e\n\u003cfooter class=\"statusbar\"\u003e\u003cspan id=\"statusText\"\u003eKeine Offlinefortschritte · Automatische Sicherung aktiv\u003c/span\u003e\u003cspan class=\"sb-stats\"\u003e\u003cspan id=\"sbDocks\"\u003eRampen 0/0\u003c/span\u003e\u003cspan id=\"sbVehicles\"\u003eFahrzeuge 0\u003c/span\u003e\u003cspan id=\"sbStaff\"\u003ePersonal 0/0\u003c/span\u003e\u003cspan id=\"sbStock\"\u003eLager 0/40\u003c/span\u003e\u003cspan\u003eINDUSTRIE \u0026amp; LOGISTIK \u003cb id=\"appVersion\"\u003e0.9 · ENTWICKLUNG\u003c/b\u003e\u003c/span\u003e\u003c/span\u003e\u003c/footer\u003e\n\u003c/main\u003e\n\u003cdialog id=\"welcome\"\u003e\u003cdiv class=\"welcome-art\"\u003e\u003cdiv class=\"welcome-symbol\"\u003eil↗\u003c/div\u003e\u003cspan\u003eBAUE, WAS\u003cbr\u003eMORGEN BEWEGT.\u003c/span\u003e\u003csmall\u003eFertigung × Menschen × Materialfluss\u003c/small\u003e\u003c/div\u003e\u003cdiv class=\"welcome-body\"\u003e\u003cspan class=\"eyebrow\"\u003eWILLKOMMEN IN MORGENFELD\u003c/span\u003e\u003ch2\u003eGroße Unternehmen\u003cbr\u003efangen klein an.\u003c/h2\u003e\u003cp\u003eDeine Halle steht bereit. Baue eine Produktionslinie, stelle dein Team ein und bringe die erste Arbeitsleuchte zum Kunden.\u003c/p\u003e\u003cdiv class=\"mode-options\"\u003e\u003clabel\u003e\u003cinput type=\"radio\" name=\"mode\" value=\"guided\" checked\u003e\u003cspan\u003e\u003cb\u003eGeführter Einstieg\u003c/b\u003e\u003csmall\u003eSchritt für Schritt zum ersten Auftrag.\u003c/small\u003e\u003c/span\u003e\u003c/label\u003e\u003clabel\u003e\u003cinput type=\"radio\" name=\"mode\" value=\"economy\"\u003e\u003cspan\u003e\u003cb\u003eWirtschaftsbetrieb\u003c/b\u003e\u003csmall\u003e85.000 € Startkapital. Deine Entscheidungen.\u003c/small\u003e\u003c/span\u003e\u003c/label\u003e\u003clabel\u003e\u003cinput type=\"radio\" name=\"mode\" value=\"sandbox\"\u003e\u003cspan\u003e\u003cb\u003eFreies Bauen\u003c/b\u003e\u003csmall\u003eGroßes Budget, eigener Speicherstand.\u003c/small\u003e\u003c/span\u003e\u003c/label\u003e\u003c/div\u003e\u003cbutton class=\"primary start\" data-action=\"start\"\u003eUnternehmen gründen \u003cspan\u003e→\u003c/span\u003e\u003c/button\u003e\u003cdiv class=\"actions\"\u003e\u003cbutton id=\"welcomeBackup\" data-action=\"welcomeBackup\" hidden title=\"Letzten gültigen Stand dieses Modus wiederherstellen\"\u003eLetzte Sicherung laden\u003c/button\u003e\u003cbutton data-action=\"retryStorage\"\u003eSpeicher erneut prüfen\u003c/button\u003e\u003cbutton data-action=\"temporary\"\u003eOhne lokale Speicherung spielen\u003c/button\u003e\u003c/div\u003e\u003cp class=\"fine\"\u003eTemporärer Modus: Fortschritt vor Schließen als HTML oder JSON speichern.\u003c/p\u003e\u003cp class=\"fine\"\u003eFiktive Welt. Echte Zusammenhänge. Fortschritt nur bei aktivem Spiel.\u003c/p\u003e\u003c/div\u003e\u003c/dialog\u003e\n\u003cdialog id=\"confirm\"\u003e\u003ch2 id=\"confirmTitle\"\u003eNeues Unternehmen?\u003c/h2\u003e\u003cp id=\"confirmText\"\u003e\u003c/p\u003e\u003cdiv class=\"actions\"\u003e\u003cbutton data-action=\"confirmCancel\"\u003eAbbrechen\u003c/button\u003e\u003cbutton class=\"primary\" data-action=\"confirmOk\"\u003eBestätigen\u003c/button\u003e\u003c/div\u003e\u003c/dialog\u003e\n\u003cinput type=\"file\" id=\"importFile\" accept=\".json,application/json\" hidden\u003e\n\u003cscript id=\"embedded-save\" type=\"application/json\"\u003enull\u003c/script\u003e\n\u003cscript id=\"embedded-prefs\" type=\"application/json\"\u003enull\u003c/script\u003e\n\u003cscript id=\"portable-template\" type=\"application/json\"\u003e@@PORTABLE-TEMPLATE@@\u003c/script\u003e\n\u003c!-- Drittanbieter-Lizenz (vendor/THREE-LICENSE.txt)\nThe MIT License\n\nCopyright © 2010-2024 three.js authors\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in\nall copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\nTHE SOFTWARE.\n--\u003e\n\u003cscript id=\"portable-runtime\"\u003e@@PORTABLE-RUNTIME@@\u003c/script\u003e\n\u003cnoscript\u003eDieses Spiel benötigt JavaScript. Aktiviere JavaScript, um deinen Betrieb zu führen.\u003c/noscript\u003e\n\u003c/body\u003e\u003c/html\u003e\n"</script>
+<script id="portable-template" type="application/json">"\u003c!doctype html\u003e\n\u003chtml lang=\"de\"\u003e\n\u003chead\u003e\u003cmeta charset=\"utf-8\"\u003e\u003cmeta name=\"viewport\" content=\"width=device-width,initial-scale=1\"\u003e\u003cmeta name=\"theme-color\" content=\"#f4f6f3\"\u003e\u003cmeta name=\"description\" content=\"Baue dein Industrieunternehmen. Fertigung, Personal und Logistik in einem gemeinsamen Wirtschaftskreislauf.\"\u003e\u003ctitle\u003eIndustrie \u0026 Logistik\u003c/title\u003e\u003cstyle id=\"portable-style\"\u003e@@PORTABLE-STYLE@@\u003c/style\u003e\u003c/head\u003e\n\u003cbody\u003e\n\u003cheader class=\"topbar\"\u003e\n\u003ca class=\"brand\" href=\"#\" aria-label=\"Betriebsübersicht\"\u003e\u003cspan class=\"brandmark\"\u003eil\u003cspan\u003e↗\u003c/span\u003e\u003c/span\u003e\u003cspan class=\"brand-text\"\u003eINDUSTRIE\u003cspan class=\"brand-sub\"\u003e\u0026 LOGISTIK\u003c/span\u003e\u003c/span\u003e\u003c/a\u003e\n\u003cdiv class=\"cmd\" role=\"search\"\u003e\u003csvg class=\"cmd-icon\" viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" aria-hidden=\"true\"\u003e\u003ccircle cx=\"10.5\" cy=\"10.5\" r=\"6\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\"/\u003e\u003cpath d=\"M15 15l5 5\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\"/\u003e\u003c/svg\u003e\u003cinput id=\"cmd\" type=\"search\" autocomplete=\"off\" spellcheck=\"false\" placeholder=\"Anlage, Fahrzeug, Kennzeichen, Vertrag suchen …\" aria-label=\"Suche nach Anlagen, Fahrzeugen, Kennzeichen, Verträgen, Aufträgen und Beschäftigten (Taste /)\" aria-controls=\"cmdResults\" aria-expanded=\"false\" aria-autocomplete=\"list\"\u003e\u003ckbd class=\"cmd-key\" aria-hidden=\"true\"\u003e/\u003c/kbd\u003e\u003cdiv id=\"cmdResults\" class=\"dropdown cmd-results\" role=\"listbox\" aria-label=\"Suchtreffer\" hidden\u003e\u003c/div\u003e\u003c/div\u003e\n\u003cdiv class=\"site-pick\"\u003e\u003cbutton id=\"siteBtn\" class=\"site-label\" data-toggle=\"sites\" aria-haspopup=\"true\" aria-expanded=\"false\" aria-controls=\"siteMenu\" title=\"Standort wählen\"\u003e\u003cspan class=\"site-code\" id=\"siteCode\"\u003eWM-01\u003c/span\u003e\u003cspan class=\"site-text\"\u003e\u003cb id=\"siteName\"\u003eWerk Morgenfeld\u003c/b\u003e\u003csmall id=\"siteStatus\"\u003eRampen 0/0 · Lager 0/40\u003c/small\u003e\u003c/span\u003e\u003cspan class=\"chevron\" aria-hidden=\"true\"\u003e⌄\u003c/span\u003e\u003c/button\u003e\u003cdiv id=\"siteMenu\" class=\"dropdown site-menu\" hidden\u003e\u003cdiv id=\"siteList\" class=\"drop-list\"\u003e\u003c/div\u003e\u003cbutton class=\"drop-foot\" data-panel=\"network\"\u003eStandorte verwalten →\u003c/button\u003e\u003c/div\u003e\u003c/div\u003e\n\u003cdiv id=\"speeds\" class=\"segmented\" role=\"group\" aria-label=\"Spielgeschwindigkeit\"\u003e\u003cbutton data-speed=\"0\" title=\"Pause · Leertaste\" aria-label=\"Pause\"\u003eⅡ\u003c/button\u003e\u003cbutton data-speed=\"1\" class=\"active\" aria-label=\"Normale Geschwindigkeit\"\u003e1×\u003c/button\u003e\u003cbutton data-speed=\"4\" aria-label=\"Vierfache Geschwindigkeit\"\u003e4×\u003c/button\u003e\u003cbutton data-speed=\"12\" aria-label=\"Zwölffache Geschwindigkeit\"\u003e12×\u003c/button\u003e\u003c/div\u003e\n\u003cdiv class=\"clock\" aria-live=\"off\"\u003e\u003cspan id=\"clock\"\u003eTag 1 · 08:00\u003c/span\u003e\u003csmall\u003e\u003cspan id=\"shiftName\"\u003eTagschicht\u003c/span\u003e · \u003cspan id=\"simState\"\u003eBetrieb läuft\u003c/span\u003e\u003c/small\u003e\u003c/div\u003e\n\u003cbutton id=\"storageWarning\" class=\"unsaved\" data-panel=\"settings\" role=\"status\" hidden title=\"Temporärer Modus · NICHT GESPEICHERT · Vor Schließen als HTML oder JSON speichern.\"\u003eTemporärer Modus · NICHT GESPEICHERT · Vor Schließen als HTML oder JSON speichern.\u003c/button\u003e\n\u003cbutton class=\"cash\" data-panel=\"finance\" title=\"Unternehmensrechnung öffnen\"\u003e\u003csmall\u003eLIQUIDITÄT\u003c/small\u003e\u003cstrong id=\"cash\"\u003e85.000 €\u003c/strong\u003e\u003c/button\u003e\n\u003cdiv class=\"bell-wrap\"\u003e\u003cbutton id=\"bellBtn\" class=\"square bell\" data-toggle=\"bell\" aria-haspopup=\"true\" aria-expanded=\"false\" aria-controls=\"bellMenu\" title=\"Meldungen\" aria-label=\"Meldungen\"\u003e\u003csvg viewBox=\"0 0 24 24\" width=\"18\" height=\"18\" aria-hidden=\"true\"\u003e\u003cpath d=\"M6 16.5V11a6 6 0 0 1 12 0v5.5l1.8 1.8H4.2zM10 20.5a2 2 0 0 0 4 0\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" stroke-linejoin=\"round\"/\u003e\u003c/svg\u003e\u003cb id=\"bellCount\" class=\"bell-count\" hidden\u003e0\u003c/b\u003e\u003c/button\u003e\u003cdiv id=\"bellMenu\" class=\"dropdown bell-menu\" hidden\u003e\u003cdiv class=\"drop-head\"\u003e\u003cb\u003eMeldungen \u0026amp; Wartegründe\u003c/b\u003e\u003csmall id=\"bellSummary\"\u003eKeine Meldungen\u003c/small\u003e\u003c/div\u003e\u003cdiv id=\"bellList\" class=\"drop-list\" role=\"list\"\u003e\u003c/div\u003e\u003c/div\u003e\u003c/div\u003e\n\u003cbutton class=\"square\" data-panel=\"settings\" title=\"Einstellungen\" aria-label=\"Einstellungen\"\u003e⚙\u003c/button\u003e\n\u003c/header\u003e\n\u003cmain id=\"game\"\u003e\u003ccanvas id=\"world\" tabindex=\"0\" aria-label=\"Interaktive Betriebskarte. Baumodus über B. Gebäude alternativ in Produktionsübersicht auswählen.\"\u003e\u003c/canvas\u003e\u003cdiv class=\"scene-vignette\"\u003e\u003c/div\u003e\n\u003cnav class=\"rail\" aria-label=\"Betriebsbereiche\"\u003e\u003cbutton data-panel=\"overview\" title=\"Betriebszentrale\"\u003e\u003ci\u003e◈\u003c/i\u003e\u003cspan\u003eZentrale\u003c/span\u003e\u003c/button\u003e\u003cbutton data-action=\"build\" title=\"Baumodus · B\"\u003e\u003ci\u003e⊞\u003c/i\u003e\u003cspan\u003eBauen\u003c/span\u003e\u003c/button\u003e\u003cdiv class=\"rail-line\"\u003e\u003c/div\u003e\u003cbutton data-panel=\"production\" title=\"Fertigung\"\u003e\u003ci\u003e⚒\u003c/i\u003e\u003cspan\u003eFertigung\u003c/span\u003e\u003c/button\u003e\u003cbutton data-panel=\"inventory\" title=\"Lager \u0026 Materialfluss\"\u003e\u003ci\u003e▤\u003c/i\u003e\u003cspan\u003eLager\u003c/span\u003e\u003c/button\u003e\u003cbutton data-panel=\"purchasing\" title=\"Einkauf\"\u003e\u003ci\u003e↓\u003c/i\u003e\u003cspan\u003eEinkauf\u003c/span\u003e\u003c/button\u003e\u003cbutton data-panel=\"staff\" title=\"Personal\"\u003e\u003ci\u003e♙\u003c/i\u003e\u003cspan\u003ePersonal\u003c/span\u003e\u003c/button\u003e\u003cbutton data-panel=\"orders\" title=\"Aufträge\"\u003e\u003ci\u003e≡\u003c/i\u003e\u003cspan\u003eAufträge\u003c/span\u003e\u003c/button\u003e\u003cbutton data-panel=\"contracts\" title=\"Frachtverträge\"\u003e\u003ci\u003e§\u003c/i\u003e\u003cspan\u003eVerträge\u003c/span\u003e\u003c/button\u003e\u003cbutton data-panel=\"yard\" title=\"Hof \u0026amp; Docks\"\u003e\u003ci\u003e⇆\u003c/i\u003e\u003cspan\u003eHof\u003c/span\u003e\u003c/button\u003e\u003cbutton data-panel=\"fleet\" title=\"Transport\"\u003e\u003ci\u003e▱\u003c/i\u003e\u003cspan\u003eTransport\u003c/span\u003e\u003c/button\u003e\u003cbutton data-panel=\"finance\" title=\"Finanzen\"\u003e\u003ci\u003e€\u003c/i\u003e\u003cspan\u003eFinanzen\u003c/span\u003e\u003c/button\u003e\u003cbutton data-panel=\"research\" title=\"Entwicklung\"\u003e\u003ci\u003e⌘\u003c/i\u003e\u003cspan\u003eEntwicklung\u003c/span\u003e\u003c/button\u003e\u003cbutton data-panel=\"rules\" title=\"Regeln\"\u003e\u003ci\u003e⇄\u003c/i\u003e\u003cspan\u003eRegeln\u003c/span\u003e\u003c/button\u003e\u003cbutton data-panel=\"network\" title=\"Standorte\"\u003e\u003ci\u003e⌁\u003c/i\u003e\u003cspan\u003eStandorte\u003c/span\u003e\u003c/button\u003e\u003cbutton data-panel=\"special\" title=\"Spezialfracht\"\u003e\u003ci\u003e❄\u003c/i\u003e\u003cspan\u003eSpezial\u003c/span\u003e\u003c/button\u003e\u003cbutton data-panel=\"service\" title=\"Service\"\u003e\u003ci\u003e↶\u003c/i\u003e\u003cspan\u003eService\u003c/span\u003e\u003c/button\u003e\u003cbutton data-panel=\"history\" title=\"Chronik\"\u003e\u003ci\u003e◷\u003c/i\u003e\u003cspan\u003eChronik\u003c/span\u003e\u003c/button\u003e\u003cdiv class=\"rail-bottom\"\u003e\u003cbutton data-panel=\"help\" title=\"Handbuch\"\u003e\u003ci\u003e?\u003c/i\u003e\u003cspan\u003eHandbuch\u003c/span\u003e\u003c/button\u003e\u003c/div\u003e\u003c/nav\u003e\n\u003csection class=\"kpis hud\" aria-label=\"Kennzahlen\"\u003e\n\u003cbutton class=\"kpi\" data-panel=\"orders\" title=\"Zustellungen aller Standorte am heutigen Spieltag\"\u003e\u003csmall\u003eAUSGELIEFERT HEUTE\u003c/small\u003e\u003cstrong id=\"kpiDelivered\"\u003e0\u003c/strong\u003e\u003cspan id=\"kpiDeliveredSub\" class=\"kpi-sub\"\u003eStück · gestern 0\u003c/span\u003e\u003c/button\u003e\n\u003cbutton class=\"kpi\" data-panel=\"fleet\" title=\"Fahrzeuge des aktiven Standorts\"\u003e\u003csmall\u003eVOR ORT / UNTERWEGS\u003c/small\u003e\u003cstrong id=\"kpiVehicles\"\u003e0 / 0\u003c/strong\u003e\u003cspan id=\"kpiVehiclesSub\" class=\"kpi-sub\"\u003eKeine Fahrzeuge\u003c/span\u003e\u003c/button\u003e\n\u003cbutton class=\"kpi\" data-panel=\"finance\" title=\"Zustellungen ohne und mit Verspätungsabschlag seit Gründung\"\u003e\u003csmall\u003ePÜNKTLICHKEIT\u003c/small\u003e\u003cstrong id=\"kpiPunctual\"\u003e—\u003c/strong\u003e\u003cspan id=\"kpiPunctualSub\" class=\"kpi-sub\"\u003eNoch keine Zustellung\u003c/span\u003e\u003c/button\u003e\n\u003cbutton id=\"kpiSortedBox\" class=\"kpi kpi-opt\" data-panel=\"inventory\" title=\"Am heutigen Spieltag sortierte Pakete aller Standorte\" hidden\u003e\u003csmall\u003eVERARBEITET HEUTE\u003c/small\u003e\u003cstrong id=\"kpiSorted\"\u003e0\u003c/strong\u003e\u003cspan id=\"kpiSortedSub\" class=\"kpi-sub\"\u003ePakete sortiert\u003c/span\u003e\u003c/button\u003e\n\u003c/section\u003e\n\u003csection id=\"flow\" class=\"flow hud\" aria-label=\"Standortfluss\"\u003e\u003cheader class=\"flow-head\"\u003e\u003cdiv\u003e\u003cspan class=\"eyebrow\"\u003eSTANDORTFLUSS\u003c/span\u003e\u003cb id=\"flowSite\"\u003eWerk Morgenfeld\u003c/b\u003e\u003c/div\u003e\u003cbutton id=\"flowToggle\" class=\"flow-toggle\" data-toggle=\"flow\" aria-expanded=\"true\" aria-controls=\"flowList\" title=\"Standortfluss ein-/ausklappen\" aria-label=\"Standortfluss ein- oder ausklappen\"\u003e‹\u003c/button\u003e\u003c/header\u003e\n\u003col id=\"flowList\" class=\"flow-list\"\u003e\n\u003cli id=\"stl-gate\"\u003e\u003cbutton class=\"station\" data-station=\"gate\" id=\"st-gate\"\u003e\u003cspan class=\"st-dot\"\u003e\u003c/span\u003e\u003cspan class=\"st-text\"\u003e\u003cb\u003eTor \u0026amp; Hof\u003c/b\u003e\u003csmall id=\"st-gate-sub\"\u003e—\u003c/small\u003e\u003c/span\u003e\u003cstrong id=\"st-gate-n\"\u003e0\u003c/strong\u003e\u003c/button\u003e\u003c/li\u003e\n\u003cli id=\"stl-unload\"\u003e\u003cbutton class=\"station\" data-station=\"unload\" id=\"st-unload\"\u003e\u003cspan class=\"st-dot\"\u003e\u003c/span\u003e\u003cspan class=\"st-text\"\u003e\u003cb\u003eEntladung\u003c/b\u003e\u003csmall id=\"st-unload-sub\"\u003e—\u003c/small\u003e\u003c/span\u003e\u003cstrong id=\"st-unload-n\"\u003e0\u003c/strong\u003e\u003c/button\u003e\u003c/li\u003e\n\u003cli id=\"stl-sort\"\u003e\u003cbutton class=\"station\" data-station=\"sort\" id=\"st-sort\"\u003e\u003cspan class=\"st-dot\"\u003e\u003c/span\u003e\u003cspan class=\"st-text\"\u003e\u003cb\u003eSortierung\u003c/b\u003e\u003csmall id=\"st-sort-sub\"\u003e—\u003c/small\u003e\u003c/span\u003e\u003cstrong id=\"st-sort-n\"\u003e0\u003c/strong\u003e\u003c/button\u003e\u003c/li\u003e\n\u003cli id=\"stl-out\"\u003e\u003cbutton class=\"station\" data-station=\"out\" id=\"st-out\"\u003e\u003cspan class=\"st-dot\"\u003e\u003c/span\u003e\u003cspan class=\"st-text\"\u003e\u003cb\u003eAusgang\u003c/b\u003e\u003csmall id=\"st-out-sub\"\u003e—\u003c/small\u003e\u003c/span\u003e\u003cstrong id=\"st-out-n\"\u003e0\u003c/strong\u003e\u003c/button\u003e\u003c/li\u003e\n\u003cli id=\"stl-delivery\"\u003e\u003cbutton class=\"station\" data-station=\"delivery\" id=\"st-delivery\"\u003e\u003cspan class=\"st-dot\"\u003e\u003c/span\u003e\u003cspan class=\"st-text\"\u003e\u003cb\u003eZustellung\u003c/b\u003e\u003csmall id=\"st-delivery-sub\"\u003e—\u003c/small\u003e\u003c/span\u003e\u003cstrong id=\"st-delivery-n\"\u003e0\u003c/strong\u003e\u003c/button\u003e\u003c/li\u003e\n\u003cli id=\"stl-stock\"\u003e\u003cbutton class=\"station\" data-station=\"stock\" id=\"st-stock\"\u003e\u003cspan class=\"st-dot\"\u003e\u003c/span\u003e\u003cspan class=\"st-text\"\u003e\u003cb\u003eLager\u003c/b\u003e\u003csmall id=\"st-stock-sub\"\u003e—\u003c/small\u003e\u003c/span\u003e\u003cstrong id=\"st-stock-n\"\u003e0\u003c/strong\u003e\u003c/button\u003e\u003c/li\u003e\n\u003cli id=\"stl-inbound\" hidden\u003e\u003cbutton class=\"station\" data-station=\"inbound\" id=\"st-inbound\"\u003e\u003cspan class=\"st-dot\"\u003e\u003c/span\u003e\u003cspan class=\"st-text\"\u003e\u003cb\u003eWareneingang\u003c/b\u003e\u003csmall id=\"st-inbound-sub\"\u003e—\u003c/small\u003e\u003c/span\u003e\u003cstrong id=\"st-inbound-n\"\u003e0\u003c/strong\u003e\u003c/button\u003e\u003c/li\u003e\n\u003cli id=\"stl-production\" hidden\u003e\u003cbutton class=\"station\" data-station=\"production\" id=\"st-production\"\u003e\u003cspan class=\"st-dot\"\u003e\u003c/span\u003e\u003cspan class=\"st-text\"\u003e\u003cb\u003eFertigung\u003c/b\u003e\u003csmall id=\"st-production-sub\"\u003e—\u003c/small\u003e\u003c/span\u003e\u003cstrong id=\"st-production-n\"\u003e0\u003c/strong\u003e\u003c/button\u003e\u003c/li\u003e\n\u003cli id=\"stl-quality\" hidden\u003e\u003cbutton class=\"station\" data-station=\"quality\" id=\"st-quality\"\u003e\u003cspan class=\"st-dot\"\u003e\u003c/span\u003e\u003cspan class=\"st-text\"\u003e\u003cb\u003ePrüfung \u0026amp; Verpackung\u003c/b\u003e\u003csmall id=\"st-quality-sub\"\u003e—\u003c/small\u003e\u003c/span\u003e\u003cstrong id=\"st-quality-n\"\u003e0\u003c/strong\u003e\u003c/button\u003e\u003c/li\u003e\n\u003cli id=\"stl-service\" hidden\u003e\u003cbutton class=\"station\" data-station=\"service\" id=\"st-service\"\u003e\u003cspan class=\"st-dot\"\u003e\u003c/span\u003e\u003cspan class=\"st-text\"\u003e\u003cb\u003eRetouren \u0026amp; Service\u003c/b\u003e\u003csmall id=\"st-service-sub\"\u003e—\u003c/small\u003e\u003c/span\u003e\u003cstrong id=\"st-service-n\"\u003e0\u003c/strong\u003e\u003c/button\u003e\u003c/li\u003e\n\u003c/ol\u003e\u003c/section\u003e\n\u003cdiv class=\"view-switch hud\" role=\"group\" aria-label=\"Ansicht\"\u003e\u003cbutton data-view=\"hall\" class=\"active\"\u003eHalle\u003c/button\u003e\u003cbutton data-view=\"site\"\u003eGelände\u003c/button\u003e\u003cbutton data-view=\"network\"\u003eNetzwerk\u003c/button\u003e\u003cbutton data-view=\"flat\"\u003eGrundriss\u003c/button\u003e\u003c/div\u003e\n\u003cdiv class=\"camera-controls tools\" role=\"toolbar\" aria-label=\"Kamera und Anzeige\" aria-orientation=\"vertical\"\u003e\u003cbutton data-camera=\"plus\" aria-label=\"Vergrößern\" title=\"Vergrößern\"\u003e+\u003c/button\u003e\u003cbutton data-camera=\"minus\" aria-label=\"Verkleinern\" title=\"Verkleinern\"\u003e−\u003c/button\u003e\u003cbutton data-camera=\"rotate\" aria-label=\"Kamera drehen\" title=\"Drehen\"\u003e↻\u003c/button\u003e\u003cbutton data-camera=\"home\" aria-label=\"Kamera zentrieren\" title=\"Ansicht zurücksetzen\"\u003e⌖\u003c/button\u003e\u003cdiv id=\"labelGroup\" class=\"tool-group\" role=\"group\" aria-label=\"Beschriftungen\" hidden\u003e\u003cspan class=\"tool-sep\"\u003e\u003c/span\u003e\u003cbutton data-labels=\"fleet\" title=\"Beschriftung: Flotte\" aria-label=\"Beschriftung Flotte\"\u003eF\u003c/button\u003e\u003cbutton data-labels=\"infra\" title=\"Beschriftung: Infrastruktur\" aria-label=\"Beschriftung Infrastruktur\"\u003eI\u003c/button\u003e\u003cbutton data-labels=\"all\" class=\"active\" title=\"Beschriftung: alle\" aria-label=\"Alle Beschriftungen\"\u003eA\u003c/button\u003e\u003cbutton data-labels=\"none\" title=\"Beschriftungen aus\" aria-label=\"Beschriftungen aus\"\u003e∅\u003c/button\u003e\u003c/div\u003e\u003cspan class=\"tool-sep\"\u003e\u003c/span\u003e\u003cbutton data-toggle=\"scene\" id=\"sceneOnlyBtn\" aria-pressed=\"false\" title=\"Panels ausblenden (nur Szene)\" aria-label=\"Panels ausblenden, nur Szene zeigen\"\u003e▢\u003c/button\u003e\u003c/div\u003e\n\u003caside id=\"panel\" class=\"panel\" hidden aria-label=\"Betriebsfenster\"\u003e\u003cheader class=\"panel-head\"\u003e\u003cdiv\u003e\u003cspan class=\"eyebrow\" id=\"panelEyebrow\"\u003eBETRIEBSZENTRALE\u003c/span\u003e\u003ch2 id=\"panelTitle\"\u003eÜbersicht\u003c/h2\u003e\u003c/div\u003e\u003cbutton data-action=\"close\" class=\"close\" aria-label=\"Fenster schließen\"\u003e×\u003c/button\u003e\u003c/header\u003e\u003cdiv class=\"panel-tools\"\u003e\u003cinput id=\"search\" type=\"search\" placeholder=\"In dieser Ansicht suchen …\" aria-label=\"Ansicht durchsuchen\"\u003e\u003cbutton data-action=\"refresh\" class=\"square\" title=\"Aktualisieren\"\u003e↻\u003c/button\u003e\u003c/div\u003e\u003cdiv id=\"panelBody\" class=\"panel-body\"\u003e\u003c/div\u003e\u003c/aside\u003e\n\u003csection id=\"buildTray\" class=\"build-tray\" hidden\u003e\u003cheader\u003e\u003cdiv\u003e\u003cspan class=\"eyebrow\"\u003eBETRIEB GESTALTEN\u003c/span\u003e\u003cstrong\u003ePlatzieren. Verbinden. Produzieren.\u003c/strong\u003e\u003c/div\u003e\u003cdiv\u003e\u003cbutton data-action=\"rotateBuild\"\u003e↻ Drehen \u003ckbd\u003eR\u003c/kbd\u003e\u003c/button\u003e\u003cbutton data-action=\"endBuild\" class=\"close\"\u003e×\u003c/button\u003e\u003c/div\u003e\u003c/header\u003e\u003cdiv id=\"buildItems\" class=\"build-items\"\u003e\u003c/div\u003e\u003cfooter\u003e\u003cspan id=\"buildHint\"\u003eAnlage wählen, freie Fläche anklicken.\u003c/span\u003e\u003cspan\u003eEsc · Abbrechen\u003c/span\u003e\u003c/footer\u003e\u003c/section\u003e\n\u003csection id=\"mission\" class=\"mission hud\"\u003e\u003cspan class=\"mission-number\" id=\"missionNumber\"\u003e01\u003c/span\u003e\u003cdiv\u003e\u003cspan class=\"eyebrow\"\u003eERSTER BETRIEB\u003c/span\u003e\u003cstrong id=\"missionTitle\"\u003eEine leere Halle. Tausend Möglichkeiten.\u003c/strong\u003e\u003csmall id=\"missionText\"\u003eRichte deine erste Produktionslinie ein.\u003c/small\u003e\u003c/div\u003e\u003cbutton id=\"missionAction\" data-action=\"build\"\u003eBetrieb aufbauen \u003cspan\u003e→\u003c/span\u003e\u003c/button\u003e\u003cbutton class=\"mission-collapse\" data-action=\"hideMission\" aria-label=\"Hinweis ausblenden\"\u003e×\u003c/button\u003e\u003c/section\u003e\n\u003csection id=\"vbar\" class=\"vbar hud\" aria-label=\"Fahrzeugleiste\"\u003e\u003cheader class=\"vbar-head\"\u003e\u003cbutton id=\"vbarToggle\" class=\"vbar-toggle\" data-toggle=\"vbar\" aria-expanded=\"true\" aria-controls=\"vbarScroll\"\u003e\u003cspan class=\"eyebrow\"\u003eFAHRZEUGE\u003c/span\u003e\u003cb id=\"vbarCount\"\u003e0\u003c/b\u003e\u003cspan class=\"chevron\" aria-hidden=\"true\"\u003e⌄\u003c/span\u003e\u003c/button\u003e\u003cspan id=\"vbarSummary\"\u003eKeine Fahrzeuge\u003c/span\u003e\u003c/header\u003e\u003cdiv id=\"vbarScroll\" class=\"vbar-scroll\"\u003e\u003cdiv class=\"vrow vhead\" aria-hidden=\"true\"\u003e\u003cspan\u003eKennung\u003c/span\u003e\u003cspan\u003eTyp\u003c/span\u003e\u003cspan\u003eStandort → Ziel\u003c/span\u003e\u003cspan\u003eStatus\u003c/span\u003e\u003cspan class=\"num\"\u003eRest\u003c/span\u003e\u003c/div\u003e\u003cdiv id=\"vbarList\" class=\"vbar-list\" role=\"list\"\u003e\u003c/div\u003e\u003cp id=\"vbarEmpty\" class=\"vbar-empty\"\u003eNoch keine Fahrzeuge. Fuhrpark im Transportfenster anschaffen oder mieten.\u003c/p\u003e\u003c/div\u003e\u003c/section\u003e\n\u003cdiv id=\"toast\" role=\"status\" aria-live=\"polite\"\u003e\u003c/div\u003e\n\u003cfooter class=\"statusbar\"\u003e\u003cspan id=\"statusText\"\u003eKeine Offlinefortschritte · Automatische Sicherung aktiv\u003c/span\u003e\u003cspan class=\"sb-stats\"\u003e\u003cspan id=\"sbDocks\"\u003eRampen 0/0\u003c/span\u003e\u003cspan id=\"sbVehicles\"\u003eFahrzeuge 0\u003c/span\u003e\u003cspan id=\"sbStaff\"\u003ePersonal 0/0\u003c/span\u003e\u003cspan id=\"sbStock\"\u003eLager 0/40\u003c/span\u003e\u003cspan\u003eINDUSTRIE \u0026amp; LOGISTIK \u003cb id=\"appVersion\"\u003e0.9 · ENTWICKLUNG\u003c/b\u003e\u003c/span\u003e\u003c/span\u003e\u003c/footer\u003e\n\u003c/main\u003e\n\u003cdialog id=\"welcome\"\u003e\u003cdiv class=\"welcome-art\"\u003e\u003cdiv class=\"welcome-symbol\"\u003eil↗\u003c/div\u003e\u003cspan\u003eBAUE, WAS\u003cbr\u003eMORGEN BEWEGT.\u003c/span\u003e\u003csmall\u003eVerträge × Menschen × Materialfluss\u003c/small\u003e\u003c/div\u003e\u003cdiv class=\"welcome-body\"\u003e\u003cspan class=\"eyebrow\"\u003eWILLKOMMEN IN MORGENFELD\u003c/span\u003e\u003ch2\u003eGroße Unternehmen\u003cbr\u003efangen klein an.\u003c/h2\u003e\u003cp\u003eDein Logistikunternehmen startet mit einem leeren Depot. Baue ein Dock, stelle dein Team ein, nimm den ersten Frachtvertrag an und stelle die Pakete der Versender pünktlich zu.\u003c/p\u003e\u003cdiv class=\"mode-options\"\u003e\u003clabel\u003e\u003cinput type=\"radio\" name=\"mode\" value=\"guided\" checked\u003e\u003cspan\u003e\u003cb\u003eGeführter Einstieg\u003c/b\u003e\u003csmall\u003eSchritt für Schritt zur ersten Zustellung.\u003c/small\u003e\u003c/span\u003e\u003c/label\u003e\u003clabel\u003e\u003cinput type=\"radio\" name=\"mode\" value=\"economy\"\u003e\u003cspan\u003e\u003cb\u003eWirtschaftsbetrieb\u003c/b\u003e\u003csmall\u003e85.000 € Startkapital. Dein Depot, deine Entscheidungen.\u003c/small\u003e\u003c/span\u003e\u003c/label\u003e\u003clabel\u003e\u003cinput type=\"radio\" name=\"mode\" value=\"sandbox\"\u003e\u003cspan\u003e\u003cb\u003eFreies Bauen\u003c/b\u003e\u003csmall\u003eGroßes Budget, eigener Speicherstand.\u003c/small\u003e\u003c/span\u003e\u003c/label\u003e\u003c/div\u003e\u003cbutton class=\"primary start\" data-action=\"start\"\u003eUnternehmen gründen \u003cspan\u003e→\u003c/span\u003e\u003c/button\u003e\u003cdiv class=\"actions\"\u003e\u003cbutton id=\"welcomeBackup\" data-action=\"welcomeBackup\" hidden title=\"Letzten gültigen Stand dieses Modus wiederherstellen\"\u003eLetzte Sicherung laden\u003c/button\u003e\u003cbutton data-action=\"retryStorage\"\u003eSpeicher erneut prüfen\u003c/button\u003e\u003cbutton data-action=\"temporary\"\u003eOhne lokale Speicherung spielen\u003c/button\u003e\u003c/div\u003e\u003cp class=\"fine\"\u003eTemporärer Modus: Fortschritt vor Schließen als HTML oder JSON speichern.\u003c/p\u003e\u003cp class=\"fine\"\u003eFiktive Welt. Echte Zusammenhänge. Fortschritt nur bei aktivem Spiel.\u003c/p\u003e\u003c/div\u003e\u003c/dialog\u003e\n\u003cdialog id=\"confirm\"\u003e\u003ch2 id=\"confirmTitle\"\u003eNeues Unternehmen?\u003c/h2\u003e\u003cp id=\"confirmText\"\u003e\u003c/p\u003e\u003cdiv class=\"actions\"\u003e\u003cbutton data-action=\"confirmCancel\"\u003eAbbrechen\u003c/button\u003e\u003cbutton class=\"primary\" data-action=\"confirmOk\"\u003eBestätigen\u003c/button\u003e\u003c/div\u003e\u003c/dialog\u003e\n\u003cinput type=\"file\" id=\"importFile\" accept=\".json,application/json\" hidden\u003e\n\u003cscript id=\"embedded-save\" type=\"application/json\"\u003enull\u003c/script\u003e\n\u003cscript id=\"embedded-prefs\" type=\"application/json\"\u003enull\u003c/script\u003e\n\u003cscript id=\"portable-template\" type=\"application/json\"\u003e@@PORTABLE-TEMPLATE@@\u003c/script\u003e\n\u003c!-- Drittanbieter-Lizenz (vendor/THREE-LICENSE.txt)\nThe MIT License\n\nCopyright © 2010-2024 three.js authors\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in\nall copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\nTHE SOFTWARE.\n--\u003e\n\u003cscript id=\"portable-runtime\"\u003e@@PORTABLE-RUNTIME@@\u003c/script\u003e\n\u003cnoscript\u003eDieses Spiel benötigt JavaScript. Aktiviere JavaScript, um deinen Betrieb zu führen.\u003c/noscript\u003e\n\u003c/body\u003e\u003c/html\u003e\n"</script>
 <!-- Drittanbieter-Lizenz (vendor/THREE-LICENSE.txt)
 The MIT License
 
@@ -673,6 +673,14 @@ const {ROLES}=__modules[1];
 
 function init(s){s.workers??=[];}
 function onShift(w,t){const hour=(t%1440)/60;return w.shift==='all'||(w.shift==='night'?(hour>=16||hour<8):hour>=8&&hour<16);}
+// Arbeitsleistung (A06 W1b): gleiche Erfahrungskappe wie Fertigung (min(1.5, skill)); Müdigkeit ab 50 senkt linear
+// bis Faktor 0,8 bei 80 (ab 80 Pflichtpause). Ganzzahlig gerundet, mindestens 1 → Mengen bleiben exakt.
+// Standardkraft (skill 1, Müdigkeit ≤ 50) liefert genau base.
+const FATIGUE_SLOW=50;
+const UNLOAD_BASE=20;   // Pakete je Minute einer Standard-Lagerkraft beim Entladen (yard.js)
+const GATE_ROLE='warehouse'; // Torkontrolle: Wareneingang = Lagerkraft, keine eigene Rolle
+function workFactor(w){const skill=Math.min(1.5,Math.max(0,w?.skill??1)),f=Math.min(80,Math.max(0,w?.fatigue??0));return skill*(1-Math.max(0,f-FATIGUE_SLOW)/150);}
+function workRate(w,base){return Math.max(1,Math.round(base*workFactor(w)));}
 function createAPI(s,api){return {acquire(role,site,task){let w=s.workers.find(w=>w.task===task);if(w&&(!onShift(w,s.t)||w.training||w.relocation||w.breakRemaining>0||w.fatigue>=80||w.role!==role||w.site!==site)){w.task=null;w=null;}if(w)return w;w=s.workers.find(w=>w.role===role&&w.site===site&&!w.task&&!w.training&&!w.relocation&&!(w.breakRemaining>0)&&onShift(w,s.t)&&w.fatigue<80);if(w){w.task=task;w.activity='Unterwegs';}return w||null;},release(task){for(const w of s.workers)if(w.task===task){w.task=null;w.activity='Bereit';}}};}
 function handle(s,c,api){
  if(c.type==='hire'){if(!ROLES[c.role]||!s.sites.some(x=>x.id===(c.site||s.selectedSite)))return {ok:false,message:'Beruf oder Standort unbekannt.'};const id=api.id('worker'),r=ROLES[c.role];if(!api.book(`hire:${id}`,-r.hireCost,'personal','Einstellung '+r.name))return {ok:false,message:'Kapital reicht nicht.'};const names=['Mira','Jona','Lina','Emil','Nora','Timo','Ada','Levi'];s.workers.push({id,name:names[s.workers.length%names.length]+' '+id.split('-').at(-1),role:c.role,site:c.site||s.selectedSite,task:null,shift:'day',skill:1,fatigue:0,wage:r.wage,activity:'Bereit'});return {ok:true,id};}
@@ -684,6 +692,24 @@ function handle(s,c,api){
 }
 function step(s,api){for(const w of s.workers){if(w.relocation){w.task=null;w.activity='Standortwechsel';if(onShift(w,s.t))api.book(`wage:${w.id}:${s.t}`,-w.wage/60,'personal','Arbeitslohn',[w.id]);w.relocation.remaining--;if(w.relocation.remaining<=0){w.site=w.relocation.toSite;w.relocation=null;w.activity='Bereit';api.log('personnel',`${w.name}: Zielstandort erreicht.`,[w.id]);}continue;}if(!onShift(w,s.t)){w.task=null;w.activity='Feierabend';w.fatigue=Math.max(0,w.fatigue-0.5);continue;}api.book(`wage:${w.id}:${s.t}`,-w.wage/60,'personal','Arbeitslohn',[w.id]);if(w.fatigue>=80&&!w.breakRemaining){w.breakRemaining=30;w.task=null;}if(w.breakRemaining>0){w.breakRemaining--;w.fatigue=Math.max(0,w.fatigue-1.2);w.activity='Erholungspause';continue;}if(w.training){w.training.remaining--;w.activity='Fortbildung';if(w.training.remaining<=0){w.skill=Math.min(3,w.skill+0.25);w.training=null;api.log('personnel',`${w.name}: Fortbildung abgeschlossen.`,[w.id]);}continue;}w.fatigue=Math.max(0,Math.min(100,w.fatigue+(w.task?0.18:-0.4)));if(!w.task)w.activity='Bereit';}}
 
+/** Lesesicht für das Personalfenster (A10): aktuelle Tätigkeit inkl. Hub-Bindungen. Ändert nichts.
+ * Rückgabe {kind,text,ref}; kind ∈ unload|gate|sort|handsort|task|break|training|relocation|off|idle. */
+function describeAssignment(s,w){
+ if(!w)return null;
+ if(w.relocation)return {kind:'relocation',text:'Standortwechsel',ref:w.relocation.toSite};
+ if(w.training)return {kind:'training',text:'Fortbildung',ref:w.training.id};
+ if(w.breakRemaining>0)return {kind:'break',text:`Erholungspause (${Math.ceil(w.breakRemaining)} min)`,ref:null};
+ if(!onShift(w,s.t))return {kind:'off',text:'Feierabend',ref:null};
+ const key=w.task;if(!key)return {kind:'idle',text:'Bereit',ref:null};
+ const i=key.lastIndexOf(':'),id=i>0?key.slice(0,i):key,suffix=i>0?key.slice(i+1):'';
+ const a=(suffix==='warehouse'||suffix==='gate')?(s.yard||[]).find(x=>x.id===id):null;
+ if(a&&suffix==='warehouse')return {kind:'unload',text:`Entlädt ${a.plate} (${a.unloaded}/${a.parcels} Pakete, ${workRate(w,UNLOAD_BASE)}/min)`,ref:a.id};
+ if(a&&suffix==='gate')return {kind:'gate',text:`Torkontrolle ${a.plate}`,ref:a.id};
+ if(suffix==='sort'){const b=s.buildings.find(x=>x.id===id);if(b)return {kind:'sort',text:'Sortierplatz',ref:b.id};}
+ if(suffix==='handsort'){const site=s.sites.find(x=>x.id===id);if(site)return {kind:'handsort',text:`Handsortierung ${site.name||site.id}`,ref:site.id};}
+ return {kind:'task',text:w.activity||'Im Einsatz',ref:key};
+}
+
 function validate(s){
  const fail=text=>{throw new Error('Personaldaten beschädigt: '+text);};
  const finite=(n,min,max)=>typeof n==='number'&&Number.isFinite(n)&&n>=min&&n<=max;
@@ -694,7 +720,7 @@ function validate(s){
  }
 }
 
-return Object.freeze(Object.defineProperties({}, {"init":{enumerable:true,get:()=>init},"onShift":{enumerable:true,get:()=>onShift},"createAPI":{enumerable:true,get:()=>createAPI},"handle":{enumerable:true,get:()=>handle},"step":{enumerable:true,get:()=>step},"validate":{enumerable:true,get:()=>validate}}));
+return Object.freeze(Object.defineProperties({}, {"init":{enumerable:true,get:()=>init},"onShift":{enumerable:true,get:()=>onShift},"FATIGUE_SLOW":{enumerable:true,get:()=>FATIGUE_SLOW},"UNLOAD_BASE":{enumerable:true,get:()=>UNLOAD_BASE},"GATE_ROLE":{enumerable:true,get:()=>GATE_ROLE},"workFactor":{enumerable:true,get:()=>workFactor},"workRate":{enumerable:true,get:()=>workRate},"createAPI":{enumerable:true,get:()=>createAPI},"handle":{enumerable:true,get:()=>handle},"step":{enumerable:true,get:()=>step},"describeAssignment":{enumerable:true,get:()=>describeAssignment},"validate":{enumerable:true,get:()=>validate}}));
 })();
 // tours.js
 __modules[5]=(()=>{
@@ -960,8 +986,202 @@ const createSaveGuard = options => new SaveGuard(options);
 
 return Object.freeze(Object.defineProperties({}, {"SaveGuard":{enumerable:true,get:()=>SaveGuard},"createSaveGuard":{enumerable:true,get:()=>createSaveGuard}}));
 })();
-// accounting.js
+// storage.js
 __modules[7]=(()=>{
+
+/** Spielstandspeicher (A12, Welle 1b, QS-W0-03/11).
+ *
+ * Zwei Backends hinter einer synchron lesbaren Schnittstelle:
+ *  - 'idb':   IndexedDB (Datenbank `<prefix>`, Objektspeicher `saves` + `meta`). Werte liegen nach load()
+ *             im Speicher-Cache; get() ist synchron, write() aktualisiert den Cache sofort und schreibt in
+ *             EINER IndexedDB-Transaktion (Commit asynchron, Ergebnis über Promise/Callbacks).
+ *  - 'local': bisheriges Verhalten über localStorage (synchron, wirft bei Quota).
+ *  - 'error': IndexedDB war bereits in Gebrauch (Marker), ist jetzt aber nicht erreichbar. Kein stiller
+ *             Rückfall auf veraltete localStorage-Daten; App bleibt schreibgeschützt/temporär.
+ *
+ * Tab-Sperre (save-guard.js) und Einstellungen bleiben in localStorage. Nur der Sperrinhaber schreibt.
+ * IndexedDB ordnet readwrite-Transaktionen mit gleichem Bereich in Erzeugungsreihenfolge, auch über
+ * Verbindungen hinweg: ein nach Sperrübernahme gestartetes load() sieht alle zuvor erzeugten Schreibvorgänge.
+ *
+ * Migration: localStorage-Stände (Hauptstand, -backup, -backup-hold) werden in einer strikten Transaktion
+ * übernommen, solange der Marker `meta/migrated` fehlt (Prüfung und Schreiben atomar in derselben
+ * Transaktion → zwei gleichzeitig startende Tabs migrieren höchstens einmal). Danach Rücklesen und Vergleich.
+ * Originale bleiben bis zum nächsten Start erhalten und werden erst entfernt, wenn der Marker in IndexedDB
+ * UND der Backend-Marker in localStorage vorliegen.
+ *
+ * Notfall-Kopie: emergency(key,text) legt beim Verlassen den zuletzt geschriebenen Stand zusätzlich in
+ * localStorage ab (`<key>-emergency`, Format `<at>\n<text>`), falls ≤ emergencyLimit Zeichen. Sie wird
+ * entfernt, sobald ein Schreibvorgang desselben Schlüssels bestätigt ist. takeEmergency() liefert sie beim
+ * nächsten Start nur, wenn sie neuer ist als der IndexedDB-Datensatz.
+ */
+const SAVE_SUFFIXES=['','-backup','-backup-prev','-backup-hold'];
+const SAVE_MODES=['guided','economy','sandbox'];
+const SAVES='saves', META='meta';
+
+const request=r=>new Promise((resolve,reject)=>{r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error||new Error('IndexedDB-Anfrage fehlgeschlagen.'));});
+const done=tx=>new Promise((resolve,reject)=>{tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error||new Error('IndexedDB-Transaktion fehlgeschlagen.'));tx.onabort=()=>reject(tx.error||new Error('IndexedDB-Transaktion abgebrochen.'));});
+
+class SaveStore {
+  constructor(options={}){
+    this.prefix=options.prefix??'industrie-logistik-v1';
+    this.modes=options.modes??SAVE_MODES;
+    this.idb=options.indexedDB===undefined?(()=>{try{return globalThis.indexedDB;}catch{return undefined;}})():options.indexedDB;
+    const storage=options.storage;
+    this.ls=()=>{try{return storage===undefined?globalThis.localStorage:typeof storage==='function'?storage():storage;}catch{return null;}};
+    this.now=options.now??Date.now;
+    this.openTimeoutMs=options.openTimeoutMs??5000;
+    this.emergencyLimit=options.emergencyLimit??2400000;
+    this.onWriteError=options.onWriteError??(()=>{});
+    this.onCommit=options.onCommit??(()=>{});
+    this.dbName=options.dbName??this.prefix;
+    this.kind='pending';this.reason='';this.error=null;this.db=null;
+    this.cache=new Map();this.stamps=new Map();this.keys=new Set();this.loaded=new Set();
+    this.seq=0;this.lastAt=0;this.inflight=new Set();this.pendingKeys=new Map();this.emSeq=new Map();
+    this.migration=null;
+  }
+  get lazy(){return this.kind==='idb';}
+  get markerKey(){return this.prefix+'-backend';}
+  keysFor(mode){return SAVE_SUFFIXES.map(s=>`${this.prefix}-${mode}${s}`);}
+  readMarker(){try{return this.ls()?.getItem(this.markerKey)??null;}catch{return null;}}
+  stamp(){const t=Math.max(this.now(),this.lastAt+1);this.lastAt=t;return t;}
+  /** Öffnet das Backend einmalig. Ergebnis: 'idb' | 'local' | 'error'. */
+  open(){return this.opening??=this.doOpen();}
+  /** Erneuter Versuch nach 'error' („Speicher erneut prüfen“). */
+  retry(){if(this.kind!=='error')return Promise.resolve(this.kind);this.kind='pending';this.opening=null;this.closed=false;return this.open();}
+  async doOpen(){
+    const marker=this.readMarker();
+    const fallback=(reason,error=null)=>{this.reason=reason;this.error=error;this.kind=marker==='idb'?'error':'local';try{this.db?.close();}catch{}this.db=null;return this.kind;};
+    if(!this.idb?.open)return fallback('idb-unavailable');
+    try{this.db=await this.openDb();}catch(e){return fallback('idb-open',e);}
+    this.db.onversionchange=()=>{try{this.db.close();}catch{}this.closed=true;};
+    this.db.onclose=()=>{this.closed=true;};
+    try{await this.migrate();this.keys=new Set((await request(this.db.transaction(SAVES,'readonly').objectStore(SAVES).getAllKeys())).map(String));}
+    catch(e){return fallback('idb-migrate',e);}
+    this.kind='idb';
+    try{this.ls()?.setItem(this.markerKey,'idb');}catch{/* Marker fehlt → Originale bleiben bis zum nächsten Start. */}
+    if(this.migration?.removable)this.removeOriginals();
+    return this.kind;
+  }
+  openDb(){
+    return new Promise((resolve,reject)=>{
+      let settled=false;
+      const timer=setTimeout(()=>{if(!settled){settled=true;reject(new Error('IndexedDB antwortet nicht.'));}},this.openTimeoutMs);
+      let r;
+      try{r=this.idb.open(this.dbName,1);}catch(e){clearTimeout(timer);settled=true;reject(e);return;}
+      r.onupgradeneeded=()=>{const db=r.result;if(!db.objectStoreNames.contains(SAVES))db.createObjectStore(SAVES);if(!db.objectStoreNames.contains(META))db.createObjectStore(META);};
+      r.onsuccess=()=>{clearTimeout(timer);if(settled){try{r.result.close();}catch{}return;}settled=true;resolve(r.result);};
+      r.onerror=()=>{clearTimeout(timer);if(!settled){settled=true;reject(r.error||new Error('IndexedDB nicht verfügbar.'));}};
+      r.onblocked=()=>{/* Nur bei Versionswechsel; Zeitlimit greift. */};
+    });
+  }
+  legacy(){
+    const ls=this.ls(),found=new Map();if(!ls)return found;
+    for(const mode of this.modes)for(const key of this.keysFor(mode)){let v=null;try{v=ls.getItem(key);}catch{}if(v!==null&&v!==undefined)found.set(key,v);}
+    return found;
+  }
+  async migrate(){
+    const legacy=this.legacy(),db=this.db;
+    const tx=db.transaction([SAVES,META],'readwrite',{durability:'strict'}),saves=tx.objectStore(SAVES),meta=tx.objectStore(META);
+    let migratedNow=false,previous=null;
+    const finished=done(tx);
+    const marker=await request(meta.get('migrated'));
+    if(!marker){
+      const at=this.stamp();
+      for(const [key,value]of legacy)saves.put({value,at},key);
+      meta.put({at,keys:[...legacy.keys()]},'migrated');migratedNow=true;
+    }else previous=marker;
+    await finished;
+    if(migratedNow){
+      // Rücklesen in neuer Transaktion. Abweichung → Marker zurücknehmen, Originale bleiben, Rückfall localStorage.
+      const check=db.transaction(SAVES,'readonly').objectStore(SAVES),entries=[...legacy];
+      const rows=await Promise.all(entries.map(([key])=>request(check.get(key))));
+      const bad=entries.find(([,value],i)=>rows[i]?.value!==value);
+      if(bad){await this.dropMarker();throw new Error('Migration nicht bestätigt: '+bad[0]);}
+      this.migration={count:legacy.size,keys:[...legacy.keys()],removable:false,at:this.lastAt};
+    }else this.migration={count:0,keys:previous.keys||[],removable:legacy.size>0&&this.readMarker()==='idb',pending:legacy.size};
+  }
+  async dropMarker(){try{const tx=this.db.transaction(META,'readwrite');tx.objectStore(META).delete('migrated');await done(tx);}catch{/* best effort */}}
+  /** Originale erst ab dem zweiten Start mit bestätigtem IndexedDB-Marker entfernen. */
+  removeOriginals(){
+    const ls=this.ls();if(!ls)return 0;let n=0;
+    for(const key of this.legacy().keys()){try{ls.removeItem(key);n++;}catch{}}
+    this.migration.removed=n;return n;
+  }
+  /** Lädt Schlüssel in den Cache (nur IndexedDB). */
+  async load(keys){
+    if(this.kind!=='idb')return;
+    const os=this.db.transaction(SAVES,'readonly').objectStore(SAVES);
+    const rows=await Promise.all(keys.map(k=>request(os.get(k))));
+    keys.forEach((k,i)=>{if(this.pendingKeys.get(k))return;const rec=rows[i];this.cache.set(k,rec?.value??null);this.stamps.set(k,rec?.at??0);this.loaded.add(k);if(rec)this.keys.add(k);else this.keys.delete(k);});
+  }
+  get(key){
+    if(this.kind==='idb'){if(!this.loaded.has(key))throw new Error('Spielstand nicht geladen: '+key);return this.cache.get(key)??null;}
+    if(this.kind==='error')throw new Error('Spielstandspeicher nicht erreichbar.');
+    return this.ls().getItem(key);
+  }
+  has(key){
+    if(this.kind==='idb')return this.keys.has(key);
+    if(this.kind==='error')throw new Error('Spielstandspeicher nicht erreichbar.');
+    return this.ls().getItem(key)!==null;
+  }
+  /** Schreibt {key: text|null} gemeinsam. local: synchron, wirft bei Fehler. idb: Cache sofort, eine
+   * Transaktion; Promise<{ok,error}> verwirft nie. Fehler zusätzlich über onWriteError, Cache wird nachgeladen. */
+  write(entries){
+    const list=Object.entries(entries);
+    if(this.kind==='local'){const ls=this.ls();for(const [k,v]of list)v===null?ls.removeItem(k):ls.setItem(k,v);return Promise.resolve({ok:true});}
+    if(this.kind!=='idb')throw new Error('Spielstandspeicher nicht erreichbar.');
+    const seq=++this.seq,at=this.stamp(),keys=list.map(([k])=>k);
+    for(const [k,v]of list){if(v===null){this.cache.set(k,null);this.keys.delete(k);}else{this.cache.set(k,v);this.keys.add(k);}this.stamps.set(k,at);this.loaded.add(k);this.pendingKeys.set(k,(this.pendingKeys.get(k)||0)+1);}
+    const settle=()=>{for(const k of keys){const n=(this.pendingKeys.get(k)||1)-1;n?this.pendingKeys.set(k,n):this.pendingKeys.delete(k);}};
+    let p;
+    try{
+      if(this.closed)throw new Error('IndexedDB-Verbindung geschlossen.');
+      const tx=this.db.transaction(SAVES,'readwrite'),os=tx.objectStore(SAVES);
+      for(const [k,v]of list)v===null?os.delete(k):os.put({value:v,at},k);
+      const finished=done(tx);
+      try{tx.commit?.();}catch{/* bereits aktiv beendet */}
+      p=finished.then(()=>{settle();this.clearEmergencies(keys,seq);try{this.onCommit({seq,keys});}catch{}return {ok:true,seq};});
+    }catch(e){p=Promise.reject(e);}
+    p=p.catch(error=>{settle();this.load(keys).catch(()=>{});try{this.onWriteError({seq,keys,error});}catch{}return {ok:false,error,seq};});
+    this.inflight.add(p);p.finally(()=>this.inflight.delete(p));
+    return p;
+  }
+  get pending(){return this.inflight.size;}
+  pendingFor(key){return this.pendingKeys.get(key)||0;}
+  flush(){return Promise.all([...this.inflight]);}
+  emergencyKey(key){return key+'-emergency';}
+  /** Notfall-Kopie des zuletzt geschriebenen Stands (nur IndexedDB). true = abgelegt. */
+  emergency(key,text){
+    if(this.kind!=='idb'||typeof text!=='string')return false;
+    const ls=this.ls();if(!ls)return false;const ek=this.emergencyKey(key);
+    try{ls.removeItem(ek);}catch{return false;}
+    if(text.length>this.emergencyLimit)return false;
+    try{ls.setItem(ek,`${this.stamps.get(key)||this.stamp()}\n${text}`);this.emSeq.set(key,this.seq);return true;}
+    catch{try{ls.removeItem(ek);}catch{}return false;}
+  }
+  clearEmergencies(keys,seq){
+    for(const k of keys){const s=this.emSeq.get(k);if(s!==undefined&&s<=seq){this.emSeq.delete(k);try{this.ls()?.removeItem(this.emergencyKey(k));}catch{}}}
+  }
+  /** Beim Start (nur als Sperrinhaber, nach load): Notfall-Kopie, falls neuer als der IndexedDB-Datensatz. */
+  takeEmergency(key){
+    if(this.kind!=='idb')return null;
+    const ls=this.ls();if(!ls)return null;let raw=null;try{raw=ls.getItem(this.emergencyKey(key));}catch{return null;}
+    if(raw===null||raw===undefined)return null;
+    const nl=raw.indexOf('\n'),at=Number(raw.slice(0,nl)),value=raw.slice(nl+1);
+    if(nl<1||!Number.isFinite(at)||at<(this.stamps.get(key)||0)||value===this.cache.get(key)){this.dropEmergency(key);return null;}
+    // Wird beim nächsten bestätigten Schreiben dieses Schlüssels entfernt.
+    this.emSeq.set(key,this.seq+1);
+    return {value,at};
+  }
+  dropEmergency(key){this.emSeq.delete(key);try{this.ls()?.removeItem(this.emergencyKey(key));}catch{}}
+}
+
+const createSaveStore=options=>new SaveStore(options);
+
+return Object.freeze(Object.defineProperties({}, {"SAVE_SUFFIXES":{enumerable:true,get:()=>SAVE_SUFFIXES},"SAVE_MODES":{enumerable:true,get:()=>SAVE_MODES},"SaveStore":{enumerable:true,get:()=>SaveStore},"createSaveStore":{enumerable:true,get:()=>createSaveStore}}));
+})();
+// accounting.js
+__modules[8]=(()=>{
 
 // Reine Auswertung des gespeicherten Zustands: keine Buchungen, keine Migration.
 // Alle Beträge in Euro. Auswertung über gesamte gespeicherte Laufzeit;
@@ -1031,7 +1251,7 @@ function report(s) {
 return Object.freeze(Object.defineProperties({}, {"report":{enumerable:true,get:()=>report}}));
 })();
 // inventory.js
-__modules[8]=(()=>{
+__modules[9]=(()=>{
 const { BUILDINGS, ITEMS }=__modules[1];
 
 
@@ -1312,7 +1532,7 @@ function validate(s) {
 return Object.freeze(Object.defineProperties({}, {"batchIndex":{enumerable:true,get:()=>batchIndex},"findBatch":{enumerable:true,get:()=>findBatch},"activeBatches":{enumerable:true,get:()=>activeBatches},"siteItemBatches":{enumerable:true,get:()=>siteItemBatches},"init":{enumerable:true,get:()=>init},"handle":{enumerable:true,get:()=>handle},"step":{enumerable:true,get:()=>step},"createAPI":{enumerable:true,get:()=>createAPI},"validate":{enumerable:true,get:()=>validate}}));
 })();
 // production.js
-__modules[9]=(()=>{
+__modules[10]=(()=>{
 const {BUILDINGS,RECIPES}=__modules[1];
 
 function init(s){s.jobs??=[];}
@@ -1352,7 +1572,7 @@ function step(s,api){
 return Object.freeze(Object.defineProperties({}, {"init":{enumerable:true,get:()=>init},"handle":{enumerable:true,get:()=>handle},"step":{enumerable:true,get:()=>step}}));
 })();
 // economy.js
-__modules[10]=(()=>{
+__modules[11]=(()=>{
 const {committedQty}=__modules[5];
 const {ITEMS,BUILDINGS}=__modules[1];
 
@@ -1457,7 +1677,7 @@ function validate(s){
 return Object.freeze(Object.defineProperties({}, {"book":{enumerable:true,get:()=>book},"init":{enumerable:true,get:()=>init},"handle":{enumerable:true,get:()=>handle},"step":{enumerable:true,get:()=>step},"validate":{enumerable:true,get:()=>validate}}));
 })();
 // transport.js
-__modules[11]=(()=>{
+__modules[12]=(()=>{
 const {committedQty}=__modules[5];
 const {VEHICLES,ITEMS}=__modules[1];
 
@@ -1604,7 +1824,7 @@ function validateTransfers(s,bad){
 return Object.freeze(Object.defineProperties({}, {"init":{enumerable:true,get:()=>init},"handle":{enumerable:true,get:()=>handle},"step":{enumerable:true,get:()=>step},"validate":{enumerable:true,get:()=>validate}}));
 })();
 // management.js
-__modules[12]=(()=>{
+__modules[13]=(()=>{
 const {RESEARCH,ITEMS,VEHICLES,BUILDINGS}=__modules[1];
 const {committedQty}=__modules[5];
 
@@ -1668,7 +1888,7 @@ function validRule(s,r){if(!['reorder','dispatch','maintenance'].includes(r.kind
 return Object.freeze(Object.defineProperties({}, {"init":{enumerable:true,get:()=>init},"handle":{enumerable:true,get:()=>handle},"step":{enumerable:true,get:()=>step},"validate":{enumerable:true,get:()=>validate}}));
 })();
 // network.js
-__modules[13]=(()=>{
+__modules[14]=(()=>{
 
 /** Deterministic fictional locations. Distance units equal kilometres. */
 const LOCATIONS=[{x:0,y:0},{x:44,y:18},{x:-36,y:52},{x:78,y:-31},{x:-62,y:-44},{x:21,y:96},{x:108,y:56},{x:-102,y:13}];
@@ -1688,9 +1908,9 @@ function validate(s){if(s.sites.length>8)throw new Error('Spielstand ungültig: 
 return Object.freeze(Object.defineProperties({}, {"init":{enumerable:true,get:()=>init},"handle":{enumerable:true,get:()=>handle},"step":{enumerable:true,get:()=>step},"validate":{enumerable:true,get:()=>validate}}));
 })();
 // special.js
-__modules[14]=(()=>{
+__modules[15]=(()=>{
 const {ITEMS,BUILDINGS,VEHICLES}=__modules[1];
-const {activeBatches,findBatch}=__modules[8];
+const {activeBatches,findBatch}=__modules[9];
 
 
 function init(){}
@@ -1753,7 +1973,7 @@ function validate(s){
 return Object.freeze(Object.defineProperties({}, {"init":{enumerable:true,get:()=>init},"coolingCapacity":{enumerable:true,get:()=>coolingCapacity},"handle":{enumerable:true,get:()=>handle},"step":{enumerable:true,get:()=>step},"validate":{enumerable:true,get:()=>validate}}));
 })();
 // multimodal.js
-__modules[15]=(()=>{
+__modules[16]=(()=>{
 const {ITEMS}=__modules[1];
 const {committedQty}=__modules[5];
 
@@ -1844,7 +2064,7 @@ function validate(s){
 return Object.freeze(Object.defineProperties({}, {"FREIGHT_MODES":{enumerable:true,get:()=>FREIGHT_MODES},"init":{enumerable:true,get:()=>init},"handle":{enumerable:true,get:()=>handle},"step":{enumerable:true,get:()=>step},"validate":{enumerable:true,get:()=>validate}}));
 })();
 // customer-service.js
-__modules[16]=(()=>{
+__modules[17]=(()=>{
 
 // Auftragsbezogener Kundendienst. Ware, Rechnungen und Zahlungseingänge bleiben unverändert.
 const DURATIONS={status:15,deadline:30,complaint:20};
@@ -1931,18 +2151,19 @@ function validate(s){
 return Object.freeze(Object.defineProperties({}, {"init":{enumerable:true,get:()=>init},"handle":{enumerable:true,get:()=>handle},"step":{enumerable:true,get:()=>step},"validate":{enumerable:true,get:()=>validate}}));
 })();
 // yard.js
-__modules[17]=(()=>{
-
+__modules[18]=(()=>{
+const {workRate,UNLOAD_BASE,GATE_ROLE}=__modules[4];
 // Hof, Tor und Docks (A07). Schnittstelle: docs/SCHNITTSTELLEN-0.9-W1.md (W1-S2).
 // Fremde Lkw durchlaufen approach→gate→queue→toDock→docking→unloading→exit→gone.
 // Dock-Regel wie transport.js/tours.js/service.js: Dock frei, wenn type 'dock', enabled, condition>0 und ohne b.task.
 // Belegung b.task=arrival.id von toDock bis Ende unloading. Eigene Abläufe prüfen ebenfalls !b.task → keine Doppelbelegung.
+
 const PHASES=['approach','gate','queue','toDock','docking','unloading','exit','gone'];
 const DURATION={approach:15,gate:2,toDock:2,docking:1,exit:3};
-const UNLOAD_RATE=20;        // Pakete je Minute (vorläufig, A06 Welle 1b)
+const UNLOAD_RATE=UNLOAD_BASE; // Pakete je Minute einer Standardkraft; tatsächlich workRate(Kraft) (A06 W1b)
 const SORT_RATE=4;           // Pakete je Minute für die atRisk-Schätzung (Sortierplatz 240/h)
 const KEEP_GONE=1440;        // abgefertigte Einträge bleiben einen Spieltag im Torbuch
-const WAIT={dock:'Kein freies Dock',staff:'Keine Lagerkraft am Standort',full:'Lager voll',dockOff:'Dock außer Betrieb'};
+const WAIT={gate:'Keine Torkontrolle',dock:'Kein freies Dock',staff:'Keine Lagerkraft am Standort',full:'Lager voll',dockOff:'Dock außer Betrieb'};
 const AT_DOCK=new Set(['toDock','docking','unloading']);
 const CARRIER_A=['Talgrund','Weidenstein','Ostheiden','Kranichmoor','Lerchental','Fuchsbrunn','Eschenfurt','Moorwiesen','Hohenkamp','Silberau'];
 const CARRIER_B=['Spedition','Logistik','Transporte','Frachtdienst','Güterverkehr'];
@@ -1954,6 +2175,12 @@ function isFreeDock(b,site){return b.type==='dock'&&b.site===site&&b.enabled&&b.
 function freeDock(s,site){return s.buildings.find(b=>isFreeDock(b,site))||null;}
 
 function init(s){s.yard??=[];}
+// Torkontrolle (A06 W1b): Phase gate braucht eine Lagerkraft (Schlüssel gateKey) für DURATION.gate Arbeitsminuten.
+// a.gateDone zählt geleistete Minuten (fehlend = 0, alte Stände starten die Kontrolle neu); ohne Kraft wartet der Lkw
+// mit WAIT.gate, phaseEnd zeigt dann das frühestmögliche Ende. Bindung nur während gate.
+const gateKey=a=>`${a.id}:gate`;
+const unloadKey=a=>`${a.id}:warehouse`;
+const heldRate=(s,key)=>{const w=s.workers.find(w=>w.task===key);return w?workRate(w,UNLOAD_BASE):UNLOAD_RATE;};
 
 const pick=(api,list)=>list[Math.floor(api.random()*list.length)%list.length];
 // Größte-Reste-Verteilung: ganzzahlig, Summe exakt total, Verhältnis nach weights.
@@ -2015,7 +2242,7 @@ function due(s,a){
 }
 // Einfache Prognose: Restzeit im Hof + Warteschlange + Entladen + Sortieren.
 function updateRisk(s,a){
- const unloadRest=Math.ceil((a.parcels-a.unloaded)/UNLOAD_RATE),t=s.t;let ready;
+ const unloadRest=Math.ceil((a.parcels-a.unloaded)/heldRate(s,unloadKey(a))),t=s.t;let ready;
  const ahead=a.phase==='queue'?queueOrder(s,a.site).indexOf(a):0;
  const queueWait=ahead*Math.ceil(a.parcels/UNLOAD_RATE);
  switch(a.phase){
@@ -2044,8 +2271,16 @@ function handle(s,c,api){
 function step(s,api){
  if(!s.yard?.length)return;const t=s.t;
  for(const a of s.yard){
-  if(a.phase==='approach'&&t>=a.phaseEnd){setPhase(a,'gate',t);a.gateAt=t;}
-  else if(a.phase==='gate'&&t>=a.phaseEnd){setPhase(a,'queue',t);}
+  if(a.phase==='approach'&&t>=a.phaseEnd){setPhase(a,'gate',t);a.gateAt=t;a.gateDone=0;}
+  else if(a.phase==='gate'){
+   const worker=api.workforce.acquire(GATE_ROLE,a.site,gateKey(a));
+   if(!worker){wait(a,WAIT.gate,t);a.phaseEnd=t+DURATION.gate-(a.gateDone||0);}
+   else{
+    worker.activity=`Torkontrolle ${a.plate}`;a.waitReason=null;a.waitSince=null;
+    a.gateDone=(a.gateDone||0)+1;
+    if(a.gateDone>=DURATION.gate){api.workforce.release(gateKey(a));delete a.gateDone;setPhase(a,'queue',t);}
+   }
+  }
   else if((a.phase==='toDock'||a.phase==='docking')){
    const b=dockOf(s,a);
    if(!usable(b)){releaseDock(s,a);setPhase(a,'queue',t);api.log('yard',`${a.plate}: Dock nicht verfügbar, zurück in die Warteschlange.`,[a.id]);}
@@ -2059,7 +2294,7 @@ function step(s,api){
     if(!worker)wait(a,WAIT.staff,t);
     else{
      worker.activity=`Entlädt ${a.plate}`;
-     const r=unloadMinute(s,api,a,Math.min(UNLOAD_RATE,a.parcels-a.unloaded));
+     const r=unloadMinute(s,api,a,Math.min(workRate(worker,UNLOAD_BASE),a.parcels-a.unloaded));
      if(r.full){wait(a,WAIT.full,t);if(!r.added)api.workforce.release(`${a.id}:warehouse`);}
      else{a.waitReason=null;a.waitSince=null;}
     }
@@ -2098,6 +2333,7 @@ function validate(s){
   if(a.waitReason!==null&&typeof a.waitReason!=='string')fail('Wartegrund');
   if(typeof a.atRisk!=='boolean'||typeof a.priority!=='boolean')fail('Gefährdung');
   if(a.phase!=='approach'&&!int(a.gateAt))fail('Torzeit');
+  if(a.gateDone!==undefined&&(a.phase!=='gate'||!int(a.gateDone)||a.gateDone>=DURATION.gate))fail('Torkontrolle');
   if(!Array.isArray(a.orderIds)||a.orderIds.some(id=>!s.orders.some(o=>o.id===id)))fail('Auftragsreferenz');
   if(!Array.isArray(a.split)||!a.split.length)fail('Verteilung');
   let done=0,target=0;for(const p of a.split){if(typeof p.owner!=='string'||!int(p.target)||!int(p.done)||p.done>p.target)fail('Verteilung');done+=p.done;target+=p.target;}
@@ -2113,11 +2349,11 @@ function validate(s){
  for(const b of s.buildings)if(typeof b.task==='string'&&ids.has(b.task)&&docks.get(b.id)!==b.task)fail('Verwaiste Dockbelegung');
 }
 
-return Object.freeze(Object.defineProperties({}, {"PHASES":{enumerable:true,get:()=>PHASES},"DURATION":{enumerable:true,get:()=>DURATION},"UNLOAD_RATE":{enumerable:true,get:()=>UNLOAD_RATE},"SORT_RATE":{enumerable:true,get:()=>SORT_RATE},"KEEP_GONE":{enumerable:true,get:()=>KEEP_GONE},"WAIT":{enumerable:true,get:()=>WAIT},"isFreeDock":{enumerable:true,get:()=>isFreeDock},"freeDock":{enumerable:true,get:()=>freeDock},"init":{enumerable:true,get:()=>init},"apportion":{enumerable:true,get:()=>apportion},"schedule":{enumerable:true,get:()=>schedule},"handle":{enumerable:true,get:()=>handle},"step":{enumerable:true,get:()=>step},"validate":{enumerable:true,get:()=>validate}}));
+return Object.freeze(Object.defineProperties({}, {"PHASES":{enumerable:true,get:()=>PHASES},"DURATION":{enumerable:true,get:()=>DURATION},"UNLOAD_RATE":{enumerable:true,get:()=>UNLOAD_RATE},"SORT_RATE":{enumerable:true,get:()=>SORT_RATE},"KEEP_GONE":{enumerable:true,get:()=>KEEP_GONE},"WAIT":{enumerable:true,get:()=>WAIT},"isFreeDock":{enumerable:true,get:()=>isFreeDock},"freeDock":{enumerable:true,get:()=>freeDock},"init":{enumerable:true,get:()=>init},"gateKey":{enumerable:true,get:()=>gateKey},"unloadKey":{enumerable:true,get:()=>unloadKey},"apportion":{enumerable:true,get:()=>apportion},"schedule":{enumerable:true,get:()=>schedule},"handle":{enumerable:true,get:()=>handle},"step":{enumerable:true,get:()=>step},"validate":{enumerable:true,get:()=>validate}}));
 })();
 // contracts.js
-__modules[18]=(()=>{
-const yardApi=__modules[17];
+__modules[19]=(()=>{
+const yardApi=__modules[18];
 // Frachtverträge und Ankunftsplan (A08). Schnittstelle: docs/SCHNITTSTELLEN-0.9-W1.md, W1-S1.
 // Vertrag annehmen ist kostenlos. Geld fließt nur über die vorhandenen Pfade (Zustellung → Rechnung → Zahlung, Abschlag bei Verspätung).
 
@@ -2132,14 +2368,21 @@ const MAX_OFFERS=3,OFFER_INTERVAL=720,OFFER_PHASE=300,OFFER_VALIDITY=2880;
 // Fiktive Versender und Gebiete (anonymisiert, eigenständig erzeugt).
 const SHIPPERS=['Kranichfeld Versandhaus','Lindenstein Online-Handel','Talbrück Modeversand','Sonnhalde Haushaltswaren','Eichenrode Buchversand','Mühlbach Elektroversand','Weidenau Spielwaren','Brunnhof Gartenversand'];
 const LANES=['Nordviertel','Altstadt Süd','Am Kanal','Hügelfeld','Westring','Bachgrund','Ostpark','Lerchenhöhe','Fischerdorf','Industriegebiet Nord'];
-const ARRIVAL_MINUTES=[540,600,660,720,780,840,900,960];
+// Depot-Stufe (A02 W1b): Ankünfte 08:30–12:00, damit Tagschicht (08–16 Uhr) sortieren und zustellen kann.
+const ARRIVAL_MINUTES=[510,540,570,600,630,660,690,720];
+/** Spielwerte Depot-Stufe (A02 W1b, docs/BALANCING-0.9-W1.md). start = Startangebot, offer = Folgeangebote.
+ *  parcels: Spanne in Zehnern je Ankunft; price (offer): [Basis €, Schritt €, Schritte]; sla: start in Minuten, offer in Stunden; days: Laufzeit in Tagen. */
+const TERMS={
+ start:{minutes:[540,570],parcels:[10,13],price:15,sla:360,days:7},
+ offer:{parcels:[5,10],price:[13.5,0.25,10],sla:[5,8],days:[5,10]}
+};
 const STATUSES=['offer','active','ended'];
 
 const pick=(api,list)=>list[Math.floor(api.random()*list.length)];
 const int=(api,min,max)=>min+Math.floor(api.random()*(max-min+1));
 const cents=n=>Math.round(n*100)/100;
 
-/** Deterministisches Angebot aus api.random. small=true: Startangebot (1 Ankunft/Tag, 60–90 Pakete). */
+/** Deterministisches Angebot aus api.random. small=true: Startangebot (1 Ankunft/Tag, 100–130 Pakete). */
 function makeOffer(s,api,small=false){
  const shipper=pick(api,SHIPPERS),laneCount=small?int(api,1,2):int(api,1,3),names=[...LANES],lanes=[];
  for(let i=0;i<laneCount;i++){const name=names.splice(Math.floor(api.random()*names.length),1)[0];lanes.push({id:`lane-${i+1}`,name,distance:int(api,15,45)});}
@@ -2147,12 +2390,12 @@ function makeOffer(s,api,small=false){
  const parts=lanes.map(()=>5);let rest=20-5*lanes.length;while(rest-->0)parts[Math.floor(api.random()*parts.length)]++;
  const laneShare=parts.map(p=>p/20);
  const arrivalCount=small?1:int(api,1,2),minutes=[...ARRIVAL_MINUTES],arrivals=[];
- for(let i=0;i<arrivalCount;i++){const minute=small?pick(api,[600,660]):minutes.splice(Math.floor(api.random()*minutes.length),1)[0];arrivals.push({minute,parcels:small?int(api,6,9)*10:int(api,6,12)*10});}
+ for(let i=0;i<arrivalCount;i++){const minute=small?pick(api,TERMS.start.minutes):minutes.splice(Math.floor(api.random()*minutes.length),1)[0];arrivals.push({minute,parcels:(small?int(api,...TERMS.start.parcels):int(api,...TERMS.offer.parcels))*10});}
  arrivals.sort((a,b)=>a.minute-b.minute);
  const id=api.id('contract');
  return {id,shipper,site:s.selectedSite,status:'offer',lanes,arrivals,laneShare,
-  pricePerParcel:small?2.6:cents(2.4+int(api,0,8)*0.1),slaMinutes:small?600:int(api,8,12)*60,
-  durationDays:small?7:int(api,7,14),offeredAt:s.t,expiresAt:s.t+OFFER_VALIDITY,
+  pricePerParcel:small?TERMS.start.price:cents(TERMS.offer.price[0]+int(api,0,TERMS.offer.price[2])*TERMS.offer.price[1]),slaMinutes:small?TERMS.start.sla:int(api,...TERMS.offer.sla)*60,
+  durationDays:small?TERMS.start.days:int(api,...TERMS.offer.days),offeredAt:s.t,expiresAt:s.t+OFFER_VALIDITY,
   startT:null,endT:null,acceptedAt:null,issued:0,lastEta:null};
 }
 
@@ -2244,13 +2487,13 @@ function validate(s){
  }
 }
 
-return Object.freeze(Object.defineProperties({}, {"SCHEDULE_LEAD":{enumerable:true,get:()=>SCHEDULE_LEAD},"START_DELAY":{enumerable:true,get:()=>START_DELAY},"MAX_OFFERS":{enumerable:true,get:()=>MAX_OFFERS},"splitParcels":{enumerable:true,get:()=>splitParcels},"init":{enumerable:true,get:()=>init},"handle":{enumerable:true,get:()=>handle},"step":{enumerable:true,get:()=>step},"validate":{enumerable:true,get:()=>validate}}));
+return Object.freeze(Object.defineProperties({}, {"SCHEDULE_LEAD":{enumerable:true,get:()=>SCHEDULE_LEAD},"START_DELAY":{enumerable:true,get:()=>START_DELAY},"MAX_OFFERS":{enumerable:true,get:()=>MAX_OFFERS},"TERMS":{enumerable:true,get:()=>TERMS},"splitParcels":{enumerable:true,get:()=>splitParcels},"init":{enumerable:true,get:()=>init},"handle":{enumerable:true,get:()=>handle},"step":{enumerable:true,get:()=>step},"validate":{enumerable:true,get:()=>validate}}));
 })();
 // sorting.js
-__modules[19]=(()=>{
+__modules[20]=(()=>{
 const {BUILDINGS}=__modules[1];
-const {siteItemBatches}=__modules[8];
-const {onShift}=__modules[4];
+const {siteItemBatches}=__modules[9];
+const {onShift, workRate}=__modules[4];
 // Entladung → Sortierung (A05, W1-S3, docs/SCHNITTSTELLEN-0.9-W1.md).
 // Pakete (item 'parcel') in location 'inbound' wandern je Auftrag (owner bleibt) nach 'stock' und sind erst dann
 // per dispatch/tour reservierbar (inventory eligible: nur stock, nur owner=Auftrag). Ware bucht nur inventory.js.
@@ -2280,7 +2523,7 @@ function inbound(s, site) {
   return out;
 }
 
-// Entladen hat Vorrang (A01): Fremd-Lkw in docking/unloading ohne gebundene Lagerkraft (yard-Schlüssel
+// Entladen und Torkontrolle haben Vorrang (A01/A06): Fremd-Lkw in gate ohne Torkraft bzw. docking/unloading ohne gebundene Lagerkraft (yard-Schlüssel
 // `${arrival.id}:warehouse`). So viele freie Lagerkräfte bleiben fürs Entladen reserviert; reicht das nicht, geben
 // Sortierbindungen ihre Person ab (zuerst Handsortierung, dann Sortierplätze von hinten). yard.step läuft vor
 // sorting.step und bindet die freigegebene Person in der nächsten Minute.
@@ -2288,7 +2531,10 @@ function unloadNeed(s, site) {
   if (!s.yard?.length) return 0;
   let n = 0;
   for (const a of s.yard) {
-    if (a.site !== site || (a.phase !== 'docking' && a.phase !== 'unloading') || a.unloaded >= a.parcels) continue;
+    if (a.site !== site) continue;
+    // Torkontrolle (A06 W1b, yard-Schlüssel `${arrival.id}:gate`) hat denselben Vorrang wie das Entladen.
+    if (a.phase === 'gate') { if (!s.workers.some(w => w.task === `${a.id}:gate`)) n++; continue; }
+    if ((a.phase !== 'docking' && a.phase !== 'unloading') || a.unloaded >= a.parcels) continue;
     const key = `${a.id}:warehouse`;
     if (!s.workers.some(w => w.task === key) && s.buildings.some(b => b.id === a.dock && b.enabled && b.condition > 0)) n++;
   }
@@ -2380,7 +2626,7 @@ function step(s, api) {
     if (active || !cand.length || ci >= cand.length) { api.workforce.release(handKey(id)); st.hand = active ? 'off' : 'idle'; continue; }
     const w = grab(id, handKey(id));
     if (!w) { st.hand = 'staff'; continue; }
-    const moved = take(HAND_RATE);
+    const moved = take(workRate(w, HAND_RATE)); // Standardkraft = HAND_RATE, Erfahrung bis ×1,5 (A06 W1b)
     st.hand = blocked && !moved ? 'storage' : 'working';
     w.activity = 'Handsortierung';
   }
@@ -2410,7 +2656,7 @@ function validate(s) {
 return Object.freeze(Object.defineProperties({}, {"ITEM":{enumerable:true,get:()=>ITEM},"HAND_RATE":{enumerable:true,get:()=>HAND_RATE},"handKey":{enumerable:true,get:()=>handKey},"sorterKey":{enumerable:true,get:()=>sorterKey},"handle":{enumerable:true,get:()=>handle},"step":{enumerable:true,get:()=>step},"summary":{enumerable:true,get:()=>summary},"validate":{enumerable:true,get:()=>validate}}));
 })();
 // world.js
-__modules[20]=(()=>{
+__modules[21]=(()=>{
 const { BUILDINGS }=__modules[1];
 
 function footprint(b){const d=BUILDINGS[b.type];if(!d)return null;return b.rotation%180?{w:d.h||1,h:d.w||1}:{w:d.w||1,h:d.h||1};}
@@ -2432,25 +2678,25 @@ function reachable(s,siteId,buildings=s.buildings,checkPower=true){
 return Object.freeze(Object.defineProperties({}, {"footprint":{enumerable:true,get:()=>footprint},"reachable":{enumerable:true,get:()=>reachable}}));
 })();
 // core.js
-__modules[21]=(()=>{
-const inventory=__modules[8];
+__modules[22]=(()=>{
+const inventory=__modules[9];
 const workforce=__modules[4];
-const production=__modules[9];
-const economy=__modules[10];
-const transport=__modules[11];
-const management=__modules[12];
+const production=__modules[10];
+const economy=__modules[11];
+const transport=__modules[12];
+const management=__modules[13];
 const service=__modules[3];
-const network=__modules[13];
+const network=__modules[14];
 const tours=__modules[5];
-const special=__modules[14];
-const multimodal=__modules[15];
+const special=__modules[15];
+const multimodal=__modules[16];
 const rental=__modules[2];
-const customerService=__modules[16];
-const contracts=__modules[18];
-const yard=__modules[17];
-const sorting=__modules[19];
+const customerService=__modules[17];
+const contracts=__modules[19];
+const yard=__modules[18];
+const sorting=__modules[20];
 const { BUILDINGS, ITEMS, RECIPES, VEHICLES, ROLES }=__modules[1];
-const { reachable, footprint }=__modules[20];
+const { reachable, footprint }=__modules[21];
 
 
 
@@ -2470,6 +2716,14 @@ const { reachable, footprint }=__modules[20];
 
 
 const MODULES=[inventory,workforce,economy,transport,production,management,service,network,tours,special,multimodal,rental,customerService,contracts,yard,sorting];
+/** Ladegrenzen (A12, W1b). Text: 30 Mio. Zeichen. Listen: 100.000, `batches` 1.000.000 – Chargen wachsen im großen
+ * Szenario um ≈ 650–1.770 je Spieltag und erreichten 100.000 nach ≈ 55 Tagen (PERF-SIM-0.9). Bei ≈ 210 Zeichen je Charge
+ * greift für batches praktisch zuerst die Textgrenze (≈ 140.000 Chargen); die App warnt ab 60 % und speichert nichts,
+ * was nicht mehr ladbar wäre. Dauerhafte Abhilfe: Kompaktierung alter Nullchargen (A05/A03). */
+const SAVE_LIMITS=Object.freeze({chars:30000000,list:100000,lists:Object.freeze({batches:1000000})});
+const listLimit=k=>SAVE_LIMITS.lists[k]??SAVE_LIMITS.list;
+/** Höchste Auslastung einer Ladegrenze (0…1+) für Größenwarnung und Speicherverweigerung. */
+function saveHeadroom(state,chars=0){let ratio=chars/SAVE_LIMITS.chars,limit='chars';for(const k of ARRAYS){const r=(state?.[k]?.length||0)/listLimit(k);if(r>ratio){ratio=r;limit=k;}}return {ratio,limit};}
 const ARRAYS=['sites','buildings','workers','batches','reservations','jobs','purchases','orders','vehicles','shipments','ledger','events','research','rules','returns','milestones','transfers','tours','freights','tickets','contracts','yard'];
 const clone=x=>JSON.parse(JSON.stringify(x));
 const fail=m=>{throw new Error('Spielstand ungültig: '+m);};
@@ -2499,7 +2753,7 @@ function validateState(s){
  if(!s||typeof s!=='object'||Array.isArray(s))fail('Zustand fehlt.');
  if(s.schema!==1)fail('Speicherformat nicht unterstützt.');
  if(!['guided','economy','sandbox'].includes(s.mode))fail('Spielmodus fehlt.');
- for(const k of ARRAYS)if(!Array.isArray(s[k])||s[k].length>100000)fail(k+' fehlt oder zu groß.');
+ for(const k of ARRAYS)if(!Array.isArray(s[k])||s[k].length>listLimit(k))fail(k+' fehlt oder zu groß.');
  if(!Number.isSafeInteger(s.t)||s.t<480||!Number.isSafeInteger(s.seq)||s.seq<1||!Number.isSafeInteger(s.seed)||s.seed<0||s.seed>4294967295||!finite(s.money)||!finite(s.reputation,0,100))fail('Grundwerte beschädigt.');
  if(!s.settings||typeof s.settings.incidents!=='boolean'||!s.stats||!['produced','delivered','revenue','costs'].every(k=>finite(s.stats[k],0)))fail('Einstellungen oder Statistik beschädigt.');
  // Reject non-finite values and prototype-shaped keys anywhere, including extensions.
@@ -2566,18 +2820,20 @@ class Simulation{
  }
  step(minutes=1){if(!Number.isInteger(minutes)||minutes<0||minutes>100000)throw new Error('Spielschritte müssen ganze Minuten sein.');for(let n=0;n<minutes;n++){this.state.t++;for(const mod of MODULES)mod.step?.(this.state,this.api);}return this.state;}
  serialize(){return JSON.stringify(this.state);}
- static fromJSON(text){if(typeof text!=='string'||text.length>30000000)throw new Error('Spielstand fehlt oder zu groß.');let state;try{state=JSON.parse(text);}catch{throw new Error('Spielstand enthält ungültiges JSON.');}migrate(state);validateState(state);const sim=Object.create(Simulation.prototype);sim.state=state;sim.makeAPI();lastValidText=text;return sim;}
+ static fromJSON(text){if(typeof text!=='string'||text.length>SAVE_LIMITS.chars)throw new Error('Spielstand fehlt oder zu groß.');let state;try{state=JSON.parse(text);}catch{throw new Error('Spielstand enthält ungültiges JSON.');}migrate(state);validateState(state);const sim=Object.create(Simulation.prototype);sim.state=state;sim.makeAPI();lastValidText=text;return sim;}
  /** true, wenn genau dieser Text zuletzt fehlerfrei durch fromJSON geladen wurde. Spart der Speicherroutine eine erneute Vollvalidierung. */
+ static get LIMITS(){return SAVE_LIMITS;}
+ static headroom(state,chars){return saveHeadroom(state,chars);}
  static wasValidated(text){return typeof text==='string'&&text===lastValidText;}
  forecast(minutes,commands=[]){const sim=Simulation.fromJSON(this.serialize());for(const c of commands){const r=sim.command(clone(c));if(!r.ok)throw new Error(r.message);}sim.step(minutes);return sim.state;}
 }
 
-return Object.freeze(Object.defineProperties({}, {"SCHEMA":{enumerable:true,get:()=>SCHEMA},"MIGRATIONS":{enumerable:true,get:()=>MIGRATIONS},"migrate":{enumerable:true,get:()=>migrate},"validateState":{enumerable:true,get:()=>validateState},"Simulation":{enumerable:true,get:()=>Simulation}}));
+return Object.freeze(Object.defineProperties({}, {"SAVE_LIMITS":{enumerable:true,get:()=>SAVE_LIMITS},"saveHeadroom":{enumerable:true,get:()=>saveHeadroom},"SCHEMA":{enumerable:true,get:()=>SCHEMA},"MIGRATIONS":{enumerable:true,get:()=>MIGRATIONS},"migrate":{enumerable:true,get:()=>migrate},"validateState":{enumerable:true,get:()=>validateState},"Simulation":{enumerable:true,get:()=>Simulation}}));
 })();
 // scene.js
-__modules[22]=(()=>{
+__modules[23]=(()=>{
 const { BUILDINGS, VEHICLES, ITEMS }=__modules[1];
-const { reachable }=__modules[20];
+const { reachable }=__modules[21];
 
 
 
@@ -2682,7 +2938,7 @@ class Scene {
 return Object.freeze(Object.defineProperties({}, {"vehicleActivity":{enumerable:true,get:()=>vehicleActivity},"coldWarnings":{enumerable:true,get:()=>coldWarnings},"vehicleAtSite":{enumerable:true,get:()=>vehicleAtSite},"Scene":{enumerable:true,get:()=>Scene}}));
 })();
 // vendor/three.module.min.js
-__modules[23]=(function(){
+__modules[24]=(function(){
 /**
  * @license
  * Copyright 2010-2024 Three.js Authors
@@ -2692,11 +2948,11 @@ const t="170",e={LEFT:0,MIDDLE:1,RIGHT:2,ROTATE:0,DOLLY:1,PAN:2},n={ROTATE:0,PAN
 return Object.freeze(Object.defineProperties({}, {"ACESFilmicToneMapping":{enumerable:true,get:()=>et},"AddEquation":{enumerable:true,get:()=>y},"AddOperation":{enumerable:true,get:()=>J},"AdditiveAnimationBlendMode":{enumerable:true,get:()=>ze},"AdditiveBlending":{enumerable:true,get:()=>g},"AgXToneMapping":{enumerable:true,get:()=>it},"AlphaFormat":{enumerable:true,get:()=>Bt},"AlwaysCompare":{enumerable:true,get:()=>Tn},"AlwaysDepth":{enumerable:true,get:()=>V},"AlwaysStencilFunc":{enumerable:true,get:()=>gn},"AmbientLight":{enumerable:true,get:()=>fp},"AnimationAction":{enumerable:true,get:()=>rm},"AnimationClip":{enumerable:true,get:()=>zd},"AnimationLoader":{enumerable:true,get:()=>Yd},"AnimationMixer":{enumerable:true,get:()=>am},"AnimationObjectGroup":{enumerable:true,get:()=>im},"AnimationUtils":{enumerable:true,get:()=>Ed},"ArcCurve":{enumerable:true,get:()=>Wh},"ArrayCamera":{enumerable:true,get:()=>Xl},"ArrowHelper":{enumerable:true,get:()=>Qm},"AttachedBindMode":{enumerable:true,get:()=>st},"Audio":{enumerable:true,get:()=>Hp},"AudioAnalyser":{enumerable:true,get:()=>Yp},"AudioContext":{enumerable:true,get:()=>Cp},"AudioListener":{enumerable:true,get:()=>Vp},"AudioLoader":{enumerable:true,get:()=>Ip},"AxesHelper":{enumerable:true,get:()=>tf},"BackSide":{enumerable:true,get:()=>d},"BasicDepthPacking":{enumerable:true,get:()=>Ge},"BasicShadowMap":{enumerable:true,get:()=>o},"BatchedMesh":{enumerable:true,get:()=>mh},"Bone":{enumerable:true,get:()=>Fc},"BooleanKeyframeTrack":{enumerable:true,get:()=>Ld},"Box2":{enumerable:true,get:()=>ym},"Box3":{enumerable:true,get:()=>Li},"Box3Helper":{enumerable:true,get:()=>Ym},"BoxGeometry":{enumerable:true,get:()=>ks},"BoxHelper":{enumerable:true,get:()=>qm},"BufferAttribute":{enumerable:true,get:()=>cs},"BufferGeometry":{enumerable:true,get:()=>Es},"BufferGeometryLoader":{enumerable:true,get:()=>Sp},"ByteType":{enumerable:true,get:()=>At},"Cache":{enumerable:true,get:()=>Vd},"Camera":{enumerable:true,get:()=>js},"CameraHelper":{enumerable:true,get:()=>Wm},"CanvasTexture":{enumerable:true,get:()=>Vh},"CapsuleGeometry":{enumerable:true,get:()=>uu},"CatmullRomCurve3":{enumerable:true,get:()=>Jh},"CineonToneMapping":{enumerable:true,get:()=>tt},"CircleGeometry":{enumerable:true,get:()=>du},"ClampToEdgeWrapping":{enumerable:true,get:()=>mt},"Clock":{enumerable:true,get:()=>Np},"Color":{enumerable:true,get:()=>Kr},"ColorKeyframeTrack":{enumerable:true,get:()=>Ud},"ColorManagement":{enumerable:true,get:()=>ai},"CompressedArrayTexture":{enumerable:true,get:()=>zh},"CompressedCubeTexture":{enumerable:true,get:()=>kh},"CompressedTexture":{enumerable:true,get:()=>Bh},"CompressedTextureLoader":{enumerable:true,get:()=>Zd},"ConeGeometry":{enumerable:true,get:()=>mu},"ConstantAlphaFactor":{enumerable:true,get:()=>B},"ConstantColorFactor":{enumerable:true,get:()=>O},"Controls":{enumerable:true,get:()=>nf},"CubeCamera":{enumerable:true,get:()=>$s},"CubeReflectionMapping":{enumerable:true,get:()=>lt},"CubeRefractionMapping":{enumerable:true,get:()=>ct},"CubeTexture":{enumerable:true,get:()=>Qs},"CubeTextureLoader":{enumerable:true,get:()=>Kd},"CubeUVReflectionMapping":{enumerable:true,get:()=>dt},"CubicBezierCurve":{enumerable:true,get:()=>tu},"CubicBezierCurve3":{enumerable:true,get:()=>eu},"CubicInterpolant":{enumerable:true,get:()=>Rd},"CullFaceBack":{enumerable:true,get:()=>r},"CullFaceFront":{enumerable:true,get:()=>s},"CullFaceFrontBack":{enumerable:true,get:()=>a},"CullFaceNone":{enumerable:true,get:()=>i},"Curve":{enumerable:true,get:()=>Hh},"CurvePath":{enumerable:true,get:()=>lu},"CustomBlending":{enumerable:true,get:()=>x},"CustomToneMapping":{enumerable:true,get:()=>nt},"CylinderGeometry":{enumerable:true,get:()=>pu},"Cylindrical":{enumerable:true,get:()=>vm},"Data3DTexture":{enumerable:true,get:()=>Ei},"DataArrayTexture":{enumerable:true,get:()=>Ti},"DataTexture":{enumerable:true,get:()=>Bc},"DataTextureLoader":{enumerable:true,get:()=>$d},"DataUtils":{enumerable:true,get:()=>as},"DecrementStencilOp":{enumerable:true,get:()=>sn},"DecrementWrapStencilOp":{enumerable:true,get:()=>on},"DefaultLoadingManager":{enumerable:true,get:()=>Gd},"DepthFormat":{enumerable:true,get:()=>Gt},"DepthStencilFormat":{enumerable:true,get:()=>Wt},"DepthTexture":{enumerable:true,get:()=>Ya},"DetachedBindMode":{enumerable:true,get:()=>at},"DirectionalLight":{enumerable:true,get:()=>mp},"DirectionalLightHelper":{enumerable:true,get:()=>Vm},"DiscreteInterpolant":{enumerable:true,get:()=>Id},"DodecahedronGeometry":{enumerable:true,get:()=>gu},"DoubleSide":{enumerable:true,get:()=>p},"DstAlphaFactor":{enumerable:true,get:()=>P},"DstColorFactor":{enumerable:true,get:()=>U},"DynamicCopyUsage":{enumerable:true,get:()=>Ln},"DynamicDrawUsage":{enumerable:true,get:()=>En},"DynamicReadUsage":{enumerable:true,get:()=>Cn},"EdgesGeometry":{enumerable:true,get:()=>Mu},"EllipseCurve":{enumerable:true,get:()=>Gh},"EqualCompare":{enumerable:true,get:()=>xn},"EqualDepth":{enumerable:true,get:()=>W},"EqualStencilFunc":{enumerable:true,get:()=>un},"EquirectangularReflectionMapping":{enumerable:true,get:()=>ht},"EquirectangularRefractionMapping":{enumerable:true,get:()=>ut},"Euler":{enumerable:true,get:()=>fr},"EventDispatcher":{enumerable:true,get:()=>Bn},"ExtrudeGeometry":{enumerable:true,get:()=>Ku},"FileLoader":{enumerable:true,get:()=>qd},"Float16BufferAttribute":{enumerable:true,get:()=>vs},"Float32BufferAttribute":{enumerable:true,get:()=>_s},"FloatType":{enumerable:true,get:()=>Lt},"Fog":{enumerable:true,get:()=>ic},"FogExp2":{enumerable:true,get:()=>nc},"FramebufferTexture":{enumerable:true,get:()=>Fh},"FrontSide":{enumerable:true,get:()=>u},"Frustum":{enumerable:true,get:()=>oa},"GLBufferAttribute":{enumerable:true,get:()=>um},"GLSL1":{enumerable:true,get:()=>Dn},"GLSL3":{enumerable:true,get:()=>Nn},"GreaterCompare":{enumerable:true,get:()=>Mn},"GreaterDepth":{enumerable:true,get:()=>j},"GreaterEqualCompare":{enumerable:true,get:()=>bn},"GreaterEqualDepth":{enumerable:true,get:()=>X},"GreaterEqualStencilFunc":{enumerable:true,get:()=>fn},"GreaterStencilFunc":{enumerable:true,get:()=>pn},"GridHelper":{enumerable:true,get:()=>Om},"Group":{enumerable:true,get:()=>jl},"HalfFloatType":{enumerable:true,get:()=>Ut},"HemisphereLight":{enumerable:true,get:()=>ep},"HemisphereLightHelper":{enumerable:true,get:()=>Nm},"IcosahedronGeometry":{enumerable:true,get:()=>Qu},"ImageBitmapLoader":{enumerable:true,get:()=>Ap},"ImageLoader":{enumerable:true,get:()=>Jd},"ImageUtils":{enumerable:true,get:()=>fi},"IncrementStencilOp":{enumerable:true,get:()=>rn},"IncrementWrapStencilOp":{enumerable:true,get:()=>an},"InstancedBufferAttribute":{enumerable:true,get:()=>Hc},"InstancedBufferGeometry":{enumerable:true,get:()=>Mp},"InstancedInterleavedBuffer":{enumerable:true,get:()=>hm},"InstancedMesh":{enumerable:true,get:()=>Jc},"Int16BufferAttribute":{enumerable:true,get:()=>ps},"Int32BufferAttribute":{enumerable:true,get:()=>fs},"Int8BufferAttribute":{enumerable:true,get:()=>hs},"IntType":{enumerable:true,get:()=>It},"InterleavedBuffer":{enumerable:true,get:()=>sc},"InterleavedBufferAttribute":{enumerable:true,get:()=>oc},"Interpolant":{enumerable:true,get:()=>Ad},"InterpolateDiscrete":{enumerable:true,get:()=>Le},"InterpolateLinear":{enumerable:true,get:()=>Ue},"InterpolateSmooth":{enumerable:true,get:()=>De},"InvertStencilOp":{enumerable:true,get:()=>ln},"KeepStencilOp":{enumerable:true,get:()=>en},"KeyframeTrack":{enumerable:true,get:()=>Pd},"LOD":{enumerable:true,get:()=>Ec},"LatheGeometry":{enumerable:true,get:()=>hu},"Layers":{enumerable:true,get:()=>gr},"LessCompare":{enumerable:true,get:()=>_n},"LessDepth":{enumerable:true,get:()=>H},"LessEqualCompare":{enumerable:true,get:()=>yn},"LessEqualDepth":{enumerable:true,get:()=>G},"LessEqualStencilFunc":{enumerable:true,get:()=>dn},"LessStencilFunc":{enumerable:true,get:()=>hn},"Light":{enumerable:true,get:()=>tp},"LightProbe":{enumerable:true,get:()=>_p},"Line":{enumerable:true,get:()=>bh},"Line3":{enumerable:true,get:()=>bm},"LineBasicMaterial":{enumerable:true,get:()=>fh},"LineCurve":{enumerable:true,get:()=>nu},"LineCurve3":{enumerable:true,get:()=>iu},"LineDashedMaterial":{enumerable:true,get:()=>yd},"LineLoop":{enumerable:true,get:()=>Rh},"LineSegments":{enumerable:true,get:()=>Ah},"LinearFilter":{enumerable:true,get:()=>Mt},"LinearInterpolant":{enumerable:true,get:()=>Cd},"LinearMipMapLinearFilter":{enumerable:true,get:()=>wt},"LinearMipMapNearestFilter":{enumerable:true,get:()=>bt},"LinearMipmapLinearFilter":{enumerable:true,get:()=>Tt},"LinearMipmapNearestFilter":{enumerable:true,get:()=>St},"LinearSRGBColorSpace":{enumerable:true,get:()=>Ke},"LinearToneMapping":{enumerable:true,get:()=>$},"LinearTransfer":{enumerable:true,get:()=>$e},"Loader":{enumerable:true,get:()=>Wd},"LoaderUtils":{enumerable:true,get:()=>yp},"LoadingManager":{enumerable:true,get:()=>Hd},"LoopOnce":{enumerable:true,get:()=>Ce},"LoopPingPong":{enumerable:true,get:()=>Pe},"LoopRepeat":{enumerable:true,get:()=>Ie},"LuminanceAlphaFormat":{enumerable:true,get:()=>Ht},"LuminanceFormat":{enumerable:true,get:()=>Vt},"MOUSE":{enumerable:true,get:()=>e},"Material":{enumerable:true,get:()=>ts},"MaterialLoader":{enumerable:true,get:()=>xp},"MathUtils":{enumerable:true,get:()=>Zn},"Matrix2":{enumerable:true,get:()=>_m},"Matrix3":{enumerable:true,get:()=>Kn},"Matrix4":{enumerable:true,get:()=>sr},"MaxEquation":{enumerable:true,get:()=>T},"Mesh":{enumerable:true,get:()=>Bs},"MeshBasicMaterial":{enumerable:true,get:()=>es},"MeshDepthMaterial":{enumerable:true,get:()=>Ol},"MeshDistanceMaterial":{enumerable:true,get:()=>Fl},"MeshLambertMaterial":{enumerable:true,get:()=>_d},"MeshMatcapMaterial":{enumerable:true,get:()=>xd},"MeshNormalMaterial":{enumerable:true,get:()=>vd},"MeshPhongMaterial":{enumerable:true,get:()=>fd},"MeshPhysicalMaterial":{enumerable:true,get:()=>md},"MeshStandardMaterial":{enumerable:true,get:()=>pd},"MeshToonMaterial":{enumerable:true,get:()=>gd},"MinEquation":{enumerable:true,get:()=>b},"MirroredRepeatWrapping":{enumerable:true,get:()=>ft},"MixOperation":{enumerable:true,get:()=>Z},"MultiplyBlending":{enumerable:true,get:()=>_},"MultiplyOperation":{enumerable:true,get:()=>Y},"NearestFilter":{enumerable:true,get:()=>gt},"NearestMipMapLinearFilter":{enumerable:true,get:()=>yt},"NearestMipMapNearestFilter":{enumerable:true,get:()=>_t},"NearestMipmapLinearFilter":{enumerable:true,get:()=>xt},"NearestMipmapNearestFilter":{enumerable:true,get:()=>vt},"NeutralToneMapping":{enumerable:true,get:()=>rt},"NeverCompare":{enumerable:true,get:()=>vn},"NeverDepth":{enumerable:true,get:()=>k},"NeverStencilFunc":{enumerable:true,get:()=>cn},"NoBlending":{enumerable:true,get:()=>m},"NoColorSpace":{enumerable:true,get:()=>Ze},"NoToneMapping":{enumerable:true,get:()=>K},"NormalAnimationBlendMode":{enumerable:true,get:()=>Be},"NormalBlending":{enumerable:true,get:()=>f},"NotEqualCompare":{enumerable:true,get:()=>Sn},"NotEqualDepth":{enumerable:true,get:()=>q},"NotEqualStencilFunc":{enumerable:true,get:()=>mn},"NumberKeyframeTrack":{enumerable:true,get:()=>Dd},"Object3D":{enumerable:true,get:()=>Lr},"ObjectLoader":{enumerable:true,get:()=>bp},"ObjectSpaceNormalMap":{enumerable:true,get:()=>Ye},"OctahedronGeometry":{enumerable:true,get:()=>td},"OneFactor":{enumerable:true,get:()=>E},"OneMinusConstantAlphaFactor":{enumerable:true,get:()=>z},"OneMinusConstantColorFactor":{enumerable:true,get:()=>F},"OneMinusDstAlphaFactor":{enumerable:true,get:()=>L},"OneMinusDstColorFactor":{enumerable:true,get:()=>D},"OneMinusSrcAlphaFactor":{enumerable:true,get:()=>I},"OneMinusSrcColorFactor":{enumerable:true,get:()=>R},"OrthographicCamera":{enumerable:true,get:()=>ba},"PCFShadowMap":{enumerable:true,get:()=>l},"PCFSoftShadowMap":{enumerable:true,get:()=>c},"PMREMGenerator":{enumerable:true,get:()=>Na},"Path":{enumerable:true,get:()=>cu},"PerspectiveCamera":{enumerable:true,get:()=>Js},"Plane":{enumerable:true,get:()=>ra},"PlaneGeometry":{enumerable:true,get:()=>ha},"PlaneHelper":{enumerable:true,get:()=>Zm},"PointLight":{enumerable:true,get:()=>dp},"PointLightHelper":{enumerable:true,get:()=>Pm},"Points":{enumerable:true,get:()=>Dh},"PointsMaterial":{enumerable:true,get:()=>Ch},"PolarGridHelper":{enumerable:true,get:()=>Fm},"PolyhedronGeometry":{enumerable:true,get:()=>fu},"PositionalAudio":{enumerable:true,get:()=>qp},"PropertyBinding":{enumerable:true,get:()=>nm},"PropertyMixer":{enumerable:true,get:()=>Zp},"QuadraticBezierCurve":{enumerable:true,get:()=>ru},"QuadraticBezierCurve3":{enumerable:true,get:()=>su},"Quaternion":{enumerable:true,get:()=>Ri},"QuaternionKeyframeTrack":{enumerable:true,get:()=>Od},"QuaternionLinearInterpolant":{enumerable:true,get:()=>Nd},"RED_GREEN_RGTC2_Format":{enumerable:true,get:()=>Ae},"RED_RGTC1_Format":{enumerable:true,get:()=>we},"REVISION":{enumerable:true,get:()=>t},"RGBADepthPacking":{enumerable:true,get:()=>We},"RGBAFormat":{enumerable:true,get:()=>kt},"RGBAIntegerFormat":{enumerable:true,get:()=>Jt},"RGBA_ASTC_10x10_Format":{enumerable:true,get:()=>xe},"RGBA_ASTC_10x5_Format":{enumerable:true,get:()=>ge},"RGBA_ASTC_10x6_Format":{enumerable:true,get:()=>ve},"RGBA_ASTC_10x8_Format":{enumerable:true,get:()=>_e},"RGBA_ASTC_12x10_Format":{enumerable:true,get:()=>ye},"RGBA_ASTC_12x12_Format":{enumerable:true,get:()=>Me},"RGBA_ASTC_4x4_Format":{enumerable:true,get:()=>le},"RGBA_ASTC_5x4_Format":{enumerable:true,get:()=>ce},"RGBA_ASTC_5x5_Format":{enumerable:true,get:()=>he},"RGBA_ASTC_6x5_Format":{enumerable:true,get:()=>ue},"RGBA_ASTC_6x6_Format":{enumerable:true,get:()=>de},"RGBA_ASTC_8x5_Format":{enumerable:true,get:()=>pe},"RGBA_ASTC_8x6_Format":{enumerable:true,get:()=>me},"RGBA_ASTC_8x8_Format":{enumerable:true,get:()=>fe},"RGBA_BPTC_Format":{enumerable:true,get:()=>Se},"RGBA_ETC2_EAC_Format":{enumerable:true,get:()=>oe},"RGBA_PVRTC_2BPPV1_Format":{enumerable:true,get:()=>re},"RGBA_PVRTC_4BPPV1_Format":{enumerable:true,get:()=>ie},"RGBA_S3TC_DXT1_Format":{enumerable:true,get:()=>$t},"RGBA_S3TC_DXT3_Format":{enumerable:true,get:()=>Qt},"RGBA_S3TC_DXT5_Format":{enumerable:true,get:()=>te},"RGBDepthPacking":{enumerable:true,get:()=>Xe},"RGBFormat":{enumerable:true,get:()=>zt},"RGBIntegerFormat":{enumerable:true,get:()=>Zt},"RGB_BPTC_SIGNED_Format":{enumerable:true,get:()=>be},"RGB_BPTC_UNSIGNED_Format":{enumerable:true,get:()=>Te},"RGB_ETC1_Format":{enumerable:true,get:()=>se},"RGB_ETC2_Format":{enumerable:true,get:()=>ae},"RGB_PVRTC_2BPPV1_Format":{enumerable:true,get:()=>ne},"RGB_PVRTC_4BPPV1_Format":{enumerable:true,get:()=>ee},"RGB_S3TC_DXT1_Format":{enumerable:true,get:()=>Kt},"RGDepthPacking":{enumerable:true,get:()=>je},"RGFormat":{enumerable:true,get:()=>qt},"RGIntegerFormat":{enumerable:true,get:()=>Yt},"RawShaderMaterial":{enumerable:true,get:()=>dd},"Ray":{enumerable:true,get:()=>rr},"Raycaster":{enumerable:true,get:()=>pm},"RectAreaLight":{enumerable:true,get:()=>gp},"RedFormat":{enumerable:true,get:()=>Xt},"RedIntegerFormat":{enumerable:true,get:()=>jt},"ReinhardToneMapping":{enumerable:true,get:()=>Q},"RenderTarget":{enumerable:true,get:()=>Si},"RepeatWrapping":{enumerable:true,get:()=>pt},"ReplaceStencilOp":{enumerable:true,get:()=>nn},"ReverseSubtractEquation":{enumerable:true,get:()=>S},"RingGeometry":{enumerable:true,get:()=>ed},"SIGNED_RED_GREEN_RGTC2_Format":{enumerable:true,get:()=>Re},"SIGNED_RED_RGTC1_Format":{enumerable:true,get:()=>Ee},"SRGBColorSpace":{enumerable:true,get:()=>Je},"SRGBTransfer":{enumerable:true,get:()=>Qe},"Scene":{enumerable:true,get:()=>rc},"ShaderChunk":{enumerable:true,get:()=>ua},"ShaderLib":{enumerable:true,get:()=>pa},"ShaderMaterial":{enumerable:true,get:()=>Xs},"ShadowMaterial":{enumerable:true,get:()=>ud},"Shape":{enumerable:true,get:()=>Su},"ShapeGeometry":{enumerable:true,get:()=>nd},"ShapePath":{enumerable:true,get:()=>ef},"ShapeUtils":{enumerable:true,get:()=>Yu},"ShortType":{enumerable:true,get:()=>Rt},"Skeleton":{enumerable:true,get:()=>Vc},"SkeletonHelper":{enumerable:true,get:()=>Cm},"SkinnedMesh":{enumerable:true,get:()=>Oc},"Source":{enumerable:true,get:()=>vi},"Sphere":{enumerable:true,get:()=>Ji},"SphereGeometry":{enumerable:true,get:()=>id},"Spherical":{enumerable:true,get:()=>gm},"SphericalHarmonics3":{enumerable:true,get:()=>vp},"SplineCurve":{enumerable:true,get:()=>au},"SpotLight":{enumerable:true,get:()=>op},"SpotLightHelper":{enumerable:true,get:()=>wm},"Sprite":{enumerable:true,get:()=>Sc},"SpriteMaterial":{enumerable:true,get:()=>lc},"SrcAlphaFactor":{enumerable:true,get:()=>C},"SrcAlphaSaturateFactor":{enumerable:true,get:()=>N},"SrcColorFactor":{enumerable:true,get:()=>A},"StaticCopyUsage":{enumerable:true,get:()=>Pn},"StaticDrawUsage":{enumerable:true,get:()=>wn},"StaticReadUsage":{enumerable:true,get:()=>Rn},"StereoCamera":{enumerable:true,get:()=>Dp},"StreamCopyUsage":{enumerable:true,get:()=>Un},"StreamDrawUsage":{enumerable:true,get:()=>An},"StreamReadUsage":{enumerable:true,get:()=>In},"StringKeyframeTrack":{enumerable:true,get:()=>Fd},"SubtractEquation":{enumerable:true,get:()=>M},"SubtractiveBlending":{enumerable:true,get:()=>v},"TOUCH":{enumerable:true,get:()=>n},"TangentSpaceNormalMap":{enumerable:true,get:()=>qe},"TetrahedronGeometry":{enumerable:true,get:()=>rd},"Texture":{enumerable:true,get:()=>yi},"TextureLoader":{enumerable:true,get:()=>Qd},"TextureUtils":{enumerable:true,get:()=>Hl},"TorusGeometry":{enumerable:true,get:()=>sd},"TorusKnotGeometry":{enumerable:true,get:()=>ad},"Triangle":{enumerable:true,get:()=>jr},"TriangleFanDrawMode":{enumerable:true,get:()=>He},"TriangleStripDrawMode":{enumerable:true,get:()=>Ve},"TrianglesDrawMode":{enumerable:true,get:()=>ke},"TubeGeometry":{enumerable:true,get:()=>od},"UVMapping":{enumerable:true,get:()=>ot},"Uint16BufferAttribute":{enumerable:true,get:()=>ms},"Uint32BufferAttribute":{enumerable:true,get:()=>gs},"Uint8BufferAttribute":{enumerable:true,get:()=>us},"Uint8ClampedBufferAttribute":{enumerable:true,get:()=>ds},"Uniform":{enumerable:true,get:()=>om},"UniformsGroup":{enumerable:true,get:()=>cm},"UniformsLib":{enumerable:true,get:()=>da},"UniformsUtils":{enumerable:true,get:()=>Ws},"UnsignedByteType":{enumerable:true,get:()=>Et},"UnsignedInt248Type":{enumerable:true,get:()=>Ot},"UnsignedInt5999Type":{enumerable:true,get:()=>Ft},"UnsignedIntType":{enumerable:true,get:()=>Pt},"UnsignedShort4444Type":{enumerable:true,get:()=>Dt},"UnsignedShort5551Type":{enumerable:true,get:()=>Nt},"UnsignedShortType":{enumerable:true,get:()=>Ct},"VSMShadowMap":{enumerable:true,get:()=>h},"Vector2":{enumerable:true,get:()=>Jn},"Vector3":{enumerable:true,get:()=>Ci},"Vector4":{enumerable:true,get:()=>Mi},"VectorKeyframeTrack":{enumerable:true,get:()=>Bd},"VideoTexture":{enumerable:true,get:()=>Oh},"WebGL3DRenderTarget":{enumerable:true,get:()=>Ai},"WebGLArrayRenderTarget":{enumerable:true,get:()=>wi},"WebGLCoordinateSystem":{enumerable:true,get:()=>On},"WebGLCubeRenderTarget":{enumerable:true,get:()=>ta},"WebGLMultipleRenderTargets":{enumerable:true,get:()=>rf},"WebGLRenderTarget":{enumerable:true,get:()=>bi},"WebGLRenderer":{enumerable:true,get:()=>ec},"WebGLUtils":{enumerable:true,get:()=>Wl},"WebGPUCoordinateSystem":{enumerable:true,get:()=>Fn},"WireframeGeometry":{enumerable:true,get:()=>ld},"WrapAroundEnding":{enumerable:true,get:()=>Fe},"ZeroCurvatureEnding":{enumerable:true,get:()=>Ne},"ZeroFactor":{enumerable:true,get:()=>w},"ZeroSlopeEnding":{enumerable:true,get:()=>Oe},"ZeroStencilOp":{enumerable:true,get:()=>tn},"createCanvasElement":{enumerable:true,get:()=>ii}}));
 }).call(undefined);
 // scene3d.js
-__modules[24]=(()=>{
-const THREE=__modules[23];
+__modules[25]=(()=>{
+const THREE=__modules[24];
 const { BUILDINGS, VEHICLES }=__modules[1];
-const { footprint, reachable }=__modules[20];
-const { Scene, vehicleActivity, vehicleAtSite, coldWarnings }=__modules[22];
+const { footprint, reachable }=__modules[21];
+const { Scene, vehicleActivity, vehicleAtSite, coldWarnings }=__modules[23];
 
 
 
@@ -3562,9 +3818,9 @@ class Scene3D {
 return Object.freeze(Object.defineProperties({}, {"VIEWS":{enumerable:true,get:()=>VIEWS},"LABEL_MODES":{enumerable:true,get:()=>LABEL_MODES},"MAX_LABELS":{enumerable:true,get:()=>MAX_LABELS},"cellToWorld":{enumerable:true,get:()=>cellToWorld},"worldToCell":{enumerable:true,get:()=>worldToCell},"defaultSite":{enumerable:true,get:()=>defaultSite},"buildingBox":{enumerable:true,get:()=>buildingBox},"buildingTone":{enumerable:true,get:()=>buildingTone},"sceneSignature":{enumerable:true,get:()=>sceneSignature},"yardLayout":{enumerable:true,get:()=>yardLayout},"slotPose":{enumerable:true,get:()=>slotPose},"vehiclePath":{enumerable:true,get:()=>vehiclePath},"pointOnPath":{enumerable:true,get:()=>pointOnPath},"phaseDuration":{enumerable:true,get:()=>phaseDuration},"phaseProgress":{enumerable:true,get:()=>phaseProgress},"vehicleTag":{enumerable:true,get:()=>vehicleTag},"vehiclePlan":{enumerable:true,get:()=>vehiclePlan},"vehicleT":{enumerable:true,get:()=>vehicleT},"rackPallets":{enumerable:true,get:()=>rackPallets},"workerSpots":{enumerable:true,get:()=>workerSpots},"selectLabels":{enumerable:true,get:()=>selectLabels},"adaptResolution":{enumerable:true,get:()=>adaptResolution},"rayBox":{enumerable:true,get:()=>rayBox},"rayGround":{enumerable:true,get:()=>rayGround},"networkLayout":{enumerable:true,get:()=>networkLayout},"FOREIGN_LEN":{enumerable:true,get:()=>FOREIGN_LEN},"YARD_TURN":{enumerable:true,get:()=>YARD_TURN},"QUEUE_PLACES":{enumerable:true,get:()=>QUEUE_PLACES},"QUEUE_DRIVE":{enumerable:true,get:()=>QUEUE_DRIVE},"PHASE_LABEL":{enumerable:true,get:()=>PHASE_LABEL},"queueOrder":{enumerable:true,get:()=>queueOrder},"queuePlace":{enumerable:true,get:()=>queuePlace},"gatePose":{enumerable:true,get:()=>gatePose},"dockPoseFor":{enumerable:true,get:()=>dockPoseFor},"makePath":{enumerable:true,get:()=>makePath},"pathPose":{enumerable:true,get:()=>pathPose},"approachPath":{enumerable:true,get:()=>approachPath},"queueEntryPath":{enumerable:true,get:()=>queueEntryPath},"toDockPath":{enumerable:true,get:()=>toDockPath},"dockingPath":{enumerable:true,get:()=>dockingPath},"exitPath":{enumerable:true,get:()=>exitPath},"arrivalTone":{enumerable:true,get:()=>arrivalTone},"arrivalLabel":{enumerable:true,get:()=>arrivalLabel},"carrierColor":{enumerable:true,get:()=>carrierColor},"arrivalPlan":{enumerable:true,get:()=>arrivalPlan},"arrivalPose":{enumerable:true,get:()=>arrivalPose},"arrivalMoving":{enumerable:true,get:()=>arrivalMoving},"PARCELS_PER_CAGE":{enumerable:true,get:()=>PARCELS_PER_CAGE},"parcelLoads":{enumerable:true,get:()=>parcelLoads},"Scene3D":{enumerable:true,get:()=>Scene3D}}));
 })();
 // scene-select.js
-__modules[25]=(()=>{
-const { Scene }=__modules[22];
-const { Scene3D }=__modules[24];
+__modules[26]=(()=>{
+const { Scene }=__modules[23];
+const { Scene3D }=__modules[25];
 
 
 
@@ -3616,16 +3872,18 @@ function createScene(canvas, callbacks = {}) {
 return Object.freeze(Object.defineProperties({}, {"chooseRenderer":{enumerable:true,get:()=>chooseRenderer},"hasWebGL":{enumerable:true,get:()=>hasWebGL},"NO_WEBGL_NOTICE":{enumerable:true,get:()=>NO_WEBGL_NOTICE},"createScene":{enumerable:true,get:()=>createScene}}));
 })();
 // app.js
-__modules[26]=(()=>{
+__modules[27]=(()=>{
 const {injectPortableSave,portableTemplate}=__modules[0];
 const {RENTAL_RATES}=__modules[2];
 const {planTour}=__modules[5];
 const {createSaveGuard}=__modules[6];
-const {report}=__modules[7];
-const {Simulation}=__modules[21];
+const {createSaveStore}=__modules[7];
+const {report}=__modules[8];
+const {Simulation}=__modules[22];
 const {ITEMS,BUILDINGS,RECIPES,ROLES,VEHICLES,RESEARCH}=__modules[1];
-const {createScene}=__modules[25];
+const {createScene}=__modules[26];
 const {onShift}=__modules[4];
+
 
 
 
@@ -3656,6 +3914,9 @@ let started=false, dirty=false, uiStamp=0, lastTick=performance.now(), accumulat
 const STORE='industrie-logistik-v1', prefsKey=STORE+'-prefs';
 const VERSION='0.9 · ENTWICKLUNG';{const v=document.getElementById('appVersion');if(v)v.textContent=VERSION;}
 const guard=createSaveGuard({prefix:STORE,onLost(){writable=false;speed=0;$('#statusText').textContent=lockMessage();}});
+// QS-W0-03 (W1b): Spielstände in IndexedDB (storage.js), Rückfall localStorage ohne IndexedDB. Sperre/Einstellungen bleiben in localStorage.
+const store=createSaveStore({prefix:STORE,onWriteError:writeFailed,onCommit:writeCommitted});
+const saveKeys=mode=>store.keysFor(mode);
 let writable=false, switching=false, temporary=false, storageFailure=false;
 const temporaryMessage='Dateimodus · Änderungen NICHT GESPEICHERT · Vor Schließen als HTML oder JSON speichern.';
 const embeddedSave=document.getElementById('embedded-save');
@@ -3667,8 +3928,9 @@ const portableSource=(()=>{if(!portableMode)return null;
  const slot=document.getElementById('portable-template'),style=document.getElementById('portable-style'),runtime=document.getElementById('portable-runtime');
  if(slot&&style&&runtime)try{const shell=JSON.parse(slot.textContent);if(typeof shell==='string')return {shell,style,runtime};}catch{}
  return {legacy:'<!doctype html>\n'+document.documentElement.outerHTML};})();
-const lockMessage=()=>guard.reason==='storage-error'?'Schreibschutz: Lokaler Speicher nicht verfügbar. Vorhandenen Stand als JSON exportieren.':guard.reason==='unsupported'?'Schreibschutz: Browser unterstützt keine sichere Tab-Sperre. JSON-Export bleibt möglich.':'Schreibschutz: Spielstand in anderem Tab geöffnet oder Sperre verloren. Anderen Tab schließen und hier neu laden.';
-function canWrite(){if(temporary)return true;if(writable&&guard.owns(sim.state.mode))return true;writable=false;speed=0;$('#statusText').textContent=lockMessage();return false;}
+const loadingMessage='Spielstand wird geladen …';
+const lockMessage=()=>store.kind==='error'?'Schreibschutz: Spielstandspeicher (IndexedDB) nicht erreichbar. Browserdaten zulassen, Seite neu laden oder JSON exportieren.':!portableMode&&!temporary&&(store.kind==='pending'||guard.reason==='unclaimed'||guard.reason==='pending')?loadingMessage:guard.reason==='storage-error'?'Schreibschutz: Lokaler Speicher nicht verfügbar. Vorhandenen Stand als JSON exportieren.':guard.reason==='unsupported'?'Schreibschutz: Browser unterstützt keine sichere Tab-Sperre. JSON-Export bleibt möglich.':'Schreibschutz: Spielstand in anderem Tab geöffnet oder Sperre verloren. Anderen Tab schließen und hier neu laden.';
+function canWrite(){if(temporary)return true;if(writable&&store.kind!=='error'&&guard.owns(sim.state.mode))return true;writable=false;speed=0;$('#statusText').textContent=lockMessage();return false;}
 function resetView(){tourDraft={};endBuild();closePanel();selected=null;forecast=null;search='';accumulator=0;scene.home();}
 async function activate(mode,{candidate=null,reset=false}={}){
  if(switching)return false;switching=true;
@@ -3678,12 +3940,19 @@ async function activate(mode,{candidate=null,reset=false}={}){
    sim=candidate||new Simulation({mode});prefs.mode=sim.state.mode;started=true;dirty=true;resetView();$('#welcome').close();setSpeed(0);render(true);return true;
   }
   if(started&&writable&&!save())return false;
+  if(store.kind==='error'){writable=false;speed=0;toast(lockMessage(),true);render();return false;}
+  // Eigene ausstehende IndexedDB-Schreibvorgänge vor Sperrwechsel bestätigen.
+  if(store.lazy)await store.flush();
   if(!await guard.acquire(mode)){writable=false;speed=0;toast(lockMessage(),true);render();return false;}
   writable=true;
-  const raw=localStorage.getItem(STORE+'-'+mode);
-  if(reset&&raw&&!candidate)keepBackup(STORE+'-'+mode);
-  const next=candidate||(reset?new Simulation({mode}):raw?Simulation.fromJSON(raw):new Simulation({mode}));
-  sim=next;prefs.mode=sim.state.mode;started=true;dirty=!!candidate||reset||!raw;resetView();
+  const key=STORE+'-'+mode;
+  if(store.lazy)await store.load(saveKeys(mode));
+  adoptLegacyHold(key);
+  const raw=store.get(key);
+  if(reset&&!candidate&&!await keepPrevious(key))return false;
+  const rescued=!candidate&&!reset?takeEmergency(key):null;
+  const next=candidate||rescued||(reset?new Simulation({mode}):raw?Simulation.fromJSON(raw):new Simulation({mode}));
+  sim=next;prefs.mode=sim.state.mode;started=true;dirty=!!candidate||!!rescued||reset||!raw;resetView();
   $('#welcome').close();setSpeed(0);render(true);
   if(dirty){if(!save())return false;}else localStorage.setItem(prefsKey,JSON.stringify(prefs));
   toast(reset?'Neues Unternehmen gegründet. Betrieb pausiert.':'Spielstand geladen. Betrieb pausiert.');return true;
@@ -3698,9 +3967,28 @@ async function bootstrap(){
   else {$('#welcome').close();toast('HTML-Spielstand geladen. Betrieb pausiert.');}
   return;
  }
- try{writable=await guard.acquire(sim.state.mode);if(writable&&started){const raw=localStorage.getItem(STORE+'-'+sim.state.mode);if(raw)sim=Simulation.fromJSON(raw);}}
+ $('#statusText').textContent=loadingMessage;
+ try{
+  const kind=await store.open();
+  if(kind==='error'){writable=false;storageFailure=true;}
+  else{
+   // Lesen ohne Sperre (Lesezugriff in zweitem Tab), danach als Sperrinhaber frisch nachladen.
+   if(store.lazy)await store.load(saveKeys(prefs.mode));
+   loadStored(STORE+'-'+prefs.mode);
+   writable=await guard.acquire(sim.state.mode);
+   if(writable){
+    const key=STORE+'-'+sim.state.mode;
+    if(store.lazy)await store.load(saveKeys(sim.state.mode));
+    adoptLegacyHold(key);
+    if(started){const raw=store.get(key);if(raw)sim=Simulation.fromJSON(raw);}
+    const rescued=takeEmergency(key);
+    if(rescued){sim=rescued;started=true;dirty=true;save();}
+   }
+  }
+ }
  catch(e){writable=false;toast('Speicher nicht verfügbar: '+e.message,true);}
- if(!writable){speed=0;$('#statusText').textContent=lockMessage();}render();if(!started)showWelcome();
+ if(!writable){speed=0;$('#statusText').textContent=lockMessage();}else if($('#statusText').textContent===loadingMessage)$('#statusText').textContent=started?'Spielstand geladen':'Speicher bereit · Unternehmen gründen';
+ render(true);if(!started)showWelcome();
 }
 
 let prefs={mode:'guided',large:false,reduced:matchMedia('(prefers-reduced-motion: reduce)').matches,mission:true,flowCollapsed:false,vbarCollapsed:false};
@@ -3709,7 +3997,11 @@ if(portableMode){
  const savedPrefs=JSON.parse(document.getElementById('embedded-prefs')?.textContent||'null')||{};
  for(const key of ['large','reduced','mission'])if(typeof savedPrefs[key]==='boolean')prefs[key]=savedPrefs[key];prefs.mode=sim.state.mode;
  }catch(e){embeddedError=e;started=false;temporary=true;speed=0;}
-}else try{prefs={...prefs,...JSON.parse(localStorage.getItem(prefsKey)||'{}')};const saved=localStorage.getItem(STORE+'-'+prefs.mode);if(saved){sim=Simulation.fromJSON(saved);started=true;}}catch(e){setTimeout(()=>toast('Gespeicherter Stand nicht geladen: '+e.message,true),500);}
+}else try{prefs={...prefs,...JSON.parse(localStorage.getItem(prefsKey)||'{}')};}catch{/* Einstellungen optional; Spielstand lädt bootstrap() über store. */}
+/** Gespeicherten Hauptstand übernehmen (bootstrap). Fehler wie bisher als verzögerte Meldung, Willkommensdialog folgt. */
+function loadStored(key){try{const saved=store.get(key);if(saved){sim=Simulation.fromJSON(saved);started=true;}}catch(e){setTimeout(()=>toast('Gespeicherter Stand nicht geladen: '+e.message,true),500);}}
+/** Notfall-Kopie (nur IndexedDB, beim Verlassen abgelegt) übernehmen, falls neuer als der gespeicherte Stand. */
+function takeEmergency(key){const em=store.takeEmergency(key);if(!em)return null;try{const rescued=Simulation.fromJSON(em.value);setTimeout(()=>toast('Letzter Stand aus Notfall-Kopie übernommen (Speichern beim Schließen war nicht bestätigt).'),600);return rescued;}catch{store.dropEmergency(key);return null;}}
 applyPrefs();
 // Szenenwahl S1; der Node-UI-Harness stellt nur einen Scene-Stub bereit.
 const scene=(typeof createScene==='function'?createScene:(canvas,callbacks)=>new Scene(canvas,callbacks))($('#world'),{onSelect(id){if(!id)return;if(sim.state.sites.some(x=>x.id===id)){send({type:'selectSite',id});scene.home();return;}selected=id;openPanel('detail');scene.focus?.(id);},onPlace(x,y){if(moving){const r=send({type:'move',id:moving,x,y,rotation});if(r.ok){moving=null;endBuild();}}else if(build)send({type:'build',buildingType:build,x,y,rotation,site:sim.state.selectedSite});},onHover(x,y){if(build)$('#buildHint').textContent=`${name(BUILDINGS,build)} · Raster ${x+1}/${y+1} · ${rotation}° · ${euro(BUILDINGS[build].cost)}`;}});
@@ -3720,24 +4012,39 @@ function send(c,quiet=false){if(!canWrite()){toast(lockMessage(),true);return {o
 // vollständig geprüft, wenn er weder von diesem Tab geschrieben noch zuletzt fehlerfrei geladen wurde.
 // So landet ein beschädigter Hauptstand nie über einer intakten Sicherung, ohne alle 20 s zu blockieren.
 const lastWritten=new Map();
-function backupCandidate(key){const old=localStorage.getItem(key);if(!old)return null;if(old===lastWritten.get(key)||Simulation.wasValidated?.(old))return old;try{Simulation.fromJSON(old);return old;}catch{return null;}}
-// QS-W0-05: Gründen über einem vorhandenen Unternehmen hält dessen letzte gültige Sicherung fest (Marker
-// `<key>-backup-hold`). Solange der Marker steht, rotiert save() nicht in die Sicherung. Freigabe nur durch
-// ausdrückliches „Alte Sicherung verwerfen“ oder erfolgreiches „Letzte Sicherung laden“.
-const backupInfo=new Map();
-function holdMeta(key){try{const raw=localStorage.getItem(key+'-backup-hold');return raw===null?null:(JSON.parse(raw)||{});}catch{return null;}}
-function validBackup(key){const text=localStorage.getItem(key+'-backup');if(!text)return null;if(Simulation.wasValidated?.(text))return text;try{Simulation.fromJSON(text);return text;}catch{return null;}}
-function keepBackup(key){
- if(holdMeta(key)&&localStorage.getItem(key+'-backup')!==null)return;
- let kept=backupCandidate(key);if(kept)localStorage.setItem(key+'-backup',kept);else kept=validBackup(key);
- if(!kept)return;let t=null;try{t=JSON.parse(kept).t??null;}catch{}
- localStorage.setItem(key+'-backup-hold',JSON.stringify({t}));backupInfo.set(key,{ok:true,t});
+function backupCandidate(key){const old=store.get(key);if(!old)return null;if(old===lastWritten.get(key)||Simulation.wasValidated?.(old))return old;try{Simulation.fromJSON(old);return old;}catch{return null;}}
+// QS-W0-05/11 (W1b): Gründen über einem vorhandenen Unternehmen legt dessen letzten gültigen Stand in einen eigenen
+// Platz `<key>-backup-prev`. Die laufende Sicherung `<key>-backup` rotiert danach normal für das neue Unternehmen.
+// Freigabe des Platzes nur durch „Alte Sicherung verwerfen“; „Vorheriges Unternehmen laden“ tauscht beide Unternehmen.
+// Altbestand: Marker `<key>-backup-hold` (W0) wird beim ersten Schreibzugriff in den eigenen Platz überführt; gelingt das
+// nicht (z. B. localStorage voll), gilt das alte Festhalten weiter.
+const backupInfo=new Map(),prevInfo=new Map();
+function holdMeta(key){try{const raw=store.get(key+'-backup-hold');return raw===null?null:(JSON.parse(raw)||{});}catch{return null;}}
+function validBackup(key){const text=store.get(key+'-backup');if(!text)return null;if(Simulation.wasValidated?.(text))return text;try{Simulation.fromJSON(text);return text;}catch{return null;}}
+function validPrevious(key){const text=store.get(key+'-backup-prev');if(!text)return null;if(Simulation.wasValidated?.(text))return text;try{Simulation.fromJSON(text);return text;}catch{return null;}}
+const stateTime=text=>{try{return JSON.parse(text).t??null;}catch{return null;}};
+function previousTime(key){if(!prevInfo.has(key)){let t=null;try{t=stateTime(store.get(key+'-backup-prev'));}catch{}prevInfo.set(key,{t});}return prevInfo.get(key).t;}
+/** Schreibt mehrere Schlüssel; IndexedDB: wartet auf Commit. false + Meldung bei Fehler. */
+async function writeNow(entries,what){
+ try{const result=store.write(entries);if(store.lazy){const r=await result;if(!r.ok)throw r.error||Error('Schreiben nicht bestätigt.');}return true;}
+ catch(e){toast(what+' nicht möglich: '+(e?.message||e)+' Zuerst JSON exportieren.',true);return false;}
 }
-function releaseHold(key){try{localStorage.removeItem(key+'-backup-hold');}catch{}}
-/** Gültige Sicherung für Willkommensdialog und Einstellungen; je Schlüssel einmal geprüft, danach aus Schreibwissen. */
+async function keepPrevious(key){
+ const kept=backupCandidate(key)||validBackup(key);if(!kept)return true;
+ const entries={[key+'-backup-prev']:kept};if(holdMeta(key))entries[key+'-backup-hold']=null;
+ if(!await writeNow(entries,'Sicherung des bisherigen Unternehmens'))return false;
+ prevInfo.set(key,{t:stateTime(kept)});backupInfo.delete(key);return true;
+}
+function adoptLegacyHold(key){
+ try{if(!holdMeta(key)||store.has(key+'-backup-prev'))return;const kept=validBackup(key);
+  store.write(kept?{[key+'-backup-prev']:kept,[key+'-backup-hold']:null}:{[key+'-backup-hold']:null});prevInfo.delete(key);}
+ catch{/* Platz voll: Marker bleibt, save() hält die Sicherung wie in W0 fest. */}
+}
+function releaseHold(key){try{if(holdMeta(key))store.write({[key+'-backup-hold']:null});}catch{}}
+/** Gültige Sicherung (laufend oder vorheriges Unternehmen) für Willkommensdialog und Einstellungen; je Schlüssel einmal geprüft. */
 function backupAvailable(mode){
  if(temporary||portableMode)return false;const key=STORE+'-'+mode;
- if(!backupInfo.has(key)){let ok=false;try{ok=!!validBackup(key);}catch{}backupInfo.set(key,{ok,t:null});}
+ if(!backupInfo.has(key)){let ok=false;try{ok=!!validBackup(key)||!!validPrevious(key);}catch{}backupInfo.set(key,{ok,t:null});}
  return backupInfo.get(key).ok;
 }
 const recoveryMode=()=>started?sim.state.mode:prefs.mode;
@@ -3745,17 +4052,61 @@ function showWelcome(){const b=$('#welcomeBackup');if(b)b.hidden=!backupAvailabl
 function loadBackup(){
  const mode=recoveryMode(),key=STORE+'-'+mode;
  return confirm('Letzte Sicherung laden?','Aktueller Fortschritt wird durch letzte Sicherung ersetzt.',async()=>{
-  try{const text=localStorage.getItem(key+'-backup');if(!text)throw Error('Keine Sicherung vorhanden.');const restored=Simulation.fromJSON(text);
+  try{let text=store.get(key+'-backup');let restored=null;
+   try{if(text)restored=Simulation.fromJSON(text);}catch(e){if(!store.get(key+'-backup-prev'))throw e;}
+   if(!restored){text=store.get(key+'-backup-prev');if(!text)throw Error('Keine Sicherung vorhanden.');restored=Simulation.fromJSON(text);}
    const ok=await activate(restored.state.mode,{candidate:restored});if(ok&&restored.state.mode===mode)releaseHold(key);return ok;}
   catch(e){toast('Sicherung nicht geladen: '+e.message,true);return false;}
  });
 }
-function discardBackup(){
- confirm('Alte Sicherung verwerfen?','Sicherung des vorherigen Unternehmens wird durch den aktuellen Stand ersetzt. Vorher bei Bedarf laden und als JSON exportieren.',()=>{
-  if(!started)return false;if(!canWrite()){toast(lockMessage(),true);return false;}releaseHold(STORE+'-'+sim.state.mode);dirty=true;return save(true);
+/** Tausch: vorheriges Unternehmen wird Hauptstand, aktuelles Unternehmen belegt den Platz „vorheriges Unternehmen“. */
+function loadPrevious(){
+ const mode=recoveryMode(),key=STORE+'-'+mode;
+ return confirm('Vorheriges Unternehmen laden?','Aktuelles Unternehmen wird dafür als Sicherung des vorherigen Unternehmens abgelegt (Tausch).',async()=>{
+  try{if(!started||!canWrite()){toast(lockMessage(),true);return false;}
+   const text=store.get(key+'-backup-prev');if(!text)throw Error('Keine Sicherung vorhanden.');const restored=Simulation.fromJSON(text);
+   if(!await writeNow({[key+'-backup-prev']:sim.serialize()},'Ablage des aktuellen Unternehmens'))return false;
+   prevInfo.set(key,{t:sim.state.t});return await activate(restored.state.mode,{candidate:restored});}
+  catch(e){toast('Sicherung nicht geladen: '+e.message,true);return false;}
  });
 }
-function save(show=false){if(temporary){$('#statusText').textContent=temporaryMessage;if(show)toast('Nicht gespeichert. Bitte JSON exportieren.',true);return false;}if(!canWrite()){if(show)toast(lockMessage(),true);return false;}try{const key=STORE+'-'+sim.state.mode,held=holdMeta(key)&&localStorage.getItem(key+'-backup')!==null,old=held?null:backupCandidate(key),text=sim.serialize();if(old){localStorage.setItem(key+'-backup',old);backupInfo.set(key,{ok:true,t:null});}localStorage.setItem(key,text);lastWritten.set(key,text);localStorage.setItem(prefsKey,JSON.stringify({...prefs,mode:sim.state.mode}));dirty=false;storageFailure=false;$('#statusText').textContent='Gesichert · '+time(sim.state.t)+' · Keine Offlinefortschritte';if(show)toast('Spielstand gesichert.');return true;}catch(e){storageFailure=true;$('#statusText').textContent='NICHT GESPEICHERT · Speicher blockiert oder voll. JSON exportieren; Speichern erneut versuchen.';toast('Speichern fehlgeschlagen. Bitte Spielstand exportieren.',true);return false;}}
+function discardBackup(){
+ confirm('Alte Sicherung verwerfen?','Sicherung des vorherigen Unternehmens wird gelöscht. Vorher bei Bedarf laden und als JSON exportieren.',async()=>{
+  if(!started)return false;if(!canWrite()){toast(lockMessage(),true);return false;}const key=STORE+'-'+sim.state.mode;
+  if(!await writeNow({[key+'-backup-prev']:null,[key+'-backup-hold']:null},'Verwerfen'))return false;
+  prevInfo.delete(key);backupInfo.delete(key);dirty=true;return save(true);
+ });
+}
+let savedAt=null,saveSeq=0;
+const sizeNote=text=>{const h=Simulation.headroom?.(sim.state,text.length);if(!h||h.ratio<0.6)return '';return h.limit==='chars'?` · Spielstand groß: ${fmt(text.length/1e6,1)} MB (${fmt(h.ratio*100)} % der Ladegrenze)`:` · Liste ${h.limit} bei ${fmt(h.ratio*100)} % der Ladegrenze`;};
+function save(show=false){if(temporary){$('#statusText').textContent=temporaryMessage;if(show)toast('Nicht gespeichert. Bitte JSON exportieren.',true);return false;}if(!canWrite()){if(show)toast(lockMessage(),true);return false;}
+ try{const key=STORE+'-'+sim.state.mode,text=sim.serialize();
+  // Ladegrenze (core SAVE_LIMITS): nie einen Stand schreiben, der sich nicht mehr laden ließe.
+  const h=Simulation.headroom?.(sim.state,text.length);
+  if(h&&h.ratio>1){storageFailure=true;$('#statusText').textContent=`NICHT GESPEICHERT · Spielstand überschreitet Ladegrenze (${h.limit}). Letzter gespeicherter Stand bleibt. JSON exportieren.`;toast('Spielstand zu groß zum Speichern. Bitte exportieren.',true);return false;}
+  const held=!!holdMeta(key)&&!store.has(key+'-backup-prev')&&store.get(key+'-backup')!==null,old=held?null:backupCandidate(key);
+  const entries={};if(old)entries[key+'-backup']=old;entries[key]=text;
+  store.write(entries);saveSeq=store.seq||0;savedAt=sim.state.t;
+  if(old)backupInfo.set(key,{ok:true,t:null});lastWritten.set(key,text);
+  try{localStorage.setItem(prefsKey,JSON.stringify({...prefs,mode:sim.state.mode}));}catch{/* Einstellungen optional */}
+  dirty=false;storageFailure=false;
+  $('#statusText').textContent=(store.lazy?'Wird gesichert · ':'Gesichert · ')+time(sim.state.t)+' · Keine Offlinefortschritte'+sizeNote(text);
+  if(show)toast('Spielstand gesichert.');return true;}
+ catch(e){storageFailure=true;$('#statusText').textContent='NICHT GESPEICHERT · Speicher blockiert oder voll. JSON exportieren; Speichern erneut versuchen.';toast('Speichern fehlgeschlagen. Bitte Spielstand exportieren.',true);return false;}}
+function writeCommitted({seq}){if(seq!==saveSeq||storageFailure||temporary)return;const st=$('#statusText');if(st.textContent.startsWith('Wird gesichert · '))st.textContent='Gesichert · '+st.textContent.slice(17);}
+function writeFailed({keys,error}){
+ const key=STORE+'-'+sim.state.mode;if(!keys.includes(key))return;
+ lastWritten.delete(key);dirty=true;storageFailure=true;
+ $('#statusText').textContent='NICHT GESPEICHERT · Speicher blockiert oder voll ('+(error?.name||'IndexedDB')+'). JSON exportieren; Speichern erneut versuchen.';
+ toast('Speichern fehlgeschlagen. Bitte Spielstand exportieren.',true);
+}
+/** Verlassen (hidden/beforeunload): 'saved' = bestätigt oder Notfall-Kopie liegt vor; 'pending' = IndexedDB-Commit offen ohne Kopie; 'failed'. */
+function leaveSave(){
+ if(!started||temporary)return 'saved';const key=STORE+'-'+sim.state.mode;
+ if(dirty&&!save())return 'failed';
+ if(!store.lazy||!store.pendingFor(key))return 'saved';
+ return store.emergency(key,lastWritten.get(key))?'saved':'pending';
+}
 let htmlExporting=false;
 async function exportHtml(){
  if(htmlExporting)return false;
@@ -3786,6 +4137,7 @@ async function retryStorage(){
  if(temporary){toast('Temporären Stand zuerst als JSON exportieren. Danach Seite neu laden und JSON importieren.',true);return false;}
  if(switching)return false;switching=true;speed=0;
  try{
+  if(store.kind==='error'&&await store.retry()==='error')throw Error(store.reason);
   writable=await guard.acquire(sim.state.mode);
   if(!writable){toast(lockMessage(),true);return false;}
   if(started&&dirty){
@@ -3798,7 +4150,8 @@ async function retryStorage(){
     finally{switching=false;render(true);}
    });return false;
   }
-  const raw=localStorage.getItem(STORE+'-'+sim.state.mode);
+  if(store.lazy)await store.load(saveKeys(sim.state.mode));
+  const raw=store.get(STORE+'-'+sim.state.mode);
   if(raw){sim=Simulation.fromJSON(raw);started=true;resetView();$('#welcome').close();}
   storageFailure=false;$('#statusText').textContent=started?'Spielstand geladen · Betrieb pausiert':'Speicher verfügbar · Unternehmen gründen';
   return true;
@@ -3823,15 +4176,20 @@ const num=(v,t,neg=false)=>`<div class="number ${neg?'negative':''}"><b>${v}</b>
 const opts=(cat,sel)=>Object.entries(cat).map(([id,v])=>`<option value="${id}" ${id===sel?'selected':''}>${esc(v.name||v)}</option>`).join('');
 const field=(title,html,full=false)=>`<label class="field ${full?'full':''}">${esc(title)}${html}</label>`;
 const progress=v=>`<div class="progress"><span style="width:${Math.max(0,Math.min(100,v*100))}%"></span></div>`;
-function requirements(){const s=sim.state,b=s.buildings.filter(x=>x.site===s.selectedSite);return[...hubRequirements(s,b),
- {ok:['assembly','testing','packing'].every(t=>b.some(x=>x.type===t))&&b.some(x=>x.type==='rack'),title:'Produktionslinie errichten',text:'Montage, Prüfung, Packstation und Lagerregal.',action:'build',cta:'Anlagen bauen'},
- {ok:s.workers.filter(x=>x.role==='production').length>=3&&s.workers.some(x=>x.role==='warehouse')&&s.workers.some(x=>x.role==='driver'),title:'Team einstellen',text:'Drei Fertigungskräfte, eine Lagerkraft und ein Fahrer.',panel:'staff',cta:'Personal einstellen'},
- {ok:['housing','board','carton'].every(i=>s.purchases.some(p=>p.item===i)),title:'Material beschaffen',text:'Je 12 Gehäuse, LED-Platinen und Kartons bestellen.',panel:'purchasing',cta:'Material bestellen'},
- {ok:s.orders.some(o=>o.status!=='offer'),title:'Kundenauftrag annehmen',text:'Erster Kunde benötigt acht Arbeitsleuchten.',panel:'orders',cta:'Auftrag auswählen'},
- {ok:s.stats.produced>=8,title:'Leuchten fertigen',text:'Material wird angenommen, montiert, geprüft und verpackt.',panel:'production',cta:'Fertigung prüfen'},
- {ok:s.vehicles.some(v=>v.status!=='rentalReturned'),title:'Lieferwagen anschaffen',text:'Eigene Flotte bringt deine Produkte zum Kunden.',panel:'fleet',cta:'Fahrzeug kaufen'},
- {ok:s.stats.delivered>=8,title:'Erste Lieferung zustellen',text:'Im Auftragsfenster Fahrzeug und echte Fertigware zuordnen.',panel:'orders',cta:'Lieferung planen'},
- {ok:s.orders.some(o=>o.paid>0),title:'Zahlung erhalten',text:'Nach Zustellung entsteht eine Forderung. Zahlung folgt später.',panel:'finance',cta:'Finanzen öffnen'}];}
+// Geführter Einstieg Logistik (A02 W1b): Depot-Stufe in Reihenfolge des ersten Kreislaufs; Sortierplatz zuletzt und optional.
+function requirements(){const s=sim.state,b=s.buildings.filter(x=>x.site===s.selectedSite),site=s.selectedSite,hub=s.orders.filter(o=>o.source==='hub'),hubIds=new Set(hub.map(o=>o.id));
+ const staff=role=>s.workers.some(w=>w.role===role&&w.site===site),driverOk=staff('driver'),vanOk=s.vehicles.some(v=>v.site===site&&v.status!=='rentalReturned');
+ const unloaded=(s.yard||[]).some(a=>a.unloaded>0)||hub.some(o=>o.delivered>0);
+ const started=s.shipments.some(x=>hubIds.has(x.orderId))||(s.tours||[]).some(t=>t.stops.some(x=>hubIds.has(x.orderId)))||hub.some(o=>o.delivered>0);
+ return [
+ {ok:b.some(x=>x.type==='dock'),title:'Laderampe bauen',text:'Am Dock docken die Lkw der Versender an. Ein Lagerregal daneben schafft Platz für Pakete.',action:'build',build:'dock',cta:'Dock bauen'},
+ {ok:staff('warehouse'),title:'Lagerkraft einstellen',text:'Lagerpersonal entlädt Lkw, sortiert Pakete von Hand und belädt Fahrzeuge. Tagschicht 08–16 Uhr.',panel:'staff',cta:'Personal einstellen'},
+ {ok:(s.contracts||[]).some(c=>c.status!=='offer'),title:'Ersten Frachtvertrag annehmen',text:'Ein Versender schickt Lkw mit Paketen. Angebot im Vertragsfenster prüfen und annehmen.',panel:'contracts',cta:'Verträge öffnen'},
+ {ok:unloaded,title:'Ersten Lkw entladen',text:'Der Lkw meldet sich am Tor, fährt ans freie Dock und wird entladen. Wartegründe stehen im Torbuch.',panel:'yard',cta:'Hof & Docks öffnen'},
+ {ok:driverOk&&vanOk,title:'Fahrer und Lieferwagen',text:'Eine Fahrperson und ein Lieferwagen bringen die sortierten Pakete in die Zustellgebiete.',panel:driverOk?'fleet':'staff',cta:driverOk?'Fahrzeug kaufen':'Fahrer einstellen'},
+ {ok:started,title:'Zustellung starten',text:'Im Auftragsfenster sortierte Pakete einem Fahrzeug zuordnen. Fristgerecht zustellen, sonst 10 % Abschlag.',panel:'orders',cta:'Zustellung planen'},
+ {ok:hub.some(o=>o.paid>0),title:'Zahlung erhalten',text:'Nach der Zustellung entsteht eine Forderung. Der Versender zahlt eine Stunde später.',panel:'finance',cta:'Finanzen öffnen'},
+ {ok:b.some(x=>x.type==='sorter'),title:'Sortierplatz bauen (optional)',text:'Sortiert doppelt so schnell wie Handarbeit, bindet aber weiter eine Lagerkraft. Lohnt sich ab dem zweiten Vertrag zusammen mit mehr Fahrzeugen.',action:'build',build:'sorter',cta:'Sortierplatz bauen'}];}
 function render(force=false){$('#storageWarning').hidden=!temporary;put('storageWarning','Nicht gespeichert');putAttr('storageWarning','title',temporaryMessage+' Klicken für Spielstand-Optionen.');if(temporary)$('#statusText').textContent=temporaryMessage;else if(!writable)$('#statusText').textContent=lockMessage();scene.setState(sim.state);syncSpeed();hudPending=true;flushHud(force);
  if(panel&&(force||performance.now()-uiStamp>900)&&!document.activeElement?.matches('input,select,textarea'))renderPanel();}
 /* ---- Leitstand-HUD (A10) ----
@@ -3984,11 +4342,11 @@ const titles={overview:'Betriebszentrale',production:'Fertigung',inventory:'Lage
 let panelHtml=null;
 /** Panel wird nur neu geschrieben, wenn sich sein HTML geändert hat; so bleiben Fokus, Eingaben und Scrollposition erhalten. */
 function renderPanel(force=false){if(!panel)return;uiStamp=performance.now();const scroll=$('#panelBody').scrollTop;$('#panelTitle').textContent=titles[panel]||panel;$('#panelEyebrow').textContent=panel==='detail'?'ALLE DATEN. EIN ZUSAMMENHANG.':'INDUSTRIE & LOGISTIK';const renderers={overview:overview,production:production,inventory:inventory,purchasing:purchasing,staff:staff,orders:orders,fleet:fleet,finance:finance,research:research,rules:rules,network:network,service:service,history:history,help:help,settings:settings,detail:detail,planning:planning,special:special,contracts:contractsPanel,yard:yardPanel};const html=(renderers[panel]||overview)();if(force!==true&&html===panelHtml)return;panelHtml=html;$('#panelBody').innerHTML=html;$('#panelBody').scrollTop=scroll;}
-function overview(){const s=sim.state,req=requirements(),blocked=s.buildings.filter(b=>['materials','staff','power','storage','broken'].includes(b.status));return `<div class="numbers">${num(fmt(s.buildings.length),'Anlagen')}${num(fmt(s.orders.filter(o=>o.status==='active').length),'Aktive Aufträge')}${num(fmt(s.reputation)+' %','Reputation')}</div><section class="section"><div class="section-title"><h3>Vom leeren Werk zur ersten Lieferung</h3>${badge(req.filter(r=>r.ok).length+' / '+req.length)}</div><ol class="checklist">${req.map((r,i)=>`<li class="${r.ok?'done':''}"><span>${r.ok?'✓':i+1}</span><div><b>${r.title}</b><small>${r.text}</small></div></li>`).join('')}</ol></section>${s.buildings.length===0?`<div class="notice">Du bestimmst den Grundriss. Alternativ setzt der Aufbauassistent eine kompakte Linie durch reguläre Bau- und Einstellbefehle.</div>${button('Startbetrieb einrichten · ca. 32.000 €','starter','','primary')}`:''}<section class="section"><div class="section-title"><h3>Engpässe</h3>${badge(blocked.length+' Hinweise',blocked.length?'warn':'good')}</div>${blocked.map(b=>`<div class="list-row"><div><strong>${esc(name(BUILDINGS,b.type))}</strong><small>${label(b.status)} · ${esc(b.id)}</small></div>${button('Prüfen →','select',b.id)}</div>`).join('')||empty('Keine Anlagen blockiert','Warteursachen erscheinen hier.')}<div class="actions">${button('Planungsvorschau','panel-planning')}${button('Chronik','panel-history')}</div></section>`;}
+function overview(){const s=sim.state,req=requirements(),blocked=s.buildings.filter(b=>['materials','staff','power','storage','broken'].includes(b.status));return `<div class="numbers">${num(fmt(s.buildings.length),'Anlagen')}${num(fmt(s.orders.filter(o=>o.status==='active').length),'Aktive Aufträge')}${num(fmt(s.reputation)+' %','Reputation')}</div><section class="section"><div class="section-title"><h3>Vom leeren Hof zur ersten Zustellung</h3>${badge(req.filter(r=>r.ok).length+' / '+req.length)}</div><ol class="checklist">${req.map((r,i)=>`<li class="${r.ok?'done':''}"><span>${r.ok?'✓':i+1}</span><div><b>${r.title}</b><small>${r.text}</small></div></li>`).join('')}</ol></section>${s.buildings.length===0?`<div class="notice">Du bestimmst den Grundriss. Alternativ richtet der Aufbauassistent die Depot-Grundausstattung über reguläre, kostenpflichtige Bau-, Einstell- und Kaufbefehle ein: Laderampe, Lagerregal, eine Lagerkraft, eine Fahrperson und ein Lieferwagen. Fertigung folgt später als Geschäftsfeld „Mehrwertdienste“.</div>${button('Startbetrieb einrichten · ca. 14.500 €','starter','','primary')}`:''}<section class="section"><div class="section-title"><h3>Engpässe</h3>${badge(blocked.length+' Hinweise',blocked.length?'warn':'good')}</div>${blocked.map(b=>`<div class="list-row"><div><strong>${esc(name(BUILDINGS,b.type))}</strong><small>${label(b.status)} · ${esc(b.id)}</small></div>${button('Prüfen →','select',b.id)}</div>`).join('')||empty('Keine Anlagen blockiert','Warteursachen erscheinen hier.')}<div class="actions">${button('Planungsvorschau','panel-planning')}${button('Chronik','panel-history')}</div></section>`;}
 function production(){const s=sim.state,rows=filtered(s.buildings.filter(b=>b.site===s.selectedSite));return `<div class="notice">Jede Station verarbeitet nur passende Rezepte. Material, Arbeitskraft, Energie und freie Ausgabe müssen verfügbar sein.</div>${rows.map(b=>{const j=s.jobs.find(j=>j.id===b.job);return `<div class="card"><div class="card-top"><div><h3>${esc(name(BUILDINGS,b.type))}</h3><small>${esc(b.id)} · Position ${b.x+1}/${b.y+1}</small></div>${badge(label(b.status),['materials','staff','storage','power','broken'].includes(b.status)?'warn':'')}</div>${j?progress(b.progress)+kv('Auftrag',esc(name(RECIPES,j.recipe)))+kv('Restzeit',fmt(j.remaining,1)+' Min.'):kv('Prozess',esc(name(RECIPES,b.recipe)))}${kv('Zustand',fmt(b.condition)+' %')}<div class="actions">${button('Details','select',b.id)}${button(b.enabled?'Pausieren':'Fortsetzen','toggle',b.id)}${button('Versetzen','move',b.id)}</div></div>`;}).join('')||empty('Noch keine Anlagen','Baue deine erste Linie über den Baumodus.')}<div class="actions">${button('Anlage bauen','build','','primary')}</div>`;}
 function inventory(){const s=sim.state,batches=filtered(s.batches.filter(b=>b.qty>0&&b.site===s.selectedSite)),{used,cap}=siteLoad(s,s.selectedSite);return `<div class="numbers">${num(fmt(used),'Einheiten am Standort')}${num(fmt(cap),'Lagerkapazität')}${num(fmt(s.reservations.reduce((n,r)=>n+r.qty,0)),'Reservierte Einheiten')}</div>${progress(cap?used/cap:0)}<div class="table-wrap"><table><thead><tr><th>Charge / Artikel</th><th class="num">Menge</th><th>Ort</th><th>Eigentum</th><th class="num">Qualität</th><th></th></tr></thead><tbody>${batches.map(b=>`<tr><td><b>${esc(name(ITEMS,b.item))}</b><br><small class="muted">${esc(b.id)}</small></td><td class="num">${fmt(b.qty)}${b.reserved?`<br><small>${b.reserved} gebunden</small>`:''}</td><td>${esc(label(b.location))}</td><td>${esc(label(b.owner))}</td><td class="num">${fmt(b.quality)} %</td><td>${button('Akte','select',b.id)}</td></tr>`).join('')}</tbody></table></div>${!batches.length?empty('Lager leer','Bestelle Material. Eine Lagerkraft prüft und lagert jede Lieferung ein.'):''}<div class="actions">${button('Material einkaufen','panel-purchasing','','primary')}${button('Kapazität bauen','build')}</div>`;}
 function purchasing(){const s=sim.state,materials=Object.fromEntries(Object.entries(ITEMS).filter(([id,v])=>['housing','board','carton','spare','metal','sensor_component'].includes(id)||v.purchasable));return `<section class="section"><h3>Material bestellen</h3><p class="fine" style="margin:9px 0 15px">Regulär: 30 Min. · Express: 10 Min. / +30 % · Premium: 45 Min. / +18 %, höhere Qualität.</p><form data-form="buy" class="form-grid">${field('Material',`<select name="item">${opts(materials)}</select>`,true)}${field('Menge','<input name="qty" type="number" min="1" max="1000" value="12" required>')}${field('Lieferant',`<select name="supplier"><option value="standard">Regulär</option><option value="express">Express</option><option value="quality">Premium</option></select>`)}<button class="primary">Verbindlich bestellen →</button></form><div class="actions">${button('Startmaterial · 12 Leuchten','buy-kit')}</div></section><section class="section"><div class="section-title"><h3>Bestellungen</h3>${badge(s.purchases.length+' Vorgänge')}</div>${filtered(s.purchases).slice().reverse().map(p=>`<div class="card"><div class="card-top"><h3>${p.qty} × ${esc(name(ITEMS,p.item))}</h3>${badge(label(p.status),p.blocked?'warn':p.status==='stored'?'good':'')}</div>${kv('Bestellwert',euro(p.cost))}${kv('Ankunft',time(p.eta))}${p.blocked?`<p>${esc(p.blocked)}</p>`:''}<small>${esc(p.id)} · ${label(p.supplier)}</small></div>`).join('')||empty('Keine offenen Bestellungen')}</section>`;}
-function staff(){const s=sim.state;return `<form data-form="hire" class="form-grid"><label class="field">Rolle<select name="role">${opts(ROLES)}</select></label><button class="primary" style="grid-column:auto;align-self:end">Person einstellen</button></form><p class="fine" style="margin:10px 0 20px">Tagschicht 08–16 Uhr. Beschäftigte können nur eine Aufgabe gleichzeitig übernehmen. Lohn je aktiver Schichtminute.</p>${filtered(s.workers).map(w=>`<div class="card"><div class="card-top"><div><h3>${esc(w.name)}</h3><small>${esc(name(ROLES,w.role))} · ${euro(w.wage)}/h</small></div>${badge(onShift(w,s.t)?w.task?'Beschäftigt':'Bereit':'Feierabend')}</div><div class="grid2"><div>${kv('Qualifikation',fmt(w.skill,2)+'×')}${w.training?kv('Fortbildung',fmt(w.training.remaining)+' Min.'):''}${kv('Müdigkeit',fmt(w.fatigue)+' %')}</div><div>${kv('Tätigkeit',esc(w.activity||'Bereit'))}${kv('Standort',esc(s.sites.find(x=>x.id===w.site)?.name))}</div></div><select aria-label="Schicht für ${esc(w.name)}" data-shift="${w.id}">${['day','night','all'].map(k=>`<option value="${k}" ${k===w.shift?'selected':''}>${label(k)}</option>`).join('')}</select><div class="actions">${button('Schulen · 90 Min. / 900 €','train',w.id)}${button('Akte','select',w.id)}${s.sites.length>1?`<select aria-label="Person versetzen" data-relocate="${w.id}"><option value="">Standort wechseln …</option>${s.sites.filter(a=>a.id!==w.site).map(a=>`<option value="${a.id}">${esc(a.name)}</option>`).join('')}</select>`:''}${button('Entlassen','fire',w.id,'danger')}</div></div>`).join('')||empty('Dein Team wartet auf dich','Für erste Linie: 3 Fertigung, 1 Lager, 1 Fahrdienst.')}`;}
+function staff(){const s=sim.state;return `<form data-form="hire" class="form-grid"><label class="field">Rolle<select name="role">${opts(ROLES)}</select></label><button class="primary" style="grid-column:auto;align-self:end">Person einstellen</button></form><p class="fine" style="margin:10px 0 20px">Tagschicht 08–16 Uhr. Beschäftigte können nur eine Aufgabe gleichzeitig übernehmen. Lohn je aktiver Schichtminute.</p>${filtered(s.workers).map(w=>`<div class="card"><div class="card-top"><div><h3>${esc(w.name)}</h3><small>${esc(name(ROLES,w.role))} · ${euro(w.wage)}/h</small></div>${badge(onShift(w,s.t)?w.task?'Beschäftigt':'Bereit':'Feierabend')}</div><div class="grid2"><div>${kv('Qualifikation',fmt(w.skill,2)+'×')}${w.training?kv('Fortbildung',fmt(w.training.remaining)+' Min.'):''}${kv('Müdigkeit',fmt(w.fatigue)+' %')}</div><div>${kv('Tätigkeit',esc(w.activity||'Bereit'))}${kv('Standort',esc(s.sites.find(x=>x.id===w.site)?.name))}</div></div><select aria-label="Schicht für ${esc(w.name)}" data-shift="${w.id}">${['day','night','all'].map(k=>`<option value="${k}" ${k===w.shift?'selected':''}>${label(k)}</option>`).join('')}</select><div class="actions">${button('Schulen · 90 Min. / 900 €','train',w.id)}${button('Akte','select',w.id)}${s.sites.length>1?`<select aria-label="Person versetzen" data-relocate="${w.id}"><option value="">Standort wechseln …</option>${s.sites.filter(a=>a.id!==w.site).map(a=>`<option value="${a.id}">${esc(a.name)}</option>`).join('')}</select>`:''}${button('Entlassen','fire',w.id,'danger')}</div></div>`).join('')||empty('Dein Team wartet auf dich','Für den Depotstart: 1 Lagerkraft und 1 Fahrdienst.')}`;}
 function orders(){const s=sim.state;return `<div class="notice">Erst tatsächliche Zustellung erzeugt eine Forderung. Zahlung folgt 60 Spielminuten später. Verspätete Lieferungen erhalten 10 % Preisabschlag.</div>${filtered(s.orders).map(o=>`<div class="card"><div class="card-top"><div><h3>${esc(o.customer)}</h3><small>${esc(o.id)} · ${esc(name(ITEMS,o.item))} · ${o.kind==='logistics'?'Fremdlogistik':o.kind==='manufacturing'?'Auftragsfertigung':'Eigenprodukte'}</small></div>${badge(o.late?'Frist überschritten':label(o.status),o.late?'bad':o.status==='fulfilled'?'good':'')}</div><div class="numbers">${num(`${o.delivered} / ${o.qty}`,'Geliefert')}${num(euro(o.price),'Preis / Stück')}${num(fmt(o.quality)+' %','Mindestqualität')}</div>${kv('Lieferfrist',time(o.due))}${kv('Vertragswert',euro(o.qty*o.price))}${kv('Bezahlt',euro(o.paid))}${o.status==='offer'?`<div class="actions">${button('Auftrag annehmen','accept',o.id,'primary')}${button('Akte','select',o.id)}</div>`:o.status==='active'?`<form data-form="dispatch" data-id="${o.id}" class="form-grid">${field('Fahrzeug',`<select name="vehicleId" required>${s.vehicles.filter(v=>v.status==='idle'&&v.site===s.selectedSite).map(v=>`<option value="${v.id}">${esc(v.name)} · ${v.capacity} Plätze</option>`).join('')||'<option value="">Kein freies Fahrzeug</option>'}</select>`,true)}${field('Teilmenge',`<input name="qty" type="number" min="1" max="${o.qty-o.delivered}" value="${Math.min(o.qty-o.delivered,20)}" required>`)}<button class="primary" style="grid-column:auto;align-self:end">Lieferung starten →</button></form><div class="actions">${button('Akte','select',o.id)}${button('Stornieren','cancelOrder',o.id)}</div>`:button('Auftragsakte','select',o.id)}</div>`).join('')}`;}
 function rentalOffer(s){return `<section class="section"><h3>Zusätzliche Fahrzeuge mieten</h3><p class="fine" style="margin:8px 0 12px">Je angefangene 1.440 Spielminuten vorausbezahlt. Erste Rate sofort. Weitere Raten bis Rückgabe, auch bei Stillstand. Keine anteilige Erstattung. Fahrtkosten, Wartung und Personal zusätzlich. Rückgabe nur leer und frei am Mietstandort.</p><form data-form="rental" class="form-grid">${field('Fahrzeug und Mietpreis',`<select name="vehicleType">${Object.entries(RENTAL_RATES).map(([id,rate])=>`<option value="${id}">${esc(VEHICLES[id].name)} · ${euro(rate)} sofort und je Spieltag · ${VEHICLES[id].capacity} Plätze</option>`).join('')}</select>`,true)}<p class="fine" style="grid-column:1/-1">Mietstandort: ${esc(s.sites.find(x=>x.id===s.selectedSite)?.name)}</p><button class="primary">Kostenpflichtig mieten</button></form></section>`;}
 function rentalDetails(s,v){const r=(s.rentals||[]).find(r=>r.id===v.rentalId);if(!r)return '';return `${kv('Mietrate',euro(r.rate)+' / Spieltag')}${kv('Nächste Rate',time(r.nextDue))}${kv('Bisher berechnet',euro(r.rate*r.paidDays)+' · '+fmt(r.paidDays)+' Miettage')}${kv('Rückgabeort',esc(s.sites.find(x=>x.id===r.homeSite)?.name||r.homeSite))}<div class="actions">${button('Mietfahrzeug zurückgeben','returnRental',r.id)}</div>`;}
@@ -4011,7 +4369,9 @@ function history(ref=null){const rows=filtered(sim.state.events.filter(e=>!ref||
 function detail(){const s=sim.state;let kind='',o;for(const k of ['buildings','workers','batches','orders','purchases','vehicles','shipments','returns','transfers','tours','freights']){o=(s[k]||[]).find(x=>x.id===selected);if(o){kind=k;break;}}if(!o)return empty('Objekt nicht gefunden','Einige abgeschlossene Arbeitsaufträge gehen in die Chronik über.');let html=`<div class="card"><div class="card-top"><h3>${esc(o.name||o.customer||name(kind==='buildings'?BUILDINGS:ITEMS,o.type||o.item)||o.id)}</h3>${badge(o.id)}</div>`;if(kind==='buildings'){const d=BUILDINGS[o.type];html+=kv('Status',label(o.status))+kv('Zustand',fmt(o.condition)+' %')+kv('Energiebedarf',d.power+' kW')+kv('Anschaffung',euro(d.cost));if(d.recipes.length)html+=`<label class="field">Arbeitsplan<select data-recipe="${o.id}">${d.recipes.map(id=>`<option value="${id}" ${id===o.recipe?'selected':''}>${esc(name(RECIPES,id))}</option>`).join('')}</select></label>`;html+=`<div class="actions">${button(o.enabled?'Pausieren':'Fortsetzen','toggle',o.id)}${button('Warten','maintain',o.id)}${button('Versetzen','move',o.id)}${button('Abreißen · 35 % Erlös','demolish',o.id,'danger')}</div>`;}else if(kind==='batches'){html+=kv('Artikel',esc(name(ITEMS,o.item)))+kv('Menge',fmt(o.qty))+kv('Reserviert',fmt(o.reserved))+kv('Ort',label(o.location))+kv('Eigentum',esc(label(o.owner)))+kv('Qualität',fmt(o.quality)+' %')+kv('Einstandspreis',euro(o.unitCost));html+=`<div class="actions">${button('Charge und Nachfolger sperren','recallBatch',o.id,'danger')}</div><p>Herkunft: ${(o.parents||[]).map(id=>button(esc(id),'select',id)).join(' ')||'Direkte Anlieferung'}</p>`;}else{for(const [k,title]of Object.entries({status:'Status',role:'Rolle',item:'Artikel',qty:'Menge',delivered:'Geliefert',remaining:'Restzeit',quality:'Qualität',condition:'Zustand',blocked:'Warteursache',task:'Tätigkeit',capacity:'Ladeplätze',paid:'Bezahlt'}))if(o[k]!==undefined)html+=kv(title,esc(k==='item'?name(ITEMS,o[k]):k==='role'?name(ROLES,o[k]):label(o[k])));}return html+'</div><h3 style="margin:20px 0">Verlauf</h3>'+history(o.id);}
 function planning(){const s=sim.state;return `<div class="notice good">Planung läuft auf vollständiger Kopie. Originalbestand, Geld und Zufallszustand bleiben unverändert. Prognose setzt heutige Befehle fort; neue Marktentscheidungen werden nicht erfunden.</div><form data-form="forecast" class="form-grid">${field('Zeitraum','<select name="minutes"><option value="60">1 Spielstunde</option><option value="480">8 Spielstunden</option><option value="1440">1 Spieltag</option></select>')}${field('Alternative','<select name="alternative"><option value="none">Aktuellen Betrieb fortführen</option><option value="worker">Zusätzliche Fertigungskraft</option></select>')}<button class="primary">Vorschau berechnen</button></form>${forecast?`<div class="forecast-comparison" style="margin-top:20px"><div class="card"><h3>Jetzt</h3>${kv('Geld',euro(s.money))}${kv('Fertigware erzeugt',s.stats.produced)}${kv('Ausgeliefert',s.stats.delivered)}</div><div class="card"><h3>${time(forecast.t)}</h3>${kv('Geld',euro(forecast.money))}${kv('Fertigware erzeugt',forecast.stats.produced)}${kv('Ausgeliefert',forecast.stats.delivered)}</div></div>`:''}`;}
 function help(){return `<p class="fine">Betriebshandbuch · Version ${VERSION}</p><div class="notice good">Alle Firmen, Personen, Preise und Verkehrsregeln sind fiktive Spielwerte. Simulation bleibt lokal. Keine Offlinefortschritte.</div>${[
- ['Erste Lieferung','Errichte Lagerregal, Montageplatz, Prüfstation, Packstation und Laderampe. Stelle drei Fertigungskräfte, eine Lagerkraft und eine Fahrperson ein. Kaufe je zwölf Gehäuse, Platinen und Kartons. Nimm ersten Auftrag an. Kaufe Lieferwagen. Sobald acht verpackte Leuchten vorliegen, Lieferung im Auftragsfenster starten.'],
+ ['Erste Zustellung','Baue eine Laderampe (Dock) und ein Lagerregal. Stelle eine Lagerkraft ein. Nimm im Vertragsfenster den ersten Frachtvertrag an. Am Vormittag kommt der erste Lkw: Er dockt an und wird entladen, die Lagerkraft sortiert die Pakete von Hand. Stelle eine Fahrperson ein und kaufe einen Lieferwagen. Ordne im Auftragsfenster die sortierten Pakete dem Fahrzeug zu, einzeln oder als Sammeltour. Eine Stunde nach der Zustellung zahlt der Versender. „Startbetrieb einrichten“ in der Zentrale übernimmt den Aufbau über reguläre Befehle (ca. 14.500 €).'],
+ ['Wirtschaftlichkeit im Depot','Erlös je Paket steht im Vertrag. Laufende Kosten: Löhne je Schichtminute, Strom, Hallenmiete und Fahrtkosten je Tour. Ein Startvertrag trägt Lagerkraft und Fahrer; mit einem zweiten Vertrag amortisiert sich die Grundausstattung in etwa fünf Spieltagen. Zustellung nach Fristende kostet 10 % des Erlöses und Ansehen. Eine Lagerkraft schafft von Hand rund 250 Pakete am Tag; darüber hinaus helfen eine zweite Lagerkraft oder ein Sortierplatz und ein weiteres Fahrzeug.'],
+ ['Mehrwertdienste (später)','Montage, Prüfung und Verpackung bleiben als künftiges Geschäftsfeld „Mehrwertdienste“ erhalten, etwa Kommissionierung und Verpackung für Versender. Für den Einstieg werden sie nicht benötigt. Die vorhandenen Fertigungsanlagen lassen sich weiterhin bauen.'],
  ['Frachtverträge, Hof und Docks','Verträge: Angebot prüfen (Versender, Zustellgebiete, Ankünfte je Tag, Pakete, Preis je Paket, Frist ab Tor) und annehmen. Zu jeder Ankunft kommt ein fremder Lkw: Anfahrt, Torkontrolle, Wartet auf Dock, Zum Dock, Andocken, Entladen, Ausfahrt. Ohne freies Dock oder Lagerpersonal wartet er; der Grund steht im Torbuch unter Hof & Docks. „Vorziehen“ bittet die Hofsteuerung, einen noch nicht angedockten Lkw zuerst zu bedienen. Entladene Pakete liegen im Wareneingang, ein Sortierplatz macht sie versandfähig, eigene Fahrzeuge stellen sie zu.'],
  ['Material und Maschinen','Gehäuse + Platine → montierte Leuchte. Prüfstation → geprüfte Leuchte. Packstation + Karton → verkaufbare Leuchte. Anlagen wählen automatisch ihren ersten Arbeitsplan. Jedes Stück benötigt Arbeitszeit, Personal und Strom.'],
  ['Warum wartet mein Betrieb?','Material fehlt: Einkauf und Wareneingang prüfen. Personal fehlt: Rolle, Schicht und andere Tätigkeiten prüfen. Ausgang blockiert: Lager erweitern oder Ware ausliefern. Energie fehlt: Versorgung ausbauen. Gebäude anklicken für Details.'],
@@ -4023,24 +4383,27 @@ function help(){return `<p class="fine">Betriebshandbuch · Version ${VERSION}</
  ['Steuerung und Zugänglichkeit','/: Suche nach Anlagen, Fahrzeugen, Kennzeichen, Verträgen, Aufträgen und Beschäftigten; Pfeiltasten und Eingabe öffnen die Akte. Glocke: aktuelle Wartegründe und Warnungen. Standortfluss und Fahrzeugleiste lassen sich einklappen; ▢ blendet alle Panels aus. Leertaste: Pause. B: Bauen. R: Bauobjekt drehen. Escape: Fenster schließen. Ziehen: Kamera bewegen. Mausrad: Zoom. Grundriss liefert ebene Ersatzansicht. Alle Anlagen auch über Fertigungstabelle auswählen. Schrift und Bewegung in Einstellungen.'],
  ['Darstellung und Umfang','Die aktuelle räumliche Ansicht verwendet lokal gezeichnete Canvas-Isometrie. Sie benötigt kein WebGL. Phasenstatus und konkrete Grenzen sind in der ausgelieferten Dokumentation nachgehalten.']
  ].map(([h,t])=>`<details><summary>${h}</summary><p>${t}</p></details>`).join('')}`;}
-function backupNotice(){if(portableMode||temporary)return '';const meta=holdMeta(STORE+'-'+recoveryMode());if(!meta)return '';return `<div class="notice">Sicherung des vorherigen Unternehmens${typeof meta.t==='number'?' ('+esc(time(meta.t))+')':''} bleibt erhalten. Bis zum Verwerfen erhält der aktuelle Stand keine eigene Sicherung.</div>${started?`<div class="actions">${button('Alte Sicherung verwerfen','discardBackup','','danger')}</div>`:''}`;}
+function backupNotice(){if(portableMode||temporary)return '';const key=STORE+'-'+recoveryMode();let prev=false;try{prev=store.has(key+'-backup-prev');}catch{}
+ if(prev){const t=previousTime(key);return `<div class="notice">Sicherung des vorherigen Unternehmens${typeof t==='number'?' ('+esc(time(t))+')':''} bleibt erhalten (eigener Platz). Der aktuelle Stand hat seine eigene laufende Sicherung.</div>${started?`<div class="actions">${button('Vorheriges Unternehmen laden','loadPrevious')}${button('Alte Sicherung verwerfen','discardBackup','','danger')}</div>`:''}`;}
+ const meta=holdMeta(key);if(!meta)return '';return `<div class="notice">Sicherung des vorherigen Unternehmens${typeof meta.t==='number'?' ('+esc(time(meta.t))+')':''} bleibt erhalten. Bis zum Verwerfen erhält der aktuelle Stand keine eigene Sicherung.</div>${started?`<div class="actions">${button('Alte Sicherung verwerfen','discardBackup','','danger')}</div>`:''}`;}
 function settings(){return `<section class="section"><h3>Spielstand</h3><p class="fine">HTML-Download enthält Spiel und aktuellen Stand. Datei im Browser öffnen, dann 1× drücken. Für späteren Fortschritt erneut als HTML speichern. Keine Installation nötig.</p>${temporary?`<div class="notice">${temporaryMessage}</div>`:''}${!portableMode?`<div class="actions">${button('Speicher erneut prüfen','retryStorage')}${!temporary?button('Ohne lokale Speicherung spielen','temporary'):''}</div>`:''}${!writable&&!temporary?`<div class="notice">${esc(lockMessage())}</div>`:''}${!portableMode?`<form data-form="loadMode" class="form-grid">${field('Gespeichertes Unternehmen','<select name="mode"><option value="guided">Geführter Einstieg</option><option value="economy">Wirtschaftsbetrieb</option><option value="sandbox">Freies Bauen</option></select>')}<button>Modus laden</button></form>`:''}<p class="fine">Version ${VERSION}. Vollständiger Funktionsstatus und Quellcode im Download.</p>${!portableMode?'<p style="margin:10px 0"><a href="./Industrie-Logistik.zip" download>Spielpaket & Quellcode herunterladen ↗</a></p>':''}<p class="fine" style="margin-top:8px">Aktiver Modus: ${sim.state.mode==='guided'?'Geführter Einstieg':sim.state.mode==='sandbox'?'Freies Bauen':'Wirtschaftsbetrieb'}</p><div class="actions">${button('Spiel als HTML speichern','exportHtml','','primary')}${!portableMode?button('Im Browser speichern','save'):''}${button('JSON exportieren','export')}${button('JSON importieren','import')}${!portableMode&&backupAvailable(recoveryMode())?button('Letzte Sicherung laden','backup'):''}</div>${backupNotice()}</section><section class="section"><h3>Darstellung</h3><div class="list-row"><span>Größere Schrift</span><input type="checkbox" data-pref="large" ${prefs.large?'checked':''} aria-label="Größere Schrift"></div><div class="list-row"><span>Bewegung reduzieren</span><input type="checkbox" data-pref="reduced" ${prefs.reduced?'checked':''} aria-label="Bewegung reduzieren"></div><div class="list-row"><span>Einstiegshinweise</span><input type="checkbox" data-pref="mission" ${prefs.mission?'checked':''} aria-label="Einstiegshinweise"></div></section><section class="section"><h3>Unternehmen</h3><div class="actions">${button('Neues Unternehmen','new','','danger')}${button('Handbuch','panel-help')}</div><p class="fine" style="margin-top:10px">Neustart erfolgt erst nach Bestätigung. Vorheriger Stand kann exportiert werden.</p></section><div class="notice">Browserprüfung dieser Veröffentlichung noch offen. Fachliche Simulation wird automatisiert geprüft.</div>`;}
 function confirm(title,text,action){$('#confirmTitle').textContent=title;$('#confirmText').textContent=text;confirmAction=action;$('#confirm').showModal();}
-function starter(){const plans=[['rack',2,2],['assembly',5,3],['testing',9,3],['packing',13,3],['dock',3,11]];for(const [buildingType,x,y]of plans)if(!sim.state.buildings.some(b=>b.type===buildingType)){if(!send({type:'build',buildingType,x,y,rotation:0},true).ok)return;}for(const role of ['production','production','production','warehouse','driver'])if(!send({type:'hire',role},true).ok)return;if(!sim.state.vehicles.some(v=>v.status!=='rentalReturned'))send({type:'buyVehicle',vehicleType:'van'},true);toast('Startbetrieb eingerichtet. Nächster Schritt: Material bestellen.');openPanel('purchasing');}
+// Depot-Grundausstattung (A02 W1b): nur reguläre Befehle; bereits Vorhandenes wird nicht doppelt gekauft. Bricht bei fehlendem Kapital ab.
+function starter(){const s=sim.state,site=s.selectedSite;for(const [buildingType,x,y]of [['dock',3,11],['rack',2,2]])if(!s.buildings.some(b=>b.type===buildingType&&b.site===site)){if(!send({type:'build',buildingType,x,y,rotation:0},true).ok)return;}for(const role of ['warehouse','driver'])if(!s.workers.some(w=>w.role===role&&w.site===site)&&!send({type:'hire',role},true).ok)return;if(!s.vehicles.some(v=>v.site===site&&v.status!=='rentalReturned')&&!send({type:'buyVehicle',vehicleType:'van'},true).ok)return;toast('Depot eingerichtet. Nächster Schritt: ersten Frachtvertrag annehmen.');openPanel('contracts');}
 document.addEventListener('click',e=>{if(!e.target.closest?.('.cmd,.site-pick,.bell-wrap'))closeMenus();const b=e.target.closest('button,a.brand');if(!b)return;if(b.matches('a.brand')){e.preventDefault();openPanel('overview');return;}if(b.dataset.panel){closeMenus();openPanel(b.dataset.panel);return;}if(b.dataset.toggle){hudToggle(b.dataset.toggle);return;}if(b.dataset.site){closeMenus();if(b.dataset.site!==sim.state.selectedSite){send({type:'selectSite',id:b.dataset.site},true);scene.home();}return;}if(b.dataset.hit){openHit(b.dataset.hit);return;}if(b.dataset.alert){const a=hudData?.alerts.find(x=>x.key===b.dataset.alert);if(a)openRef(a.ref,a.target);return;}if(b.dataset.station){openStation(b.dataset.station);return;}if(b.dataset.vehicle){openRef(b.dataset.vehicle);return;}if(b.dataset.arrival){openArrival(b.dataset.arrival);return;}if(b.dataset.labels){labelMode=b.dataset.labels;scene.setLabels?.(labelMode);$$('[data-labels]').forEach(x=>x.classList.toggle('active',x===b));return;}if(b.dataset.speed!==undefined){setSpeed(+b.dataset.speed);return;}if(b.dataset.view){scene.setView(b.dataset.view);$$('[data-view]').forEach(x=>x.classList.toggle('active',x===b));return;}if(b.dataset.camera){({plus:()=>scene.zoom(1),minus:()=>scene.zoom(-1),rotate:()=>scene.rotate(),home:()=>scene.home()})[b.dataset.camera]();return;}if(b.dataset.build){build=b.dataset.build;scene.setBuild(build,rotation,moving);renderBuild();return;}const a=b.dataset.action,id=b.dataset.id;if(!a)return;if(a.startsWith('panel-')){openPanel(a.slice(6));return;}
- const actions={'ticket-inform':()=>ticketRespond(id,'inform'),'ticket-approve':()=>ticketRespond(id,'approve'),'ticket-reject':()=>ticketRespond(id,'reject'),'ticket-goodwill':()=>ticketRespond(id,'goodwill'),'ticket-apologize':()=>ticketRespond(id,'apologize'),exportHtml,retryStorage,temporary:chooseTemporary,returnRental:()=>confirm('Mietfahrzeug zurückgeben?','Rückgabe beendet weitere Mietkosten. Angebrochene Miettage werden nicht erstattet. Fahrzeug muss leer und frei am Mietstandort stehen.',()=>send({type:'returnRental',id})),cancelTour:()=>send({type:'cancelTour',id}),disposeBatch:()=>confirm('Geschädigte Ware entsorgen?','Entsorgung kostet 2 € je Stück. Ware wird endgültig entfernt.',()=>send({type:'disposeBatch',batchId:id})),approveDocuments:()=>send({type:'approveDocuments',id}),cancelFreight:()=>confirm('Fracht stornieren?','Bereits gezahlte Fracht verfällt. Ware kehrt nur bei freier Lagerkapazität zurück.',()=>send({type:'cancelFreight',id})),recallBatch:()=>confirm('Charge zurückrufen?','Betroffene Charge und ihre nachverfolgbaren Nachfolger werden gesperrt. Bereits gelieferte Ware wird im Rückruf erfasst.',()=>send({type:'recallBatch',batchId:id})),acceptContract:()=>hubSend({type:'acceptContract',id},'Vertragsannahme'),cancelContract:()=>cancelContract(id),prioritizeArrival:()=>hubSend({type:'prioritizeArrival',id},'Vorziehen'),close:closePanel,refresh:()=>renderPanel(true),build:()=>startBuild(BUILDINGS[id]?id:undefined),endBuild,rotateBuild:()=>{rotation=(rotation+90)%360;scene.setBuild(build,rotation,moving);toast('Anlage gedreht: '+rotation+'°');},select:()=>{selected=id;openPanel('detail');scene.focus?.(id);},toggle:()=>send({type:'toggleBuilding',id}),maintain:()=>send({type:'maintain',id}),move:()=>{const o=sim.state.buildings.find(b=>b.id===id);if(o){moving=id;rotation=o.rotation;startBuild(o.type);toast('Neue Position auf Karte wählen.');}},demolish:()=>confirm('Anlage zurückbauen?','Rückbau gibt 35 % Anschaffungskosten zurück. Belegte Anlagen bleiben geschützt.',()=>send({type:'demolish',id})),accept:()=>send({type:'acceptOrder',id}),cancelOrder:()=>confirm('Auftrag stornieren?','Unvollständige Aufträge senken Reputation.',()=>send({type:'cancelOrder',id})),cancelShipment:()=>send({type:'cancelShipment',id}),train:()=>send({type:'train',id}),fire:()=>confirm('Person entlassen?','Aktive Tätigkeit muss vorher abgeschlossen werden.',()=>send({type:'fire',id})),vehicleMaintain:()=>send({type:'maintainVehicle',id}),research:()=>send({type:'startResearch',key:id}),toggleRule:()=>send({type:'toggleRule',id}),deleteRule:()=>send({type:'deleteRule',id}),site:()=>{send({type:'selectSite',id});scene.home();closePanel();},networkView:()=>{scene.setView('network');closePanel();},repairReturn:()=>send({type:'resolveReturn',id,resolution:'repair'}),recycleReturn:()=>send({type:'resolveReturn',id,resolution:'recycle'}),starter, 'buy-kit':()=>{for(const item of ['housing','board','carton'])if(!send({type:'buy',item,qty:12,supplier:'standard'},true).ok)return;toast('Drei getrennte Materiallieferungen bestellt.');},save:()=>save(true),export:()=>{const blob=new Blob([sim.serialize()],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`Industrie-Logistik-Tag-${Math.floor(sim.state.t/1440)+1}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);},import:()=>$('#importFile').click(),backup:loadBackup,welcomeBackup:loadBackup,discardBackup,new:()=>confirm('Neues Unternehmen?','Vorherigen Spielstand bei Bedarf zuerst exportieren. Moduswahl öffnet sich danach.',()=>{showWelcome();setSpeed(0);}),hideMission:()=>{prefs.mission=false;applyPrefs();},start:()=>{const mode=$('input[name=mode]:checked').value;if(temporary)return confirm('Temporäres Unternehmen ersetzen?','Aktuellen Stand vorher als JSON exportieren.',()=>activate(mode,{reset:true}));let existing;try{existing=localStorage.getItem(STORE+'-'+mode);}catch{toast(lockMessage(),true);return false;}if(existing){confirm('Vorhandenen Spielstand ersetzen?','Dieser Modus besitzt bereits ein Unternehmen. Vorher bei Bedarf laden und exportieren. Letzte gültige Sicherung bleibt erhalten, bis du sie in den Einstellungen verwirfst.',()=>activate(mode,{reset:true}));return;}return activate(mode,{reset:true});},confirmCancel:()=>$('#confirm').close(),confirmOk:()=>{$('#confirm').close();const fn=confirmAction;confirmAction=null;return fn?.();}};return actions[a]?.();});
+ const actions={'ticket-inform':()=>ticketRespond(id,'inform'),'ticket-approve':()=>ticketRespond(id,'approve'),'ticket-reject':()=>ticketRespond(id,'reject'),'ticket-goodwill':()=>ticketRespond(id,'goodwill'),'ticket-apologize':()=>ticketRespond(id,'apologize'),exportHtml,retryStorage,temporary:chooseTemporary,returnRental:()=>confirm('Mietfahrzeug zurückgeben?','Rückgabe beendet weitere Mietkosten. Angebrochene Miettage werden nicht erstattet. Fahrzeug muss leer und frei am Mietstandort stehen.',()=>send({type:'returnRental',id})),cancelTour:()=>send({type:'cancelTour',id}),disposeBatch:()=>confirm('Geschädigte Ware entsorgen?','Entsorgung kostet 2 € je Stück. Ware wird endgültig entfernt.',()=>send({type:'disposeBatch',batchId:id})),approveDocuments:()=>send({type:'approveDocuments',id}),cancelFreight:()=>confirm('Fracht stornieren?','Bereits gezahlte Fracht verfällt. Ware kehrt nur bei freier Lagerkapazität zurück.',()=>send({type:'cancelFreight',id})),recallBatch:()=>confirm('Charge zurückrufen?','Betroffene Charge und ihre nachverfolgbaren Nachfolger werden gesperrt. Bereits gelieferte Ware wird im Rückruf erfasst.',()=>send({type:'recallBatch',batchId:id})),acceptContract:()=>hubSend({type:'acceptContract',id},'Vertragsannahme'),cancelContract:()=>cancelContract(id),prioritizeArrival:()=>hubSend({type:'prioritizeArrival',id},'Vorziehen'),close:closePanel,refresh:()=>renderPanel(true),build:()=>startBuild(BUILDINGS[id]?id:undefined),endBuild,rotateBuild:()=>{rotation=(rotation+90)%360;scene.setBuild(build,rotation,moving);toast('Anlage gedreht: '+rotation+'°');},select:()=>{selected=id;openPanel('detail');scene.focus?.(id);},toggle:()=>send({type:'toggleBuilding',id}),maintain:()=>send({type:'maintain',id}),move:()=>{const o=sim.state.buildings.find(b=>b.id===id);if(o){moving=id;rotation=o.rotation;startBuild(o.type);toast('Neue Position auf Karte wählen.');}},demolish:()=>confirm('Anlage zurückbauen?','Rückbau gibt 35 % Anschaffungskosten zurück. Belegte Anlagen bleiben geschützt.',()=>send({type:'demolish',id})),accept:()=>send({type:'acceptOrder',id}),cancelOrder:()=>confirm('Auftrag stornieren?','Unvollständige Aufträge senken Reputation.',()=>send({type:'cancelOrder',id})),cancelShipment:()=>send({type:'cancelShipment',id}),train:()=>send({type:'train',id}),fire:()=>confirm('Person entlassen?','Aktive Tätigkeit muss vorher abgeschlossen werden.',()=>send({type:'fire',id})),vehicleMaintain:()=>send({type:'maintainVehicle',id}),research:()=>send({type:'startResearch',key:id}),toggleRule:()=>send({type:'toggleRule',id}),deleteRule:()=>send({type:'deleteRule',id}),site:()=>{send({type:'selectSite',id});scene.home();closePanel();},networkView:()=>{scene.setView('network');closePanel();},repairReturn:()=>send({type:'resolveReturn',id,resolution:'repair'}),recycleReturn:()=>send({type:'resolveReturn',id,resolution:'recycle'}),starter, 'buy-kit':()=>{for(const item of ['housing','board','carton'])if(!send({type:'buy',item,qty:12,supplier:'standard'},true).ok)return;toast('Drei getrennte Materiallieferungen bestellt.');},save:()=>save(true),export:()=>{const blob=new Blob([sim.serialize()],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`Industrie-Logistik-Tag-${Math.floor(sim.state.t/1440)+1}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);},import:()=>$('#importFile').click(),backup:loadBackup,welcomeBackup:loadBackup,discardBackup,loadPrevious,new:()=>confirm('Neues Unternehmen?','Vorherigen Spielstand bei Bedarf zuerst exportieren. Moduswahl öffnet sich danach.',()=>{showWelcome();setSpeed(0);}),hideMission:()=>{prefs.mission=false;applyPrefs();},start:()=>{const mode=$('input[name=mode]:checked').value;if(temporary)return confirm('Temporäres Unternehmen ersetzen?','Aktuellen Stand vorher als JSON exportieren.',()=>activate(mode,{reset:true}));let existing,prevExists=false;try{existing=store.has(STORE+'-'+mode);prevExists=store.has(STORE+'-'+mode+'-backup-prev');}catch{toast(lockMessage(),true);return false;}if(existing){confirm('Vorhandenen Spielstand ersetzen?','Dieser Modus besitzt bereits ein Unternehmen. Vorher bei Bedarf laden und exportieren. Letzte gültige Sicherung bleibt erhalten (eigener Platz „vorheriges Unternehmen“), bis du sie in den Einstellungen verwirfst.'+(prevExists?' Eine dort liegende ältere Sicherung wird dabei ersetzt.':''),()=>activate(mode,{reset:true}));return;}return activate(mode,{reset:true});},confirmCancel:()=>$('#confirm').close(),confirmOk:()=>{$('#confirm').close();const fn=confirmAction;confirmAction=null;return fn?.();}};return actions[a]?.();});
 document.addEventListener('change',e=>{const t=e.target;if(t.closest?.('[data-form="tour"]'))updateTourDraft(t.closest('[data-form="tour"]'));if(t.dataset.relocate&&t.value)send({type:'moveWorker',id:t.dataset.relocate,toSite:t.value});if(t.dataset.shift)send({type:'setShift',id:t.dataset.shift,shift:t.value});if(t.dataset.recipe)send({type:'setRecipe',id:t.dataset.recipe,recipe:t.value});if(t.dataset.pref){prefs[t.dataset.pref]=t.checked;applyPrefs();dirty=true;try{if(!temporary)localStorage.setItem(prefsKey,JSON.stringify({...prefs,mode:sim.state.mode}));}catch{}}});
 document.addEventListener('input',e=>{const f=e.target.closest?.('[data-form="tour"]');if(f)updateTourDraft(f);});
 $('#search').addEventListener('input',e=>{search=e.target.value.toLowerCase();renderPanel();});
 document.addEventListener('submit',e=>{const f=e.target.closest('[data-form]');if(!f)return;e.preventDefault();const d=Object.fromEntries(new FormData(f));const t=f.dataset.form;for(const k of ['qty','threshold','budget','cooldown','minutes','amount','qty1','qty2','qty3','priority','extensionMinutes'])if(k in d)d[k]=Number(d[k]);const commands={ticket:{type:'createTicket',...d},rental:{type:'rentVehicle',vehicleType:d.vehicleType,site:sim.state.selectedSite},freight:{type:'bookFreight',...d},tour:tourCommand(d),loan:{type:d.operation,amount:d.amount},buy:{type:'buy',...d},hire:{type:'hire',...d},vehicle:{type:'buyVehicle',...d},dispatch:{type:'dispatch',orderId:f.dataset.id,...d},rule:{type:'addRule',kind:'reorder',...d},site:{type:'buySite',...d},transfer:{type:'transfer',...d},return:{type:'createReturn',...d}};if(t==='loadMode'){return activate(d.mode);}if(t==='forecast'){try{forecast=sim.forecast(d.minutes,d.alternative==='worker'?[{type:'hire',role:'production'}]:[]);renderPanel();toast('Vorschau berechnet. Echter Betrieb unverändert.');}catch(err){toast(err.message,true);}}else{const result=send(commands[t]);if(t==='tour'&&result.ok)tourDraft={};renderPanel();}});
 $('#importFile').addEventListener('change',async e=>{const file=e.target.files[0];e.target.value='';if(!file)return;try{if(file.size>30000000)throw Error('Datei zu groß.');const candidate=Simulation.fromJSON(await file.text());confirm('Spielstand importieren?',`${time(candidate.state.t)} · ${euro(candidate.state.money)} · ${candidate.state.buildings.length} Anlagen. Aktuellen Stand ersetzen?`,()=>activate(candidate.state.mode,{candidate}));}catch(err){toast(err.message,true);}});
 document.addEventListener('keydown',e=>{if(e.target.matches('input,select,textarea')||$('dialog[open]'))return;if(e.key==='/'&&!e.ctrlKey&&!e.metaKey&&!e.altKey){e.preventDefault();closeMenus();$('#cmd').focus?.();return;}if(e.code==='Space'){e.preventDefault();setSpeed(speed?0:1);}if(e.key.toLowerCase()==='b')startBuild();if(e.key.toLowerCase()==='r'&&!$('#buildTray').hidden){rotation=(rotation+90)%360;scene.setBuild(build,rotation,moving);}if(e.key==='Escape'){if(menuOpen('siteMenu')||menuOpen('bellMenu')){closeMenus();return;}endBuild();closePanel();}});
-document.addEventListener('visibilitychange',()=>{accumulator=0;lastTick=performance.now();if(document.hidden&&started)save();render();});
-window.addEventListener('beforeunload',e=>{if(started&&dirty&&(temporary||!save())){e.preventDefault();e.returnValue='';}});
+document.addEventListener('visibilitychange',()=>{accumulator=0;lastTick=performance.now();if(document.hidden&&started)leaveSave();render();});
+window.addEventListener('beforeunload',e=>{if(!started)return;if(temporary?dirty:leaveSave()!=='saved'){e.preventDefault();e.returnValue='';}});
 window.addEventListener('pagehide',()=>guard.release());
 window.addEventListener('pageshow',e=>{if(e.persisted){writable=false;speed=0;toast('Ansicht wiederhergestellt. Für sicheres Fortsetzen Seite neu laden.',true);render();}});
 setInterval(()=>{const now=performance.now(),dt=Math.min(1000,now-lastTick);lastTick=now;if(!started||switching||document.hidden||$('dialog[open]')||!speed||!canWrite()){accumulator=0;scene.setClock?.(sim.state.t);return;}accumulator+=dt*speed;const n=Math.floor(accumulator/1000);if(n){accumulator-=n*1000;try{sim.step(n);dirty=true;render();}catch(e){setSpeed(0);toast('Simulation angehalten: '+e.message,true);}}scene.setClock?.(sim.state.t+accumulator/1000);},100);
-// Autosave im Leerlauf; Verlassen (visibilitychange/beforeunload) speichert weiterhin synchron.
+// Autosave im Leerlauf; Verlassen (visibilitychange/beforeunload) speichert sofort (localStorage synchron; IndexedDB: Transaktion sofort + Notfall-Kopie).
 let idleSave=0;
 function requestIdleSave(){if(idleSave)return;const run=()=>{idleSave=0;if(started&&dirty)save();};idleSave=typeof requestIdleCallback==='function'?requestIdleCallback(run,{timeout:5000}):setTimeout(run,0);}
 setInterval(()=>{if(started&&dirty)requestIdleSave();},20000);
@@ -4094,9 +4457,6 @@ function cancelContract(id){const s=sim.state,c=(s.contracts||[]).find(x=>x.id==
 function searchHub(s,q,has,site,hits){const day=Math.floor(s.t/1440);
  for(const a of s.yard||[])if((a.phase!=='gone'||sameDay(a.eta,day))&&has(a.plate,a.id,a.carrier))hits.push({id:a.id,kind:'Fremd-Lkw',title:a.plate||a.id,sub:`${a.carrier||'—'} · ${phaseLabel(a.phase)} · ${site(a.site)}`,tone:arrivalTone(a)});
  for(const c of s.contracts||[])if(has(c.shipper,c.id,...(c.lanes||[]).map(l=>l.name)))hits.push({id:c.id,kind:'Vertrag',title:c.shipper||c.id,sub:`${c.id} · ${label(c.status)} · ${fmt(parcelsPerDay(c))} Pakete/Tag · ${site(c.site)}`,tone:c.status==='active'?'move':'neutral'});}
-function hubRequirements(s,b){if(!(s.contracts||[]).length)return [];return [
- {ok:s.contracts.some(c=>c.status!=='offer'),title:'Ersten Frachtvertrag annehmen',text:'Ein Versender schickt Lkw mit Paketen. Angebot im Vertragsfenster prüfen und annehmen.',panel:'contracts',cta:'Verträge öffnen'},
- {ok:b.some(x=>x.type==='sorter'),title:'Sortierplatz bauen',text:'Sortierplatz macht entladene Pakete versandfähig. Ohne ihn sortiert Lagerpersonal langsam von Hand.',action:'build',build:'sorter',cta:'Sortierplatz bauen'}];}
 function contractCard(s,c){const arrivals=(c.arrivals||[]).slice().sort((a,b)=>a.minute-b.minute),perDay=parcelsPerDay(c),site=s.sites.find(x=>x.id===c.site)?.name||c.site;
  const lanes=(c.lanes||[]).map((l,i)=>`${esc(l.name)} · ${fmt(l.distance)} km${Number.isFinite(c.laneShare?.[i])?' · '+fmt(c.laneShare[i]*100)+' %':''}`).join('<br>');
  const open=s.orders.filter(o=>o.contractId===c.id&&o.status==='active'),late=open.filter(o=>o.late||s.t>o.due).length;
