@@ -148,6 +148,44 @@ try {
   check('Hof: unter 150 Draw Calls', hof.info.drawCalls < 150, String(hof.info.drawCalls));
   check('Hof: Spielzustand unverändert', hof.unchanged);
   await page.evaluate(() => { window.__hof.s.destroy(); window.__hof.host.remove(); });
+  // Welle 2b: Palettenvertrag + Stapler (Datenform W2-S2): Paletten-Lkw entlädt an d1 (Stapler f1 gebunden), eigener Lkw belädt an d2 (Stapler f3),
+  // Stapler f2 lädt (8 %), Palettenstapel im Lager, Paket-Lkw in der Warteschlange weiter mit Kastenauflieger.
+  const fork = await page.evaluate(async () => {
+    const { Scene3D } = await import('./scene3d.js');
+    const host = document.createElement('div'); host.style.cssText = 'position:fixed;inset:0;z-index:999;background:#fff'; document.body.appendChild(host);
+    const canvas = document.createElement('canvas'); canvas.style.cssText = 'width:100%;height:100%;display:block'; host.appendChild(canvas);
+    const B = (id, type, x, y, status = 'idle', extra = {}) => ({ id, type, site: 's1', x, y, rotation: 0, status, enabled: true, condition: 100, ...extra });
+    const A = (id, phase, extra) => ({ id, site: 's1', contractId: 'contract-1', orderIds: [], carrier: 'Weidenstein Frachtdienst', plate: 'WST-PL 4410', parcels: 12, phase, phaseStart: 600, phaseEnd: null, eta: 600, dock: null, waitReason: null, waitSince: null, unloaded: 0, atRisk: false, forecast: null, gateAt: 590, priority: false, split: [{ owner: 'order-1', target: 12, done: 0 }], ...extra });
+    const state = { t: 600, selectedSite: 's1', sites: [{ id: 's1', name: 'Hub Palette', x: 0, y: 0, width: 20, height: 16, energy: 60 }],
+      buildings: [B('d1', 'dock', 2, 13, 'idle', { task: 'arrival-1' }), B('d2', 'dock', 9, 13, 'idle', { task: 'sh1' }), B('r1', 'rack', 2, 8), B('r2', 'rack', 5, 8), B('r3', 'rack', 9, 8),
+        B('f1', 'forklift', 14, 9, 'idle', { charge: 54, task: 'arrival-1:forklift' }), B('f2', 'forklift', 15, 9, 'idle', { charge: 8, task: null }), B('f3', 'forklift', 16, 9, 'idle', { charge: 91, task: 'sh1:forklift' }), B('pw', 'power', 17, 1)],
+      batches: [{ id: 'p1', item: 'pallet', site: 's1', qty: 14, location: 'stock', owner: 'order-1' }, { id: 'k1', item: 'parcel', site: 's1', qty: 40, location: 'stock', owner: 'order-2' }],
+      workers: [{ id: 'w1', site: 's1', role: 'warehouse', task: 'arrival-1:warehouse' }, { id: 'w2', site: 's1', role: 'warehouse', task: 'sh1:warehouse' }], jobs: [], research: [],
+      vehicles: [{ id: 'vehicle-1', type: 'truck', site: 's1', status: 'loading', shipment: 'sh1' }], shipments: [{ id: 'sh1', vehicleId: 'vehicle-1', status: 'loading', remaining: 3 }], transfers: [], tours: [], freights: [], returns: [],
+      yard: [A('arrival-1', 'unloading', { dock: 'd1', item: 'pallet', unloaded: 5, split: [{ owner: 'order-1', target: 12, done: 5 }] }), A('arrival-2', 'queue', { plate: 'TGD-KA 1200', carrier: 'Talgrund Spedition', parcels: 120, split: [{ owner: 'order-2', target: 120, done: 0 }], waitReason: 'Kein freies Dock' })] };
+    const before = JSON.stringify(state);
+    const s = new Scene3D(canvas, {}); s.setState(state); s.setView('hall'); s.setLabels('all');
+    let clock = 600.1; s.setClock(clock);
+    s.goal.tx = 9; s.goal.tz = 12; s.goal.dist = 20; s.cam = { ...s.goal }; s.applyCamera(); s.needs = true;
+    await new Promise(r => setTimeout(r, 1500));
+    const pose = () => s.forks.map(f => `${f.id}:${f.x.toFixed(2)},${f.z.toFixed(2)}`);
+    const p0 = pose();
+    clock += .25; s.setClock(clock);
+    let p1 = pose(); for (let i = 0; i < 40 && p1[0] === p0[0]; i++) { await new Promise(r => setTimeout(r, 100)); p1 = pose(); }
+    const chips = [...host.querySelectorAll('.scene3d-chip')].filter(c => c.style.display !== 'none').map(c => c.textContent);
+    window.__fork = { s, host };
+    return { p0, p1, chips, forks: s.inst.fork.count, bars: s.inst.charge.count, flats: s.inst.fflat.count, boxes: s.inst.ftrailer.count, trailerLoad: s.inst.tload.count, stockPallets: s.inst.pstack.count, carried: s.inst.fload.count, stacks: s.inst.stack.count, rackPallets: s.inst.pallet.count, info: s.renderInfo(), unchanged: JSON.stringify(state) === before };
+  });
+  await page.screenshot({ path: path.join(root, 'docs/assets/stapler-0.10.png') });
+  report.stapler = fork;
+  check('Stapler: 3 Stapler mit Akkubalken instanziert', fork.forks === 3 && fork.bars === 3, `${fork.forks}/${fork.bars}`);
+  check('Stapler: gebundene Stapler pendeln mit gebrochener Uhr, ladender steht', fork.p0[0] !== fork.p1[0] && fork.p0[2] !== fork.p1[2] && fork.p0[1] === fork.p1[1], JSON.stringify([fork.p0, fork.p1]));
+  check('Stapler: Labels „Stapler · 54 %“ (Gruppe infra)', fork.chips.some(c => c === 'Stapler · 54 %') && fork.chips.some(c => c === 'Stapler · 8 %'), fork.chips.join(' | '));
+  check('Paletten: Palettenauflieger mit Restladung, Paket-Lkw weiter Kastenauflieger', fork.flats === 1 && fork.boxes === 1 && fork.trailerLoad === 5, JSON.stringify({ f: fork.flats, b: fork.boxes, l: fork.trailerLoad }));
+  check('Paletten: Lagerpaletten als Stapel (14), Kartons weiter als Kartonstapel, keine Materialregal-Paletten', fork.stockPallets === 14 && fork.stacks === 2 && fork.rackPallets === 0, JSON.stringify({ p: fork.stockPallets, k: fork.stacks, r: fork.rackPallets }));
+  check('Stapler: unter 150 Draw Calls', fork.info.drawCalls < 150, String(fork.info.drawCalls));
+  check('Stapler: Spielzustand unverändert', fork.unchanged);
+  await page.evaluate(() => { window.__fork.s.destroy(); window.__fork.host.remove(); });
   // W1b: Probe-Zustand aus tests/ui-hub-probe.js über den echten Importweg (Befund A01: Fremd-Lkw an Dock 1 unsichtbar).
   {
     const { Simulation } = await import(pathToFileURL(path.join(root, 'dist/core.js')).href);
