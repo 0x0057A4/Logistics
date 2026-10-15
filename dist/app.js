@@ -73,7 +73,12 @@ const scene=new Scene($('#world'),{onSelect(id){if(!id)return;if(sim.state.sites
 scene.setState(sim.state);
 function toast(text,error=false){$('#toast').textContent=text;$('#toast').className='visible'+(error?' error':'');clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('#toast').className='',4500);}
 function send(c,quiet=false){if(!canWrite()){toast(lockMessage(),true);return {ok:false,message:lockMessage()};}try{const r=sim.command(c);if(!r.ok)toast(r.message||'Aktion nicht möglich.',true);else{dirty=true;if(!quiet)toast(r.message||'Änderung übernommen.');}render(true);return r;}catch(e){toast(e.message,true);return {ok:false,message:e.message};}}
-function save(show=false){if(temporary){$('#statusText').textContent=temporaryMessage;if(show)toast('Nicht gespeichert. Bitte JSON exportieren.',true);return false;}if(!canWrite()){if(show)toast(lockMessage(),true);return false;}try{const key=STORE+'-'+sim.state.mode,old=localStorage.getItem(key);if(old){let valid=false;try{Simulation.fromJSON(old);valid=true;}catch{}if(valid)localStorage.setItem(key+'-backup',old);}localStorage.setItem(key,sim.serialize());localStorage.setItem(prefsKey,JSON.stringify({...prefs,mode:sim.state.mode}));dirty=false;storageFailure=false;$('#statusText').textContent='Gesichert · '+time(sim.state.t)+' · Keine Offlinefortschritte';if(show)toast('Spielstand gesichert.');return true;}catch(e){storageFailure=true;$('#statusText').textContent='NICHT GESPEICHERT · Speicher blockiert oder voll. JSON exportieren; Speichern erneut versuchen.';toast('Speichern fehlgeschlagen. Bitte Spielstand exportieren.',true);return false;}}
+// Sicherung (S3): Backup ist der zuletzt erfolgreich geschriebene Stand. Der Altstand wird nur dann
+// vollständig geprüft, wenn er weder von diesem Tab geschrieben noch zuletzt fehlerfrei geladen wurde.
+// So landet ein beschädigter Hauptstand nie über einer intakten Sicherung, ohne alle 20 s zu blockieren.
+const lastWritten=new Map();
+function backupCandidate(key){const old=localStorage.getItem(key);if(!old)return null;if(old===lastWritten.get(key)||Simulation.wasValidated?.(old))return old;try{Simulation.fromJSON(old);return old;}catch{return null;}}
+function save(show=false){if(temporary){$('#statusText').textContent=temporaryMessage;if(show)toast('Nicht gespeichert. Bitte JSON exportieren.',true);return false;}if(!canWrite()){if(show)toast(lockMessage(),true);return false;}try{const key=STORE+'-'+sim.state.mode,old=backupCandidate(key),text=sim.serialize();if(old)localStorage.setItem(key+'-backup',old);localStorage.setItem(key,text);lastWritten.set(key,text);localStorage.setItem(prefsKey,JSON.stringify({...prefs,mode:sim.state.mode}));dirty=false;storageFailure=false;$('#statusText').textContent='Gesichert · '+time(sim.state.t)+' · Keine Offlinefortschritte';if(show)toast('Spielstand gesichert.');return true;}catch(e){storageFailure=true;$('#statusText').textContent='NICHT GESPEICHERT · Speicher blockiert oder voll. JSON exportieren; Speichern erneut versuchen.';toast('Speichern fehlgeschlagen. Bitte Spielstand exportieren.',true);return false;}}
 let htmlExporting=false;
 async function exportHtml(){
  if(htmlExporting)return false;
@@ -206,7 +211,10 @@ window.addEventListener('beforeunload',e=>{if(started&&dirty&&(temporary||!save(
 window.addEventListener('pagehide',()=>guard.release());
 window.addEventListener('pageshow',e=>{if(e.persisted){writable=false;speed=0;toast('Ansicht wiederhergestellt. Für sicheres Fortsetzen Seite neu laden.',true);render();}});
 setInterval(()=>{const now=performance.now(),dt=Math.min(1000,now-lastTick);lastTick=now;if(!started||switching||document.hidden||$('dialog[open]')||!speed||!canWrite()){accumulator=0;return;}accumulator+=dt*speed;const n=Math.floor(accumulator/1000);if(n){accumulator-=n*1000;try{sim.step(n);dirty=true;render();}catch(e){setSpeed(0);toast('Simulation angehalten: '+e.message,true);}}},100);
-setInterval(()=>{if(started&&dirty)save();},20000);
+// Autosave im Leerlauf; Verlassen (visibilitychange/beforeunload) speichert weiterhin synchron.
+let idleSave=0;
+function requestIdleSave(){if(idleSave)return;const run=()=>{idleSave=0;if(started&&dirty)save();};idleSave=typeof requestIdleCallback==='function'?requestIdleCallback(run,{timeout:5000}):setTimeout(run,0);}
+setInterval(()=>{if(started&&dirty)requestIdleSave();},20000);
 const ready=bootstrap();
 
 /** Sammeltouren nutzen dieselben Auftrags-IDs und Fahrzeuge wie Einzellieferungen. */

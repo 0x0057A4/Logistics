@@ -18,6 +18,26 @@ const ARRAYS=['sites','buildings','workers','batches','reservations','jobs','pur
 const clone=x=>JSON.parse(JSON.stringify(x));
 const fail=m=>{throw new Error('Spielstand ungültig: '+m);};
 function finite(n,min=-Infinity,max=Infinity){return typeof n==='number'&&Number.isFinite(n)&&n>=min&&n<=max;}
+/** Aktuelles Speicherformat. Welle 0 bleibt bei Schema 1 (docs/SCHNITTSTELLEN-0.9.md, S3). */
+export const SCHEMA=1;
+/** Migrationsschritte from→to. Jeder Schritt erhält den Zustand von Schema `from`, ändert ihn an Ort und Stelle und setzt `schema` auf `to`. Welle 1 ergänzt hier {from:1,to:2,...}. */
+export const MIGRATIONS=[];
+/** Auffüllungen innerhalb einer Schemastufe: ältere Stände derselben Stufe erhalten definierte Standardwerte. */
+const FILLS={1(s){for(const key of ['research','rules','transfers','tours','freights','tickets'])if(s[key]===undefined)s[key]=[];}};
+/** Bringt einen geparsten Stand auf SCHEMA. Unbekannte oder neuere Stände bleiben unverändert und werden von validateState abgelehnt. */
+export function migrate(state,{steps=MIGRATIONS,target=SCHEMA,fills=FILLS}={}){
+ if(!state||typeof state!=='object'||Array.isArray(state)||!Number.isSafeInteger(state.schema)||state.schema>target)return state;
+ fills[state.schema]?.(state);
+ while(state.schema<target){
+  const from=state.schema,step=steps.find(m=>m.from===from);
+  if(!step)return state;
+  if(step.to!==from+1)throw new Error('Migrationsschritt '+from+'→'+step.to+' ungültig.');
+  step.migrate(state);state.schema=step.to;fills[step.to]?.(state);
+ }
+ return state;
+}
+/** Zuletzt fehlerfrei geladener Spielstandtext (nur Laufzeit, nie gespeichert). */
+let lastValidText=null;
 /** Validation never repairs or mutates its input. Unknown module fields survive. */
 export function validateState(s){
  if(!s||typeof s!=='object'||Array.isArray(s))fail('Zustand fehlt.');
@@ -90,6 +110,8 @@ export class Simulation{
  }
  step(minutes=1){if(!Number.isInteger(minutes)||minutes<0||minutes>100000)throw new Error('Spielschritte müssen ganze Minuten sein.');for(let n=0;n<minutes;n++){this.state.t++;for(const mod of MODULES)mod.step?.(this.state,this.api);}return this.state;}
  serialize(){return JSON.stringify(this.state);}
- static fromJSON(text){if(typeof text!=='string'||text.length>30000000)throw new Error('Spielstand fehlt oder zu groß.');let state;try{state=JSON.parse(text);}catch{throw new Error('Spielstand enthält ungültiges JSON.');}if(state&&state.schema===1){for(const key of ['research','rules','transfers','tours','freights','tickets'])if(state[key]===undefined)state[key]=[];}validateState(state);const sim=Object.create(Simulation.prototype);sim.state=state;sim.makeAPI();return sim;}
+ static fromJSON(text){if(typeof text!=='string'||text.length>30000000)throw new Error('Spielstand fehlt oder zu groß.');let state;try{state=JSON.parse(text);}catch{throw new Error('Spielstand enthält ungültiges JSON.');}migrate(state);validateState(state);const sim=Object.create(Simulation.prototype);sim.state=state;sim.makeAPI();lastValidText=text;return sim;}
+ /** true, wenn genau dieser Text zuletzt fehlerfrei durch fromJSON geladen wurde. Spart der Speicherroutine eine erneute Vollvalidierung. */
+ static wasValidated(text){return typeof text==='string'&&text===lastValidText;}
  forecast(minutes,commands=[]){const sim=Simulation.fromJSON(this.serialize());for(const c of commands){const r=sim.command(clone(c));if(!r.ok)throw new Error(r.message);}sim.step(minutes);return sim.state;}
 }
