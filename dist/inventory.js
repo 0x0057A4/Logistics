@@ -121,11 +121,22 @@ export function createAPI(s, api) {
     if (STORED.has(location) && free(site) + 1e-9 < qty * vol(item)) return false;
     if (spec.quality != null && (!Number.isFinite(spec.quality) || spec.quality < 0 || spec.quality > 100)) return false;
     if (spec.unitCost != null && (!Number.isFinite(spec.unitCost) || spec.unitCost < 0)) return false;
+    // Opt-in (W1, Vorschlag für yard.js): gleiche mergeKey (z. B. Ankunft) + gleiche Ware/Ort/Eigentum/Qualität/Kosten
+    // füllt die jüngste passende aktive Charge auf, statt je Minute eine neue anzulegen. Nie in Nullchargen,
+    // gesperrte oder blockierte Chargen; nur ohne Elternteile (Herkunft bleibt eindeutig).
+    if (typeof spec.mergeKey === 'string' && spec.mergeKey && !spec.parents?.length && !spec.locked && !ITEMS[item]?.cold) {
+      const quality = spec.quality ?? 100, unitCost = spec.unitCost ?? 0, owner = spec.owner || 'company', list = group(item, site);
+      for (let i = list.length - 1; i >= 0; i--) {
+        const b = list[i];
+        if (b.mergeKey === spec.mergeKey && b.site === site && b.location === location && b.owner === owner && b.qty > 0 && !b.blocked && !b.locked && b.quality === quality && b.unitCost === unitCost && !b.parents.length) { b.qty += qty; return b; }
+      }
+    }
     const batch = {id:api.id('batch'), item, qty, site, owner:spec.owner || 'company', location,
       quality:spec.quality ?? 100, unitCost:spec.unitCost ?? 0, parents:[...(spec.parents || [])], reserved:0,
       created:s.t};
     if(ITEMS[item]?.cold){batch.temperature=Number.isFinite(spec.temperature)?spec.temperature:4;batch.exposure=Number.isFinite(spec.exposure)?spec.exposure:0;batch.peakTemperature=Number.isFinite(spec.peakTemperature)?spec.peakTemperature:batch.temperature;batch.coldDamaged=!!spec.coldDamaged;if(batch.coldDamaged)batch.blocked=true;}
     if (spec.locked) batch.locked = true;
+    if (typeof spec.mergeKey === 'string' && spec.mergeKey && !batch.parents.length) batch.mergeKey = spec.mergeKey;
     // Erste gesperrte Elternteilcharge in Arrayreihenfolge (wie s.batches.find), über Positionsindex.
     let recalled, first=Infinity; const pos=batchIndex(s).pos;
     for(const id of batch.parents){const i=pos.get(id);if(i!==undefined&&i<first&&s.batches[i]?.id===id&&s.batches[i].blocked){first=i;recalled=s.batches[i];}}
@@ -254,7 +265,7 @@ export function createAPI(s, api) {
 export function validate(s) {
   const ids=new Set();
   for(const b of s.batches) {
-    if(ids.has(b.id)||(b.sortedTo!==undefined&&typeof b.sortedTo!=='string')||!Number.isFinite(b.qty)||b.qty<0||!Number.isFinite(b.reserved)||b.reserved<0||b.reserved>b.qty+1e-9||!LOCATIONS.has(b.location)) throw new Error('Ungültige Lagercharge.');
+    if(ids.has(b.id)||(b.sortedTo!==undefined&&typeof b.sortedTo!=='string')||(b.mergeKey!==undefined&&typeof b.mergeKey!=='string')||!Number.isFinite(b.qty)||b.qty<0||!Number.isFinite(b.reserved)||b.reserved<0||b.reserved>b.qty+1e-9||!LOCATIONS.has(b.location)) throw new Error('Ungültige Lagercharge.');
     ids.add(b.id);
     const reserved=s.reservations.filter(r=>r.batchId===b.id).reduce((n,r)=>n+r.qty,0);
     if(Math.abs(reserved-b.reserved)>1e-7) throw new Error('Reservierungssumme stimmt nicht.');

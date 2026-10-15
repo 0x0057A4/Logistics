@@ -10,6 +10,7 @@
 // damit Spielstände ohne Hub-Betrieb bitgleich bleiben).
 import {BUILDINGS} from './catalog.js';
 import {siteItemBatches} from './inventory.js';
+import {onShift} from './workforce.js';
 
 export const ITEM = 'parcel';
 export const HAND_RATE = 2;
@@ -25,6 +26,24 @@ function inbound(s, site) {
   for (const b of siteItemBatches(s, site, ITEM)) if (b.site === site && b.location === 'inbound' && !b.blocked && !b.locked && b.qty - b.reserved > 1e-9) out.push(b);
   return out;
 }
+
+// Entladen hat Vorrang (A01): Fremd-Lkw in docking/unloading ohne gebundene Lagerkraft (yard-Schlüssel
+// `${arrival.id}:warehouse`). So viele freie Lagerkräfte bleiben fürs Entladen reserviert; reicht das nicht, geben
+// Sortierbindungen ihre Person ab (zuerst Handsortierung, dann Sortierplätze von hinten). yard.step läuft vor
+// sorting.step und bindet die freigegebene Person in der nächsten Minute.
+function unloadNeed(s, site) {
+  if (!s.yard?.length) return 0;
+  let n = 0;
+  for (const a of s.yard) {
+    if (a.site !== site || (a.phase !== 'docking' && a.phase !== 'unloading') || a.unloaded >= a.parcels) continue;
+    const key = `${a.id}:warehouse`;
+    if (!s.workers.some(w => w.task === key) && s.buildings.some(b => b.id === a.dock && b.enabled && b.condition > 0)) n++;
+  }
+  return n;
+}
+// Gleiche Bedingungen wie workforce.acquire (ohne task).
+const ready = (s, w, site) => w.role === 'warehouse' && w.site === site && !w.training && !w.relocation && !(w.breakRemaining > 0) && onShift(w, s.t) && w.fatigue < 80;
+const freeWarehouse = (s, site) => { let n = 0; for (const w of s.workers) if (!w.task && ready(s, w, site)) n++; return n; };
 
 function stats(s, site) {
   const day = Math.floor(s.t / 1440);
@@ -69,6 +88,24 @@ export function step(s, api) {
       st.today += moved; st.total += moved;
       return moved;
     };
+    // Personalvergabe mit Vorrang fürs Entladen (s. unloadNeed).
+    const need = unloadNeed(s, id), yielded = new Set();
+    let spare = Infinity;
+    if (need) {
+      spare = freeWarehouse(s, id) - need;
+      const holders = [handKey(id), ...(list || []).map(sorterKey).reverse()];
+      for (const key of holders) { if (spare >= 0) break; if (s.workers.some(w => w.task === key)) { api.workforce.release(key); yielded.add(key); spare++; } }
+    }
+    const grab = (site, key) => {
+      if (yielded.has(key)) return null;
+      const held = s.workers.find(w => w.task === key);
+      if (held && ready(s, held, site)) return api.workforce.acquire('warehouse', site, key);
+      if (held) api.workforce.release(key);
+      if (spare <= 0) return null;
+      const w = api.workforce.acquire('warehouse', site, key);
+      if (w) spare--;
+      return w;
+    };
     let active = false;
     for (const b of list || []) {
       const key = sorterKey(b), spec = BUILDINGS[b.type];
@@ -79,7 +116,7 @@ export function step(s, api) {
       if (p < spec.power) { b.status = 'power'; api.workforce.release(key); continue; }
       power.set(id, p - spec.power);
       if (ci >= cand.length || blocked) { b.status = blocked ? 'storage' : 'idle'; api.workforce.release(key); continue; }
-      const w = api.workforce.acquire('warehouse', b.site, key);
+      const w = grab(b.site, key);
       if (!w) { b.status = 'staff'; continue; }
       const acc = (b.sortAcc || 0) + spec.throughput, n = Math.floor(acc / 60);
       b.sortAcc = acc - n * 60;
@@ -88,7 +125,7 @@ export function step(s, api) {
       w.activity = 'Sortierung';
     }
     if (active || !cand.length || ci >= cand.length) { api.workforce.release(handKey(id)); st.hand = active ? 'off' : 'idle'; continue; }
-    const w = api.workforce.acquire('warehouse', id, handKey(id));
+    const w = grab(id, handKey(id));
     if (!w) { st.hand = 'staff'; continue; }
     const moved = take(HAND_RATE);
     st.hand = blocked && !moved ? 'storage' : 'working';

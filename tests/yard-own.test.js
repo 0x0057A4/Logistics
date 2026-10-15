@@ -37,14 +37,15 @@ test('Verteilung ganzzahlig, exakt und im Verhältnis der Auftragsmengen',()=>{
  runUntil(sim,()=>a.phase==='exit');
  assert.equal(a.unloaded,33);assert.equal(parcels(s),33);
  a.orderIds.forEach((id,i)=>assert.equal(parcels(s,id),[17,11,5][i]));
- assert.ok(s.batches.filter(b=>b.item==='parcel').every(b=>b.location==='inbound'&&Number.isInteger(b.qty)));
+ // Sortierung (A05) läuft ab der Entladung mit: Pakete liegen in inbound oder bereits in stock.
+ assert.ok(s.batches.filter(b=>b.item==='parcel').every(b=>['inbound','stock'].includes(b.location)&&Number.isInteger(b.qty)));
 });
 
 test('Vollständiger Phasenablauf mit Dauern, Rate 20/min und Freigabe bei exit',()=>{
  const {sim,s,dockIds}=setup();const a=arrive(sim,[50],485);const seen=[];
  runUntil(sim,()=>{if(seen.at(-1)!==a.phase)seen.push(a.phase);return a.phase==='gone';});
  assert.deepEqual(seen,['approach','gate','queue','toDock','docking','unloading','exit','gone'].filter(p=>p!=='queue'));
- assert.equal(s.buildings.find(b=>b.id===dockIds[0]).task,null);assert.equal(s.workers[0].task,null);
+ assert.equal(s.buildings.find(b=>b.id===dockIds[0]).task,null);assert.ok([null,`${s.selectedSite}:handsort`].includes(s.workers[0].task),'Entladebindung frei (danach Handsortierung A05)');assert.ok(!s.workers.some(w=>w.task===`${a.id}:warehouse`));
 });
 
 test('Entladen dauert ceil(parcels/20) Minuten',()=>{
@@ -82,6 +83,8 @@ test('Lagerkraft beendet Schicht während Entladen: wartet, setzt fort, Menge er
 
 test('Lager voll: Entladen stoppt mit Grund, setzt nach Platz fort',()=>{
  const {sim,s}=setup({racks:0});const cap=sim.api.inventory.capacity(s.selectedSite);assert.equal(cap,40);
+ // Paketvolumen 0,05 (W1-S3): Platz für genau 40 Pakete = 2 Volumen; Rest mit eigener Ware belegt.
+ assert.ok(sim.api.inventory.add({item:'housing',qty:cap-2,site:s.selectedSite}));
  const a=arrive(sim,[50],481);runUntil(sim,()=>a.phase==='unloading');sim.step(4);
  assert.equal(a.unloaded,40);assert.equal(a.waitReason,yard.WAIT.full);assert.equal(parcels(s),40);
  assert.equal(sim.command({type:'build',buildingType:'rack',x:2,y:2}).ok,true);

@@ -5,6 +5,7 @@ import {createHash} from 'node:crypto';
 import {Simulation, validateState} from '../dist/core.js';
 import {BUILDINGS} from '../dist/catalog.js';
 import {summary, HAND_RATE} from '../dist/sorting.js';
+import * as yard from '../dist/yard.js';
 
 const SITE = 'site-1';
 const ok = (sim, c) => { const r = sim.command(c); assert.equal(r.ok, true, `${c.type}: ${r.message}`); return r; };
@@ -13,11 +14,14 @@ function hub({sorter = true, workers = 1, seed = 7} = {}) {
   ok(sim, {type:'build', buildingType:'dock', x:2, y:10, site:SITE});
   if (sorter) ok(sim, {type:'build', buildingType:'sorter', x:8, y:2, site:SITE});
   for (let i = 0; i < workers; i++) ok(sim, {type:'hire', role:'warehouse', site:SITE});
+  // Echter Vertrag für Auftragsreferenzen (contracts.validate); sofort beendet, damit er keine eigenen Lkw schickt.
+  const c = sim.state.contracts[0];
+  ok(sim, {type:'acceptContract', id:c.id}); ok(sim, {type:'cancelContract', id:c.id});
   return sim;
 }
 function order(sim, qty, due) {
-  const s = sim.state, id = sim.api.id('order');
-  s.orders.push({id, kind:'logistics', source:'hub', contractId:'contract-x', lane:'lane-1', customer:'Nordbezirk (Versand Test)', item:'parcel', qty, price:1.2, due, quality:0, site:SITE, status:'active', delivered:0, paid:0});
+  const s = sim.state, id = sim.api.id('order'), c = s.contracts.find(k => k.status === 'ended');
+  s.orders.push({id, kind:'logistics', source:'hub', contractId:c.id, lane:c.lanes[0].id, customer:'Nordbezirk (Versand Test)', item:'parcel', qty, price:1.2, due, quality:0, site:SITE, status:'active', delivered:0, paid:0});
   return id;
 }
 const parcels = (sim, owner, qty) => assert.ok(sim.api.inventory.add({item:'parcel', qty, site:SITE, location:'inbound', owner}), 'Paket-Anlage');
@@ -241,4 +245,57 @@ test('Validierung lehnt beschädigte Sortierdaten ab', () => {
   const bad2 = JSON.parse(sim.serialize());
   bad2.buildings.find(b => b.type === 'sorter').sortAcc = -1;
   assert.throws(() => Simulation.fromJSON(JSON.stringify(bad2)), /Sortierdaten/);
+});
+
+for (const withSorter of [false, true]) test(`Entladen hat Vorrang vor ${withSorter ? 'Sortierplatz' : 'Handsortierung'} (eine Lagerkraft)`, () => {
+  const sim = hub({sorter:withSorter, workers:1}), s = sim.state;
+  const old = order(sim, 200, 2000); parcels(sim, old, 200);
+  sim.step(2);
+  assert.equal(s.workers[0].task, withSorter ? `${sorterOf(sim).id}:sort` : `${SITE}:handsort`);
+  const id = order(sim, 60, 900), c = s.contracts.find(k => k.status === 'ended');
+  const a = yard.schedule(s, sim.api, {contractId:c.id, site:SITE, parcels:60, eta:s.t + 1, orderIds:[id]});
+  let staffWait = 0, i = 0;
+  for (; i < 60 && a.phase !== 'exit'; i++) { sim.step(1); if (a.phase === 'unloading' && a.waitReason === yard.WAIT.staff) staffWait++; }
+  assert.equal(a.phase, 'exit');
+  assert.ok(staffWait <= 1, `Lkw wartete ${staffWait} min auf Personal`);
+  sim.step(1);
+  assert.notEqual(s.workers[0].task, null, 'Sortierung übernimmt die Person wieder');
+  assert.equal(count(s, null, 'inbound') + count(s, null, 'stock'), 260);
+});
+
+test('Ende-zu-Ende mit yard.js: entladene Pakete werden vollständig nach stock sortiert', () => {
+  let sim = hub({workers:2});
+  const ids = [order(sim, 40, 760), order(sim, 30, 700)];
+  const c = sim.state.contracts.find(k => k.status === 'ended');
+  assert.ok(yard.schedule(sim.state, sim.api, {contractId:c.id, site:SITE, parcels:70, eta:520, orderIds:ids}));
+  let reloaded = false;
+  for (let i = 0; i < 400 && count(sim.state, null, 'stock') < 70; i++) {
+    sim.step(1);
+    if (!reloaded && count(sim.state, null, 'inbound') > 0) { const x = Simulation.fromJSON(sim.serialize()); assert.equal(x.serialize(), sim.serialize()); sim = x; reloaded = true; }
+    assert.ok(count(sim.state, null, 'inbound') + count(sim.state, null, 'stock') <= 70);
+  }
+  const s = sim.state;
+  assert.ok(reloaded, 'Pakete lagen zwischenzeitlich in inbound');
+  assert.equal(count(s, null, 'stock'), 70);
+  assert.equal(count(s, null, 'inbound'), 0);
+  assert.equal(count(s, ids[0], 'stock'), 40);
+  assert.equal(count(s, ids[1], 'stock'), 30);
+  validateState(s);
+});
+
+test('add mit mergeKey füllt passende Charge auf (opt-in für Entladung), sonst neue Charge', () => {
+  const sim = hub({sorter:false, workers:0}), id = order(sim, 100, 900), s = sim.state, inv = sim.api.inventory;
+  const spec = {item:'parcel', qty:20, site:SITE, location:'inbound', owner:id, mergeKey:'arrival-x'};
+  const a = inv.add(spec), b = inv.add(spec);
+  assert.equal(a, b); assert.equal(a.qty, 40);
+  assert.notEqual(inv.add({...spec, mergeKey:'arrival-y'}), a, 'andere Ankunft → eigene Charge');
+  assert.notEqual(inv.add({...spec, owner:'company'}), a, 'anderes Eigentum');
+  const r = inv.relocateQty(a.id, 15, 'stock');
+  assert.notEqual(r, a);
+  assert.equal(inv.add(spec), a, 'Restcharge in inbound weiter befüllbar'); assert.equal(a.qty, 45);
+  a.blocked = true;
+  assert.notEqual(inv.add(spec), a, 'nie in blockierte Charge');
+  a.blocked = false;
+  assert.equal(inv.add({item:'parcel', qty:1, site:SITE, location:'inbound', owner:id, mergeKey:'arrival-z', parents:[a.id]}).mergeKey, undefined);
+  validateState(s);
 });
