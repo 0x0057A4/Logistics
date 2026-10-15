@@ -88,7 +88,7 @@ export function step(s,api){for(const t of s.tours||[]){
   const cost=cents((t.stops.reduce((n,x)=>n+x.distance,0)+t.returnDistance)*VEHICLES[v.type].runningCost);if(s.money<cost){t.blocked='Fahrtkosten nicht gedeckt';t.remaining=1;continue;}
   // Alle Reservierungen vorab geprüft; synchrone Fahrzeugtransfers benötigen keinen Lagerplatz.
   for(const stop of t.stops){const cargo=api.inventory.transfer(stop.reservationKey,'vehicle',t.site);stop.cargo=cargo.map(b=>b.id);stop.materialCost=stop.owner==='company'?cents(cargo.reduce((n,b)=>n+b.qty*b.unitCost,0)):0;}
-  api.book(`tour-trip:${t.id}`,-cost,'Transport','Mehrstoppige Sammeltour',[t.id,v.id]);t.transportCost=cost;t.departedAt=s.t;dock.task=null;api.workforce.release(`${t.id}:warehouse`);if(pallet)releaseForklift(s,forkliftKey(t.id));t.worker=null;setPhase(t,'transit',Math.ceil(t.stops[0].distance/VEHICLES[v.type].speed));continue;
+  api.book(`tour-trip:${t.id}`,-cost,'Transport','Mehrstoppige Sammeltour',[t.id,v.id]);t.transportCost=cost;t.departedAt=s.t;{const k=dock.task;for(const b of s.buildings)if(b.task===k)b.task=null;};api.workforce.release(`${t.id}:warehouse`);if(pallet)releaseForklift(s,forkliftKey(t.id));t.worker=null;setPhase(t,'transit',Math.ceil(t.stops[0].distance/VEHICLES[v.type].speed));continue;
  }
  if(t.status==='returnUnloading'){
   const returns=(s.returns||[]).filter(r=>r.tourId===t.id&&r.status==='onTour');

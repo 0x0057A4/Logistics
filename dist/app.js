@@ -26,7 +26,7 @@ Object.assign(L,{rentalReturned:'Mietfahrzeug zurückgegeben',returned:'Zurückg
 Object.assign(L,{approach:'Anfahrt',gate:'Torkontrolle',queue:'Wartet auf Dock',toDock:'Zum Dock',docking:'Andocken',exit:'Ausfahrt',gone:'Abgefertigt',ended:'Beendet'});
 const PHASE={...Object.fromEntries(['approach','gate','queue','toDock','docking','exit','gone'].map(k=>[k,L[k]])),unloading:'Entladen'};
 const phaseLabel=p=>PHASE[p]||label(p);
-let sim=new Simulation(), speed=1, panel='', selected=null, build=null, rotation=0, moving=null, search='', forecast=null, toastTimer, confirmAction=null;
+let sim=new Simulation(), speed=0, panel='', selected=null, build=null, rotation=0, moving=null, search='', forecast=null, toastTimer, confirmAction=null;
 let tourDraft={};
 let started=false, dirty=false, uiStamp=0, lastTick=performance.now(), accumulator=0;
 const STORE='industrie-logistik-v1', prefsKey=STORE+'-prefs';

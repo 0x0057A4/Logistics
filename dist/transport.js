@@ -84,7 +84,7 @@ export function step(s,api){
    const cost=Math.round(sh.distance*2*VEHICLES[v.type].runningCost*100)/100;
    if(s.money<cost){sh.remaining=1;sh.blocked='Betriebskosten können nicht bezahlt werden';continue;}
    const cargo=api.inventory.transfer(sh.id,'vehicle',sh.site);if(!cargo){sh.remaining=1;sh.blocked='Ladung nicht verfügbar';continue;}
-   sh.cargo=cargo.map(b=>b.id);sh.materialCost=o.kind==='logistics'?0:Math.round(cargo.reduce((n,b)=>n+b.qty*b.unitCost,0)*100)/100;sh.transportCost=cost;sh.tripCost=cost;const dock=s.buildings.find(b=>b.task===sh.id);if(dock)dock.task=null;api.book(`trip:${sh.id}`,-cost,'Transport',`Tour ${sh.id}`,[sh.id,v.id,o.id]);api.workforce.release(`${sh.id}:warehouse`);if(pallet)releaseForklift(s,forkliftKey(sh.id));sh.worker=null;sh.status='transit';v.status='transit';sh.remaining=Math.ceil(sh.distance/VEHICLES[v.type].speed);sh.departedAt=s.t;
+   sh.cargo=cargo.map(b=>b.id);sh.materialCost=o.kind==='logistics'?0:Math.round(cargo.reduce((n,b)=>n+b.qty*b.unitCost,0)*100)/100;sh.transportCost=cost;sh.tripCost=cost;const dock=s.buildings.find(b=>b.task===sh.id);if(dock){const k=dock.task;for(const b of s.buildings)if(b.task===k)b.task=null;};api.book(`trip:${sh.id}`,-cost,'Transport',`Tour ${sh.id}`,[sh.id,v.id,o.id]);api.workforce.release(`${sh.id}:warehouse`);if(pallet)releaseForklift(s,forkliftKey(sh.id));sh.worker=null;sh.status='transit';v.status='transit';sh.remaining=Math.ceil(sh.distance/VEHICLES[v.type].speed);sh.departedAt=s.t;
   }else{
    sh.blocked=null;if(--sh.remaining>0)continue;
    if(sh.status==='transit'){sh.status='unloading';v.status='unloading';sh.remaining=2+Math.ceil(sh.qty/10);}
@@ -142,7 +142,7 @@ function stepTransfers(s,api){
     if(!api.inventory.relocate(tr.cargo,'stock',tr.toSite)){tr.blocked='Zielkapazität fehlt; Ware bleibt im Fahrzeug';tr.remaining=1;continue;}
     tr.deliveredAt=s.t;tr.status='returning';tr.remaining=Math.ceil(tr.distance/VEHICLES[v.type].speed);tr.duration=tr.remaining;api.log('transfer',`${tr.qty} × ${ITEMS[tr.item].name} am Zielstandort eingelagert.`,[tr.id,tr.toSite]);
    }
-   dock.task=null;api.workforce.release(`${tr.id}:warehouse`);tr.worker=null;
+   {const k=dock.task;for(const b of s.buildings)if(b.task===k)b.task=null;};api.workforce.release(`${tr.id}:warehouse`);tr.worker=null;
   }else{
    tr.blocked=null;if(--tr.remaining>0)continue;
    if(tr.status==='transit'){tr.status='unloading';tr.remaining=2+Math.ceil(tr.qty/5);tr.duration=tr.remaining;}

@@ -8,7 +8,7 @@ import {WAIT} from '../dist/yard.js';
 
 const docks=s=>s.buildings.filter(b=>b.type==='dock');
 
-test('QS-W1-01 Dock während Beladung abgeschaltet (2 Docks): nach Abfahrt bleibt keine verwaiste Dockbelegung',{todo:'QS-W1-01 (A07, transport.js)'},()=>{
+test('QS-W1-01 Dock während Beladung abgeschaltet (2 Docks): nach Abfahrt bleibt keine verwaiste Dockbelegung',()=>{
  const r=depot({minute:600,warehouse:2,docks:2});until(r,s=>s.t===1440+480);
  const o=r.s.orders.find(o=>o.source==='hub');const sh=cmd(r.sim,{type:'dispatch',orderId:o.id,vehicleId:r.s.vehicles[0].id,qty:40}).id;
  r.sim.step(1);const used=docks(r.sim.state).find(b=>b.task===sh);
@@ -17,7 +17,7 @@ test('QS-W1-01 Dock während Beladung abgeschaltet (2 Docks): nach Abfahrt bleib
  assert.deepEqual(docks(r.sim.state).filter(b=>b.task).map(b=>b.id+':'+b.task),[],'Dock bleibt durch abgeschlossene Lieferung belegt');
 });
 
-test('QS-W1-01b Dock während Tour-Beladung abgeschaltet: abgeschaltetes Dock bleibt nicht bis Tourende belegt',{todo:'QS-W1-01 (A07, tours.js)'},()=>{
+test('QS-W1-01b Dock während Tour-Beladung abgeschaltet: abgeschaltetes Dock bleibt nicht bis Tourende belegt',()=>{
  const r=depot({seed:3,minute:600,warehouse:2,docks:2});until(r,s=>s.t===1440+480);
  const os=r.s.orders.filter(o=>o.source==='hub');assert.ok(os.length>=2);
  const t=cmd(r.sim,{type:'dispatchTour',vehicleId:r.s.vehicles[0].id,stops:os.slice(0,2).map(o=>({orderId:o.id,qty:20}))}).id;

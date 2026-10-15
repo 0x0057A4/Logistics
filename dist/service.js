@@ -60,7 +60,7 @@ export function step(s,api){
     if(api.inventory.free(r.site)<r.qty){r.blocked='Quarantänelager voll';continue;}
     if(--r.remaining>0)continue;
     for(const id of r.cargo)api.inventory.move(id,'quarantine');
-    dock.task=null;api.workforce.release(r.id+':warehouse');api.workforce.release(r.id+':driver');v.status='idle';v.shipment=null;v.condition=Math.max(0,v.condition-2);
+    {const k=dock.task;for(const b of s.buildings)if(b.task===k)b.task=null;};api.workforce.release(r.id+':warehouse');api.workforce.release(r.id+':driver');v.status='idle';v.shipment=null;v.condition=Math.max(0,v.condition-2);
     r.status='inspection';r.remaining=3*r.qty;
    }
   }else if(r.status==='inspection'){
