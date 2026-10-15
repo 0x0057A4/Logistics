@@ -14,11 +14,12 @@ const SHIPPERS=['Kranichfeld Versandhaus','Lindenstein Online-Handel','Talbrück
 const LANES=['Nordviertel','Altstadt Süd','Am Kanal','Hügelfeld','Westring','Bachgrund','Ostpark','Lerchenhöhe','Fischerdorf','Industriegebiet Nord'];
 // Depot-Stufe (A02 W1b): Ankünfte 08:30–12:00, damit Tagschicht (08–16 Uhr) sortieren und zustellen kann.
 const ARRIVAL_MINUTES=[510,540,570,600,630,660,690,720];
-/** Spielwerte Depot-Stufe (A02 W1b, docs/BALANCING-0.9-W1.md). start = Startangebot, offer = Folgeangebote.
+/** Spielwerte Depot-Stufe (A02 W1b, Preis/Volumen W1c: 5–6,50 €/Paket, Volumen füllt 1 Lagerkraft + 1 Lieferwagen;
+ *  docs/BALANCING-0.9-W1.md Abschnitt 9). start = Startangebot, offer = Folgeangebote.
  *  parcels: Spanne in Zehnern je Ankunft; price (offer): [Basis €, Schritt €, Schritte]; sla: start in Minuten, offer in Stunden; days: Laufzeit in Tagen. */
 export const TERMS={
- start:{minutes:[540,570],parcels:[10,13],price:15,sla:360,days:7},
- offer:{parcels:[5,10],price:[13.5,0.25,10],sla:[5,8],days:[5,10]}
+ start:{minutes:[540,570],parcels:[20,25],price:6,sla:360,days:7},
+ offer:{parcels:[6,11],price:[5,0.25,6],sla:[5,8],days:[5,10]}
 };
 const STATUSES=['offer','active','ended'];
 
@@ -26,7 +27,7 @@ const pick=(api,list)=>list[Math.floor(api.random()*list.length)];
 const int=(api,min,max)=>min+Math.floor(api.random()*(max-min+1));
 const cents=n=>Math.round(n*100)/100;
 
-/** Deterministisches Angebot aus api.random. small=true: Startangebot (1 Ankunft/Tag, 100–130 Pakete). */
+/** Deterministisches Angebot aus api.random. small=true: Startangebot (1 Ankunft/Tag, 200–250 Pakete). */
 function makeOffer(s,api,small=false){
  const shipper=pick(api,SHIPPERS),laneCount=small?int(api,1,2):int(api,1,3),names=[...LANES],lanes=[];
  for(let i=0;i<laneCount;i++){const name=names.splice(Math.floor(api.random()*names.length),1)[0];lanes.push({id:`lane-${i+1}`,name,distance:int(api,15,45)});}
