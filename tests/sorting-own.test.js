@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {Simulation, validateState} from '../dist/core.js';
 import {BUILDINGS} from '../dist/catalog.js';
-import {summary, HAND_RATE} from '../dist/sorting.js';
+import {summary, HAND_RATE, setLoadPriority} from '../dist/sorting.js';
 import * as yard from '../dist/yard.js';
 
 const SITE = 'site-1';
@@ -134,7 +134,7 @@ test('Paketvolumen 0,05 zählt in used', () => {
   assert.ok(Math.abs(inv.used(SITE) - before - 5) < 1e-9);
 });
 
-test('Handsortierung ohne Sortierplatz: 2/min durch freie Lagerkraft; ausgeschalteter Sortierplatz zählt nicht', () => {
+test('Handsortierung ohne Sortierplatz: HAND_RATE/min durch freie Lagerkraft; ausgeschalteter Sortierplatz zählt nicht', () => {
   const sim = hub({sorter:false}), id = order(sim, 30, 900), s = sim.state;
   parcels(sim, id, 30);
   const busy = sim.api.workforce.acquire('warehouse', SITE, 'fremd');
@@ -261,6 +261,48 @@ for (const withSorter of [false, true]) test(`Entladen hat Vorrang vor ${withSor
   sim.step(1);
   assert.notEqual(s.workers[0].task, null, 'Sortierung übernimmt die Person wieder');
   assert.equal(count(s, null, 'inbound') + count(s, null, 'stock'), 260);
+});
+
+// A01 W1c / Befund B1: Beladen eigener Lieferungen und Sammeltouren hat Personalvorrang vor Sortierung.
+// Eine Lagerkraft, Eingang voll (Sortierung läuft lange), sortierte Ware für 1 bzw. 2 Aufträge im Bestand.
+function loadingRun({withSorter, kind}) {
+  const sim = hub({sorter:withSorter, workers:1}), s = sim.state;
+  ok(sim, {type:'hire', role:'driver', site:SITE});
+  const vid = ok(sim, {type:'buyVehicle', vehicleType:'van', site:SITE}).id, v = s.vehicles.find(x => x.id === vid);
+  const backlog = order(sim, 600, 3000); parcels(sim, backlog, 600);
+  const a = order(sim, 20, 1400), b = order(sim, 15, 1400);
+  for (const [id, q] of [[a, 20], [b, 15]]) assert.ok(sim.api.inventory.add({item:'parcel', qty:q, site:SITE, location:'stock', owner:id}));
+  sim.step(3);
+  assert.equal(s.workers.find(w => w.role === 'warehouse').task, withSorter ? `${sorterOf(sim).id}:sort` : `${SITE}:handsort`, 'Sortierung hält die Person');
+  const jid = (kind === 'tour'
+    ? ok(sim, {type:'dispatchTour', vehicleId:v.id, stops:[{orderId:a, qty:20}, {orderId:b, qty:15}]})
+    : ok(sim, {type:'dispatch', orderId:a, vehicleId:v.id, qty:20})).id;
+  const job = (kind === 'tour' ? s.tours : s.shipments).find(x => x.id === jid);
+  const need = job.remaining;
+  let waited = 0, m = 0;
+  for (; m < 90 && job.status === 'loading'; m++) { sim.step(1); if (job.status === 'loading' && !s.workers.some(w => w.task === `${job.id}:warehouse`)) waited++; }
+  return {sim, s, job, need, waited, minutes:m, inbound:count(s, null, 'inbound')};
+}
+for (const withSorter of [false, true]) for (const kind of ['dispatch', 'tour']) test(`Beladen (${kind === 'tour' ? 'Sammeltour' : 'Lieferung'}) hat Vorrang vor ${withSorter ? 'Sortierplatz' : 'Handsortierung'} (eine Lagerkraft)`, () => {
+  const r = loadingRun({withSorter, kind});
+  assert.notEqual(r.job.status, 'loading', `Fahrzeug nach ${r.minutes} min noch an der Rampe`);
+  assert.ok(r.waited <= 1, `Fahrzeug wartete ${r.waited} min auf Lagerkraft`);
+  assert.ok(r.minutes <= r.need + 2, `Beladung ${r.minutes} min statt ${r.need}`);
+  assert.ok(r.inbound > 0, 'Eingang noch nicht leer: Vorrang, nicht Leerlauf');
+  r.sim.step(1);
+  assert.notEqual(r.s.workers.find(w => w.role === 'warehouse').task, null, 'Sortierung übernimmt die Person wieder');
+  assert.equal(count(r.s, null, 'inbound') + count(r.s, null, 'stock') + count(r.s, null, 'vehicle'), 635, 'Paketmenge exakt');
+  validateState(r.s);
+});
+test('Gegenprobe: ohne Beladevorrang wartet das Fahrzeug, bis der Eingang leer sortiert ist', () => {
+  setLoadPriority(false);
+  try {
+    for (const withSorter of [false, true]) {
+      const r = loadingRun({withSorter, kind:'dispatch'});
+      assert.equal(r.job.status, 'loading', 'ohne Vorrang blockiert die Sortierung die Beladung');
+      assert.ok(r.waited >= 80, `wartete nur ${r.waited} min`);
+    }
+  } finally { setLoadPriority(true); }
 });
 
 test('Ende-zu-Ende mit yard.js: entladene Pakete werden vollständig nach stock sortiert', () => {

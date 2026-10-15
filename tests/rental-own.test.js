@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {Simulation,validateState} from '../dist/core.js';
 import * as rental from '../dist/rental.js';
 import {report} from '../dist/accounting.js';
+import {lampGame, lampOffers, withManufacturing} from './fertigung-fixture.mjs';
 const rent=(sim,vehicleType='van')=>sim.command({type:'rentVehicle',vehicleType});
 
 test('Mietfahrzeuge kosten ersten Tag einmal und sind normale Fahrzeugkapazität',()=>{
@@ -25,7 +26,7 @@ test('Mietverlängerung erfolgt nach 1.440 Spielminuten; auch ohne Liquidität',
 });
 
 test('Rückgabe beendet Gebühren, bleibt historisch erhalten und sperrt neue Aufträge',()=>{
- const sim=new Simulation(),s=sim.state,r=rent(sim),o=s.orders[0];sim.command({type:'acceptOrder',id:o.id});
+ const sim=lampGame(),s=sim.state,r=rent(sim),o=lampOffers(sim)[0];sim.command({type:'acceptOrder',id:o.id});
  assert.equal(sim.command({type:'returnRental',id:r.id}).ok,true);assert.equal(sim.command({type:'returnRental',id:r.id}).ok,false);
  assert.equal(s.vehicles[0].status,'rentalReturned');assert.equal(sim.command({type:'dispatch',vehicleId:r.vehicleId,orderId:o.id,qty:1}).ok,false);
  sim.step(2880);assert.equal(s.rentals[0].paidDays,1);validateState(s);assert.equal(Simulation.fromJSON(sim.serialize()).serialize(),sim.serialize());
@@ -41,7 +42,7 @@ test('Rückgabe verlangt idle, Heimatstandort und vollständig entladenes Fahrze
 test('Laufende Mietlieferung speichert deterministisch und Rückgabe erhält Lieferhistorie',()=>{
  const sim=new Simulation({mode:'sandbox'}),s=sim.state;
  for(const c of [{type:'build',buildingType:'dock',x:2,y:10},{type:'hire',role:'driver'},{type:'hire',role:'warehouse'}])assert.equal(sim.command(c).ok,true);
- const r=rent(sim),o=s.orders[0];assert.equal(sim.command({type:'acceptOrder',id:o.id}).ok,true);sim.api.inventory.add({item:'lamp',qty:2,quality:95,site:s.selectedSite});
+ withManufacturing(sim);const r=rent(sim),o=lampOffers(sim)[0];assert.equal(sim.command({type:'acceptOrder',id:o.id}).ok,true);sim.api.inventory.add({item:'lamp',qty:2,quality:95,site:s.selectedSite});
  assert.equal(sim.command({type:'dispatch',vehicleId:r.vehicleId,orderId:o.id,qty:2}).ok,true);sim.step(10);assert.equal(sim.command({type:'returnRental',id:r.id}).ok,false);
  const loaded=Simulation.fromJSON(sim.serialize());sim.step(100);loaded.step(100);assert.equal(loaded.serialize(),sim.serialize());assert.equal(s.shipments[0].status,'complete');
  assert.equal(sim.command({type:'returnRental',id:r.id}).ok,true);validateState(s);assert.equal(Simulation.fromJSON(sim.serialize()).serialize(),sim.serialize());

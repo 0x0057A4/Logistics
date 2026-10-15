@@ -1,8 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {Simulation,validateState} from '../dist/core.js';
+import {lampGame, lampOffers, withManufacturing} from './fertigung-fixture.mjs';
 const cmd=(sim,type,data={})=>{const r=sim.command({type,...data});assert.equal(r.ok,true,r.message);return r;};
-function setup(){const sim=new Simulation({mode:'sandbox',seed:83});cmd(sim,'build',{buildingType:'dock',x:2,y:10});for(const role of ['warehouse','driver','service'])cmd(sim,'hire',{role});const rental=cmd(sim,'rentVehicle',{vehicleType:'van'});const orders=sim.state.orders.filter(o=>o.kind==='manufacturing').slice(0,2);for(const o of orders)cmd(sim,'acceptOrder',{id:o.id});sim.api.inventory.add({item:'lamp',qty:6,quality:95,site:sim.state.selectedSite});return {sim,rental,orders};}
+function setup(){const sim=new Simulation({mode:'sandbox',seed:83});cmd(sim,'build',{buildingType:'dock',x:2,y:10});for(const role of ['warehouse','driver','service'])cmd(sim,'hire',{role});const rental=cmd(sim,'rentVehicle',{vehicleType:'van'});withManufacturing(sim);const orders=sim.state.orders.filter(o=>o.kind==='manufacturing').slice(0,2);for(const o of orders)cmd(sim,'acceptOrder',{id:o.id});sim.api.inventory.add({item:'lamp',qty:6,quality:95,site:sim.state.selectedSite});return {sim,rental,orders};}
 function until(sim,predicate){for(let i=0;i<3000&&!predicate();i++)sim.step();assert.ok(predicate(),'Zielzustand erreicht');}
 test('QS Miete: Rückladetour blockiert Rückgabe in allen Phasen; volle Rampe verliert keine Ware',()=>{
  const {sim,rental,orders}=setup(),s=sim.state;

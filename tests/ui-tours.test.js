@@ -22,11 +22,12 @@ test('Tourkarte zeigt Rückladung, echte Fahrzeugladung und Wartegrund ohne HTML
 });
 test('Vorschau zeigt Fachprüfung und Kosten ohne Simulation zu verändern',async()=>{
  const ui=await boot();await ui.click('start');ui.click('starter');
- ui.run("sim.state.orders.slice(0,2).forEach(o=>{o.status='active';o.item='lamp';o.qty=20;o.delivered=0;});");
+ // Fertigungsanfragen erst mit Fertigungsanlage (A01 W1c): Montageplatz bauen, eine Minute laufen lassen.
+ ui.run("sim.command({type:'build',buildingType:'assembly',x:5,y:3,rotation:0});sim.step(1);globalThis.mf=sim.state.orders.filter(o=>o.kind==='manufacturing');mf.slice(0,2).forEach(o=>{o.status='active';o.item='lamp';o.qty=20;o.delivered=0;});");
  const before=ui.run('sim.serialize()');
- const html=ui.run("tourPreview(sim.state,{vehicleId:sim.state.vehicles[0].id,order1:sim.state.orders[0].id,order2:sim.state.orders[1].id,qty1:'2',qty2:'3',returnQty1:'0',returnQty2:'0'})");
+ const html=ui.run("tourPreview(sim.state,{vehicleId:sim.state.vehicles[0].id,order1:mf[0].id,order2:mf[1].id,qty1:'2',qty2:'3',returnQty1:'0',returnQty2:'0'})");
  assert.match(html,/Fahrtkosten/);assert.match(html,/Arbeits- und Fahrtzeit/);assert.match(html,/ohne zusätzliche Schicht-/);assert.equal(ui.run('sim.serialize()'),before);
- const invalid=ui.run("tourPreview(sim.state,{vehicleId:sim.state.vehicles[0].id,order1:sim.state.orders[0].id,order2:sim.state.orders[1].id,qty1:'200',qty2:'3'})");assert.match(invalid,/notice/);assert.equal(ui.run('sim.serialize()'),before);
+ const invalid=ui.run("tourPreview(sim.state,{vehicleId:sim.state.vehicles[0].id,order1:mf[0].id,order2:mf[1].id,qty1:'200',qty2:'3'})");assert.match(invalid,/notice/);assert.equal(ui.run('sim.serialize()'),before);
 });
 
 test('Fahrerprognose zeigt Wartezeiten und benennt fehlendes Fahrpersonal',async()=>{

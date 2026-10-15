@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {Simulation} from '../dist/core.js';
+import {lampGame, lampOffers, withManufacturing} from './fertigung-fixture.mjs';
 const cmd=(s,type,data={})=>{const r=s.command({type,...data});assert.equal(r.ok,true,`${type}: ${r.message}`);return r;};
 function until(s,fn,max=700){for(let i=0;i<max&&!fn();i++)s.step(1);assert.ok(fn(),`Zeitlimit bei ${s.state.t}`);}
 function stock(s,item,site,owner='company'){return s.state.batches.filter(b=>b.item===item&&b.site===site&&b.owner===owner&&b.location==='stock').reduce((n,b)=>n+b.qty,0);}
@@ -18,7 +19,7 @@ test('Standorttransfer hält volle Zielhalle sauber und erzeugt keinen Konzernum
  cmd(s,'build',{buildingType:'rack',site:target,x:6,y:3,rotation:0});until(s,()=>tr.status==='complete');assert.equal(stock(s,'housing',target),8);assert.equal(stock(s,'housing',source),0);assert.equal(s.state.stats.revenue,0);continuation(s,1);
 });
 test('Kundenware bleibt fremdes Eigentum und kann nicht als eigene Ware verkauft werden',()=>{
- const s=new Simulation({mode:'guided',seed:18});depot(s,'site-1');cmd(s,'hire',{role:'driver',site:'site-1'});cmd(s,'buyVehicle',{vehicleType:'van',site:'site-1'});
+ const s=new Simulation({mode:'guided',seed:18});depot(s,'site-1');withManufacturing(s);cmd(s,'hire',{role:'driver',site:'site-1'});cmd(s,'buyVehicle',{vehicleType:'van',site:'site-1'});
  const own=s.state.orders.find(o=>o.kind==='manufacturing'),external=s.state.orders.find(o=>o.kind==='logistics');cmd(s,'acceptOrder',{id:own.id});cmd(s,'acceptOrder',{id:external.id});
  until(s,()=>stock(s,external.item,'site-1',external.id)===external.qty);assert.equal(stock(s,external.item,'site-1'),0);
  assert.equal(s.command({type:'dispatch',orderId:own.id,vehicleId:s.state.vehicles[0].id,qty:1,site:'site-1'}).ok,false);

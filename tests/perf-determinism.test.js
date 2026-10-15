@@ -24,27 +24,31 @@ const SCENARIOS={
 // neue Angebote über api.random/api.id erzeugt (Seed und ID-Zähler verschieben sich). Ursache geklärt; Node v22.22.0.
 // Welle 1b (A02): erneut erzeugt, weil Vertragswerte (Preis, Frist, Pakete, Ankunftsminuten, Laufzeit; contracts.js TERMS)
 // im Zustand stehen. Gleiche Anzahl Zufallszüge; mit alten Werten reproduzieren sich die alten Hashes exakt.
+// Welle 1c (A05/A08): erneut erzeugt, weil neue Spiele als Depot starten (Standortname „Depot Morgenfeld“) und die
+// Leuchten-Fertigungsanfragen erst mit der ersten Fertigungsanlage (economy.step) statt in economy.init entstehen.
+// Die Szenarien lassen dafür nach dem Aufbau eine Minute laufen (perf-scenarios.mjs). Gegenprobe: Stand vor der
+// Änderung (d3f4f37) reproduziert die alten Hashes exakt, auch mit neuem sorting.js (Hub-Sortierung hier ungenutzt).
 const EXPECTED={
  klein:[
-  'f38c478aa2973e664fe08b666eec5c7cc91223b998479dea20af8683bc097f0d',
-  'b15cb84fa26d12c946b28d962778a02ac9d7528cc2153da65d41be6fe0848e6a',
-  '8d2b9507dd86b9f278605dd6f5fdaeba1434d721c2216edd980d8933b3631609',
-  '8a6f961f208e2bd34fe9e5bf9628b6aadb6d1954619d1ede35fb3f85ef4ecf94',
+  'f8caee5a6c039d441fc20a67d091b23d331f9e3c6487f10092a87bd77d55836f',
+  'fde3b82bf784c28129ca3243ebad40ddfbf048399ebdce225596c4d79a7bb85f',
+  '4bea28fcf8de7f063911b2ca14f2c5c608273702f6764b07690080110861bc68',
+  'a370c6e7a3540a842ce750e4c733b7f87e7e934e9e633e8b11307bba12398cec',
  ],
  dienste:[
-  'c438536f8b81320ebd1aa7f09410044c575bffb4dab82ae7620403cb545f1323',
-  '1c662861068c3deceb0551bda1ec3b4b5e720c81d140b1faca3502023c568ade',
-  '5d38f0c60051545437e123e587fdc49faaf1063c18c1bf2d474e089e040554ec',
-  'bcf5e13768c8465d1b3ef005369783356f14eddf57c8cd9046da7f803b38d31f',
+  'b23f0056bb25c3e1b79eb28aa45ea98c2f5f42b7cc0d11838b8a8bca1d34d541',
+  '21d3a4e080d3645b5aff6630a158e00c33850a7f0688f179bfd882e3b2d0f8ce',
+  '4852ec8dea7d51aa1621f0cff186e83d13d69cc198d0f0d094c4c0db39fa446b',
+  'a807e9109583e08f096dd04bc375eb883738baf1562f1b4fa2590916e9981439',
  ],
  gross:[
-  '2247da5cf156579bbcb8710c94349eaf532b6ef6563c7f3eade717dc7a8573a2',
-  '963e2b5facffa3dffd83ea565d53aadb144c207ce1ddf3d0912f9a0949a638ea',
-  'd38adf490078b6d64a2ea3a1cd779cd7edef6b6a262c987179d81dedeadb2999',
-  '17a36afbcc68862d26d95c3063587b58dedc687f36ee633c17cd02c7e726eb47',
+  '620dbb41bf18bb2e0f398592fdc0fe66973282804ea1ecac52c5c0580b1d27ce',
+  '1b4266d7886cb2153a4a9e73f164cfac97507bdf86cf607c36a70b5d72d3b71e',
+  '2a84ff637c25b853b74e4b38e6cd6a48e51cdc956c94bddf036c9996ee096dca',
+  'b1e5a9eb0c8af27285d54bd6c56f84ccde0fa7c5aaf90bb1970f277404dd93e8',
  ],
  prognose:[
-  'e66b45ec975ff7501903eecd464203df2c72e77e843f61cd846cc08055ee1040',
+  '2c09cb46c823e4b4a33cfa5e5495866df92a8f0c07e6d6a7d038d185a2a8b0a2',
  ],
 };
 

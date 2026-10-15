@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {Simulation} from '../dist/core.js';
+import {lampGame, lampOffers, withManufacturing} from './fertigung-fixture.mjs';
 
 const SITE='site-1';
 const command=(sim,type,data={})=>{const result=sim.command({type,...data});assert.equal(result.ok,true,`${type}: ${result.message}`);return result;};
@@ -21,7 +22,7 @@ function setup(){
   for(const role of ['production','production','production','warehouse','driver'])command(sim,'hire',{role,site:SITE});
   for(const [type,recipe]of[['assembly','assemble'],['testing','test'],['packing','pack']])command(sim,'setRecipe',{id:sim.state.buildings.find(b=>b.type===type).id,recipe});
   command(sim,'buyVehicle',{vehicleType:'van',site:SITE});
-  return sim;
+  return withManufacturing(sim); // Fertigungsanfragen erscheinen eine Minute nach dem Bau der Linie (A01 W1c)
 }
 function purchase(sim,qty=4){for(const item of ['housing','board','carton'])command(sim,'buy',{item,qty,supplier:'standard',site:SITE});}
 function equivalentContinuation(sim,minutes=80){const clone=Simulation.fromJSON(sim.serialize());assert.equal(clone.serialize(),sim.serialize());sim.step(minutes);clone.step(minutes);assert.equal(clone.serialize(),sim.serialize());integrity(sim);}
@@ -65,7 +66,7 @@ test('Wartung lässt sich ohne Verlust speichern und fortsetzen',()=>{
 });
 test('Teilzustellung, spätere Zahlung und Speichern während Beladung/Fahrt',()=>{
  const s=setup();purchase(s);until(s,()=>stock(s,'lamp')>=4);
- const order=s.state.orders.find(o=>o.status==='offer'&&o.item==='lamp'&&o.qty>2);assert.ok(order,'Passender Startauftrag fehlt');command(s,'acceptOrder',{id:order.id});
+ const order=s.state.orders.find(o=>o.status==='offer'&&o.kind==='manufacturing'&&o.item==='lamp'&&o.qty>2);assert.ok(order,'Passender Startauftrag fehlt');command(s,'acceptOrder',{id:order.id});
  const vehicle=s.state.vehicles[0];command(s,'dispatch',{orderId:order.id,vehicleId:vehicle.id,qty:2,site:SITE});
  assert.ok(s.state.shipments.some(x=>x.status==='loading'),'Beladungszustand fehlt');
  let clone=Simulation.fromJSON(s.serialize());s.step(1);clone.step(1);assert.deepEqual(s.state,clone.state);

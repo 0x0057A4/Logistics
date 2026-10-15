@@ -16,9 +16,19 @@ export function book(s,key,amount,category,note,refs=[]){
  if(match){s.accountingWatermarks??={};s.accountingWatermarks[match[1]]=watermark;}
  if(amount>0&&category==='Umsatz')s.stats.revenue=cents(s.stats.revenue+amount);else if(amount<0&&category!=='Tilgung')s.stats.costs=cents(s.stats.costs-amount);s.overdraft=Math.max(0,-s.money);return true;
 }
+/** Fertigungsanlage vorhanden: mindestens ein Gebäude mit Rezept (Montage, Prüfung, Verpackung) an irgendeinem Standort. */
+export const hasManufacturing=s=>s.buildings.some(b=>BUILDINGS[b.type]?.recipes?.length>0);
+// Erste Fertigungsanfragen (früher Startaufträge in init). Nur einmal: Aufträge werden nie gelöscht, daher genügt
+// „noch nie ein Fertigungsauftrag“ als Bedingung; alte Stände besitzen ihre Startaufträge bereits.
+function startOffers(s,api){
+ const site=s.buildings.find(b=>BUILDINGS[b.type]?.recipes?.length>0).site;
+ for(const [i,qty,price,quality] of [[1,8,110,70],[2,20,117,75],[3,35,125,82]])s.orders.push({id:`order-${s.seq++}`,kind:'manufacturing',customer:['Lichtbogen Bürobedarf','Morgenrot Werkstätten','Hafenblick Handel'][i-1],item:'lamp',qty,price,due:s.t+1440*i,quality,site,status:'offer',delivered:0,paid:0});
+ api.log('order','Erste Fertigungsanfragen für Arbeitsleuchten eingegangen (Mehrwertdienste).',s.orders.slice(-3).map(o=>o.id));
+}
 export function init(s){
  s.loanBalance??=0;s.overdraft??=Math.max(0,-s.money);
- if(!s.orders.length) for(const [i,qty,price,quality] of [[1,8,110,70],[2,20,117,75],[3,35,125,82]])s.orders.push({id:`order-${s.seq++}`,kind:'manufacturing',customer:['Lichtbogen Bürobedarf','Morgenrot Werkstätten','Hafenblick Handel'][i-1],item:'lamp',qty,price,due:s.t+1440*i,quality,site:'site-1',status:'offer',delivered:0,paid:0});
+ // Neue Spiele sind Logistikunternehmen (A01 W1c, Befund B5): keine Leuchten-Startaufträge bei Gründung. Die drei
+ // Fertigungsanfragen kommen erst mit der ersten Fertigungsanlage (step → startOffers). init läuft nur bei Neugründung.
  if(!s.orders.some(o=>o.kind==='logistics'))s.orders.push({id:`order-${s.seq++}`,kind:'logistics',customer:'Westbogen Versand',item:'lamp',qty:12,price:18,due:s.t+1800,quality:70,site:'site-1',status:'offer',delivered:0,paid:0});
 }
 export function handle(s,c,api){
@@ -85,8 +95,11 @@ export function step(s,api){
   else if(s.ledger.some(x=>x.key===`payment:${sh.id}`))sh.paid=true;
  }
  for(const o of s.orders){if(o.status==='active'&&s.t>o.due&&!o.late){o.late=true;s.reputation=Math.max(0,s.reputation-4);api.log('warning',`Lieferfrist überschritten: ${o.customer}.`,[o.id]);}}
- // New fictional tenders keep a completed company playable.
- if(s.t%720===0&&s.orders.filter(o=>o.status==='offer').length<5){const n=api.id('order'),products=Object.keys(ITEMS).filter(k=>ITEMS[k].sellable||k==='lamp'),item=products[Math.floor(api.random()*products.length)];s.orders.push({id:n,kind:api.random()<.25?'logistics':'manufacturing',customer:`Werkverbund ${s.seq}`,item,qty:12+Math.floor(api.random()*30),price:Math.round(ITEMS[item].price*(1.12+api.random()*.15)),due:s.t+2160,quality:75,site:s.selectedSite,status:'offer',delivered:0,paid:0});const offer=s.orders.at(-1);if(offer.kind==='logistics')offer.price=Math.round(12+api.random()*12);}
+ if(hasManufacturing(s)&&!s.orders.some(o=>o.kind==='manufacturing'))startOffers(s,api);
+ // New fictional tenders keep a completed company playable. Ohne Fertigungsanlage nur Fremdlogistik (A01 W1c).
+ // Zufallszüge bleiben gleich: gezogene Fremdlogistik zieht wie bisher ihren Preis nach, umgewandelte Angebote
+ // nutzen den schon gezogenen Preiszufall (gleiche Verteilung 12–24 €), damit Vertrags- und Störungszufall gleich bleiben.
+ if(s.t%720===0&&s.orders.filter(o=>o.status==='offer').length<5){const n=api.id('order'),products=Object.keys(ITEMS).filter(k=>ITEMS[k].sellable||k==='lamp'),item=products[Math.floor(api.random()*products.length)],drawn=api.random()<.25,qty=12+Math.floor(api.random()*30),r=api.random(),kind=drawn||!hasManufacturing(s)?'logistics':'manufacturing';s.orders.push({id:n,kind,customer:`Werkverbund ${s.seq}`,item,qty,price:Math.round(ITEMS[item].price*(1.12+r*.15)),due:s.t+2160,quality:75,site:s.selectedSite,status:'offer',delivered:0,paid:0});const offer=s.orders.at(-1);if(drawn)offer.price=Math.round(12+api.random()*12);else if(kind==='logistics')offer.price=Math.round(12+r*12);}
 }
 export function validate(s){
  const bad=m=>{throw new Error('Spielstand ungültig: '+m);};

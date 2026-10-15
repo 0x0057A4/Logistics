@@ -2,11 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {Simulation} from '../dist/core.js';
 import {planTour} from '../dist/tours.js';
+import {lampGame, lampOffers, withManufacturing} from './fertigung-fixture.mjs';
 function setup(){
  const sim=new Simulation({mode:'sandbox',seed:83}),s=sim.state;
  const run=(type,data={})=>{const r=sim.command({type,...data});assert.equal(r.ok,true,r.message);return r;};
  run('build',{buildingType:'dock',x:2,y:10});for(const role of ['warehouse','driver'])run('hire',{role});run('buyVehicle',{vehicleType:'van'});
- const orders=s.orders.filter(o=>o.kind==='manufacturing').slice(0,2);for(const o of orders)run('acceptOrder',{id:o.id});
+ withManufacturing(sim);const orders=s.orders.filter(o=>o.kind==='manufacturing').slice(0,2);for(const o of orders)run('acceptOrder',{id:o.id});
  sim.api.inventory.add({item:'lamp',qty:8,quality:95,site:s.selectedSite});
  const stops=orders.map(o=>({orderId:o.id,qty:1}));return {sim,s,orders,stops,run,driver:s.workers.find(w=>w.role==='driver')};
 }
