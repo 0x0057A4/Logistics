@@ -2,6 +2,16 @@ import {committedQty} from './tours.js';
 import {VEHICLES,ITEMS} from './catalog.js';
 export function init(s){s.transfers??=[];}
 const fits=(v,item,qty)=>(!ITEMS[item].cold||VEHICLES[v.type].cold)&&qty*(ITEMS[item].volume||1)<=v.capacity&&qty*(ITEMS[item].weight||1)<=(VEHICLES[v.type].weightCapacity||VEHICLES[v.type].maxWeight||v.capacity*4);
+/** Höchste Stückzahl eines Artikels, die `fits` für dieses Fahrzeug zulässt (Volumen, Gewicht, Kühlung). Nur lesend. */
+export function maxLoad(v,item){
+ const it=ITEMS[item],spec=VEHICLES[v?.type];if(!it||!spec||!Number.isFinite(v.capacity))return 0;if(it.cold&&!spec.cold)return 0;
+ const weightCap=spec.weightCapacity||spec.maxWeight||v.capacity*4;let n=Math.max(0,Math.floor(Math.min(v.capacity/(it.volume||1),weightCap/(it.weight||1))+1e-9));
+ while(n>0&&!fits(v,item,n))n--;while(fits(v,item,n+1))n++;return n;
+}
+/** Wartungskosten: Werkstatt 8 € je fehlendem Zustandspunkt; externer Servicepartner ×1,5, 120 Spielminuten, ohne eigenes Ersatzteil. */
+export const EXTERNAL_SERVICE={minutes:120,factor:1.5};
+export const maintenanceCost=(v,external=false)=>Math.ceil((100-v.condition)*8*(external?EXTERNAL_SERVICE.factor:1));
+export const WEAR_WARN=35;
 export function handle(s,c,api){
  if(c.type==='transfer')return startTransfer(s,c,api);
  if(c.type==='buyVehicle'){
@@ -29,15 +39,26 @@ export function handle(s,c,api){
   const workshop=s.buildings.find(b=>b.site===v.site&&b.type==='workshop'&&b.enabled&&b.condition>0&&!b.maintenanceTask&&!b.serviceJob);
   if(!workshop)return {ok:false,message:'Freie Wartungswerkstatt fehlt.'};
   const id=api.id('maintenance');if(!api.inventory.reserve('spare',1,v.site,id))return {ok:false,message:'Ein Ersatzteil benötigt.'};
-  const cost=Math.ceil((100-v.condition)*8);if(!api.book(`vehicle-maintenance:${id}`,-cost,'Wartung',v.name,[v.id])){api.inventory.release(id);return {ok:false,message:'Kapital für Wartung fehlt.'};}
+  const cost=maintenanceCost(v);if(!api.book(`vehicle-maintenance:${id}`,-cost,'Wartung',v.name,[v.id])){api.inventory.release(id);return {ok:false,message:'Kapital für Wartung fehlt.'};}
   api.inventory.consume(id);v.status='maintenance';v.maintenance={id,workshop:workshop.id,remaining:20};workshop.maintenanceTask=id;return {ok:true};
+ }
+ if(c.type==='serviceVehicleExternal'){
+  // Mobiler Servicepartner am Standort: keine eigene Werkstatt, kein eigenes Ersatzteil, kein eigenes Personal; teurer.
+  const v=s.vehicles.find(x=>x.id===c.id);if(!v||v.status!=='idle'||!s.sites.some(a=>a.id===v.site))return {ok:false,message:'Nur freies Fahrzeug am Standort kann extern gewartet werden.'};
+  if(v.condition>=100)return {ok:false,message:'Fahrzeug bereits gewartet.'};
+  const id=api.id('maintenance'),cost=maintenanceCost(v,true);
+  if(!api.book(`vehicle-service-external:${id}`,-cost,'Wartung',`${v.name} · externe Wartung`,[v.id]))return {ok:false,message:'Kapital für externe Wartung fehlt.'};
+  v.status='maintenance';v.maintenance={id,external:true,remaining:EXTERNAL_SERVICE.minutes,duration:EXTERNAL_SERVICE.minutes,cost};
+  api.log('maintenance',`${v.name}: externe Wartung beauftragt, ${EXTERNAL_SERVICE.minutes} Min. außer Betrieb.`,[v.id]);return {ok:true,id,cost};
  }
  return null;
 }
 export function step(s,api){
  stepTransfers(s,api);
  for(const v of s.vehicles.filter(v=>v.status==='maintenance')){
-  const m=v.maintenance,workshop=s.buildings.find(b=>b.id===m.workshop);
+  const m=v.maintenance;
+  if(m.external){m.blocked=null;if(--m.remaining<=0){v.condition=100;v.status='idle';v.maintenance=null;api.log('maintenance',`${v.name} extern gewartet.`,[v.id]);}continue;}
+  const workshop=s.buildings.find(b=>b.id===m.workshop);
   if(!workshop||!workshop.enabled||workshop.condition<=0){m.blocked='Werkstatt nicht verfügbar';continue;}
   const w=api.workforce.acquire('technician',v.site,m.id);if(!w){m.blocked='Technikpersonal oder Schicht fehlt';continue;}
   m.blocked=null;m.worker=w.id;if(--m.remaining<=0){v.condition=100;v.status='idle';workshop.maintenanceTask=null;api.workforce.release(m.id);v.maintenance=null;api.log('maintenance',`${v.name} gewartet.`,[v.id]);}
@@ -74,7 +95,7 @@ export function step(s,api){
 }
 export function validate(s){
  const bad=m=>{throw new Error('Spielstand ungültig: '+m);};
- for(const v of s.vehicles){if(!VEHICLES[v.type]||!Number.isFinite(v.capacity)||v.capacity!==VEHICLES[v.type].capacity||!Number.isFinite(v.condition)||v.condition<0||v.condition>100||!['idle','loading','transit','unloading','returning','maintenance','service','transfer','tour','rentalReturned'].includes(v.status))bad('Fahrzeug beschädigt.');if(v.status==='maintenance'&&(!v.maintenance||!s.buildings.some(b=>b.id===v.maintenance.workshop&&b.maintenanceTask===v.maintenance.id)))bad('Fahrzeugwartung beschädigt.');if(v.status==='service'&&!s.returns.some(r=>r.id===v.shipment))bad('Rücktransport beschädigt.');if(!['idle','maintenance','service','transfer','tour','rentalReturned'].includes(v.status)&&!s.shipments.some(sh=>sh.id===v.shipment&&sh.vehicleId===v.id&&sh.status===v.status))bad('Fahrzeugzuweisung beschädigt.');}
+ for(const v of s.vehicles){if(!VEHICLES[v.type]||!Number.isFinite(v.capacity)||v.capacity!==VEHICLES[v.type].capacity||!Number.isFinite(v.condition)||v.condition<0||v.condition>100||!['idle','loading','transit','unloading','returning','maintenance','service','transfer','tour','rentalReturned'].includes(v.status))bad('Fahrzeug beschädigt.');if(v.status==='maintenance'&&(!v.maintenance||(v.maintenance.external?!(Number.isFinite(v.maintenance.remaining)&&v.maintenance.remaining>=0&&v.maintenance.remaining<=EXTERNAL_SERVICE.minutes):!s.buildings.some(b=>b.id===v.maintenance.workshop&&b.maintenanceTask===v.maintenance.id))))bad('Fahrzeugwartung beschädigt.');if(v.status==='service'&&!s.returns.some(r=>r.id===v.shipment))bad('Rücktransport beschädigt.');if(!['idle','maintenance','service','transfer','tour','rentalReturned'].includes(v.status)&&!s.shipments.some(sh=>sh.id===v.shipment&&sh.vehicleId===v.id&&sh.status===v.status))bad('Fahrzeugzuweisung beschädigt.');}
  validateTransfers(s,bad);
  const occupied=new Set();
  for(const sh of s.shipments){
