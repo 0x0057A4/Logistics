@@ -66,7 +66,7 @@ function unloadMinute(s,api,a,n){
  for(let k=0;k<n;k++){let best=null,score=-1;for(const p of a.split){const open=p.target-p.done-(plan.get(p)||0);if(open<=0)continue;const f=open/p.target;if(f>score+1e-12){score=f;best=p;}}if(!best)break;plan.set(best,(plan.get(best)||0)+1);}
  let added=0;
  for(const p of a.split){const q=plan.get(p);if(!q)continue;
-  const batch=api.inventory.add({item:'parcel',qty:q,site:a.site,location:'inbound',owner:p.owner,quality:100,unitCost:0});
+  const batch=api.inventory.add({item:'parcel',qty:q,site:a.site,location:'inbound',owner:p.owner,quality:100,unitCost:0,mergeKey:a.id});
   if(!batch)return {added,full:true};
   p.done+=q;a.unloaded+=q;added+=q;}
  return {added,full:false};
