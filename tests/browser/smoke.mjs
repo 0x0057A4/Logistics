@@ -32,7 +32,8 @@ async function persistenceChecks(browser,url,errors){
  // a) Schließen mit ungespeicherter Änderung (beforeunload/visibilitychange → IndexedDB-Transaktion + Notfall-Kopie).
  {const ctx=await browser.newContext();const p=await ctx.newPage();watch(p,errors,'close');await p.goto(url+'index.html');
   await p.waitForFunction(()=>document.querySelector('#welcome')?.open===true,null,{timeout:15000});await p.click('#welcome [data-action="start"]');await waitIdle(p);
-  await p.click('[data-speed="12"]');await p.waitForTimeout(4000);await p.click('[data-speed="0"]');const t=minutesOf(await clock(p));
+  await p.click('[data-speed="12"]');await p.waitForTimeout(4000);await p.click('[data-speed="0"]');await p.waitForTimeout(600);// HUD-Uhr aktualisiert mit 4 Hz
+  const t=minutesOf(await clock(p));
   const closed=new Promise(r=>p.once('close',r));await p.close({runBeforeUnload:true});await closed;
   const q=await ctx.newPage();watch(q,errors,'close2');await q.goto(url+'index.html');await waitLoaded(q);await q.waitForTimeout(300);
   const t2=minutesOf(await clock(q));check('Schließen ohne Autosave: Neustart lädt letzten Stand',t2===t&&t>480,`vor ${t} · nach ${t2} Min.`);await ctx.close();}
