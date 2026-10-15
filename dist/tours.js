@@ -1,6 +1,7 @@
 import {ITEMS,VEHICLES} from './catalog.js';
 import {returnSources} from './service.js';
 import {onShift} from './workforce.js';
+import {acquireForklift,releaseForklift,useForklift,forkliftKey,PALLET} from './yard.js';
 const active=t=>!['complete','cancelled'].includes(t.status);
 const owner=o=>o.kind==='logistics'?o.id:'company';
 const cents=n=>Math.round(n*100)/100;
@@ -69,22 +70,25 @@ export function handle(s,c,api){
  }
  const total=stops.reduce((n,x)=>n+x.qty,0);s.tours??=[];s.tours.push({id,vehicleId:v.id,site:v.site,status:'loading',stops,stopIndex:0,remaining:2+Math.ceil(total/5),duration:2+Math.ceil(total/5),returnDistance:30,driver:null,worker:null,createdAt:s.t,plannedMinutes:plan.minutes,plannedCost:plan.cost});v.status='tour';v.tour=id;v.shipment=null;api.log('tour',`Sammeltour mit ${stops.length} Stopps reserviert.`,[id,v.id]);return {ok:true,id};
 }
-function release(s,t,api){const v=s.vehicles.find(v=>v.id===t.vehicleId);if(v){v.status='idle';v.tour=null;v.shipment=null;}for(const b of s.buildings)if(b.task===t.id)b.task=null;api.workforce.release(`${t.id}:warehouse`);api.workforce.release(`${t.id}:driver`);t.worker=null;t.driver=null;}
+function release(s,t,api){const v=s.vehicles.find(v=>v.id===t.vehicleId);if(v){v.status='idle';v.tour=null;v.shipment=null;}for(const b of s.buildings)if(b.task===t.id)b.task=null;api.workforce.release(`${t.id}:warehouse`);api.workforce.release(`${t.id}:driver`);releaseForklift(s,forkliftKey(t.id));t.worker=null;t.driver=null;}
 function setPhase(t,status,minutes){t.status=status;t.remaining=minutes;t.duration=minutes;}
 function nextStop(t,v){t.stopIndex++;if(t.stopIndex<t.stops.length)setPhase(t,'transit',Math.ceil(t.stops[t.stopIndex].distance/VEHICLES[v.type].speed));else setPhase(t,'returning',Math.ceil(t.returnDistance/VEHICLES[v.type].speed));}
 function cargoValid(s,stop){const batches=stop.cargo.map(id=>s.batches.find(b=>b.id===id));return batches.length>0&&batches.every(b=>b&&b.location==='vehicle'&&!b.blocked&&!b.locked&&b.owner===stop.owner&&b.item===stop.item)&&batches.reduce((n,b)=>n+b.qty,0)===stop.qty;}
 export function step(s,api){for(const t of s.tours||[]){
  for(const [i,stop] of t.stops.entries())if(stop.paymentAt!=null&&s.t>=stop.paymentAt&&!stop.paid){const o=s.orders.find(o=>o.id===stop.orderId);if(api.book(`tour-payment:${t.id}:${i}`,stop.invoiceAmount,'Umsatz',`Sammeltour: ${o.customer}`,[t.id,o.id])){stop.paid=true;o.paid=cents(o.paid+stop.invoiceAmount);}}
  if(!active(t))continue;const v=s.vehicles.find(v=>v.id===t.vehicleId);if(!v)continue;
- const driver=api.workforce.acquire('driver',t.site,`${t.id}:driver`);if(!driver){t.blocked='Fahrpersonal oder Schicht fehlt';t.driver=null;continue;}t.driver=driver.id;
+ const pallet=t.status==='loading'&&t.stops.some(x=>x.item===PALLET);
+ const driver=api.workforce.acquire('driver',t.site,`${t.id}:driver`);if(!driver){t.blocked='Fahrpersonal oder Schicht fehlt';t.driver=null;if(pallet)releaseForklift(s,forkliftKey(t.id));continue;}t.driver=driver.id;
  if(t.status==='loading'){
   let dock=s.buildings.find(b=>b.type==='dock'&&b.site===t.site&&b.enabled&&b.condition>0&&b.task===t.id);dock??=s.buildings.find(b=>b.type==='dock'&&b.site===t.site&&b.enabled&&b.condition>0&&!b.task);if(!dock){t.blocked='Freie Laderampe fehlt';continue;}dock.task=t.id;t.dock=dock.id;
-  const worker=api.workforce.acquire('warehouse',t.site,`${t.id}:warehouse`);if(!worker){t.blocked='Lagerpersonal fehlt';continue;}t.worker=worker.id;t.blocked=null;if(--t.remaining>0)continue;
+  // Paletten (W2-S2): Stapler zuerst, dann Lagerkraft (wie transport.js).
+  let fork=null;if(pallet){const f=acquireForklift(s,t.site,forkliftKey(t.id));if(!f.forklift){api.workforce.release(`${t.id}:warehouse`);t.worker=null;t.blocked=f.reason;continue;}fork=f.forklift;}
+  const worker=api.workforce.acquire('warehouse',t.site,`${t.id}:warehouse`);if(!worker){t.blocked='Lagerpersonal fehlt';if(fork)releaseForklift(s,forkliftKey(t.id));continue;}t.worker=worker.id;t.blocked=null;if(fork)useForklift(s,fork);if(--t.remaining>0)continue;
   const allValid=t.stops.every(stop=>{const rs=s.reservations.filter(r=>r.job===stop.reservationKey);return rs.reduce((n,r)=>n+r.qty,0)===stop.qty&&rs.every(r=>{const b=s.batches.find(b=>b.id===r.batchId);return b&&!b.blocked&&!b.locked&&b.qty>=r.qty&&b.reserved>=r.qty&&b.owner===stop.owner&&b.item===stop.item;});});if(!allValid){t.blocked='Reservierte Gesamtladung gesperrt oder unvollständig';t.remaining=1;continue;}
   const cost=cents((t.stops.reduce((n,x)=>n+x.distance,0)+t.returnDistance)*VEHICLES[v.type].runningCost);if(s.money<cost){t.blocked='Fahrtkosten nicht gedeckt';t.remaining=1;continue;}
   // Alle Reservierungen vorab geprüft; synchrone Fahrzeugtransfers benötigen keinen Lagerplatz.
   for(const stop of t.stops){const cargo=api.inventory.transfer(stop.reservationKey,'vehicle',t.site);stop.cargo=cargo.map(b=>b.id);stop.materialCost=stop.owner==='company'?cents(cargo.reduce((n,b)=>n+b.qty*b.unitCost,0)):0;}
-  api.book(`tour-trip:${t.id}`,-cost,'Transport','Mehrstoppige Sammeltour',[t.id,v.id]);t.transportCost=cost;t.departedAt=s.t;dock.task=null;api.workforce.release(`${t.id}:warehouse`);t.worker=null;setPhase(t,'transit',Math.ceil(t.stops[0].distance/VEHICLES[v.type].speed));continue;
+  api.book(`tour-trip:${t.id}`,-cost,'Transport','Mehrstoppige Sammeltour',[t.id,v.id]);t.transportCost=cost;t.departedAt=s.t;dock.task=null;api.workforce.release(`${t.id}:warehouse`);if(pallet)releaseForklift(s,forkliftKey(t.id));t.worker=null;setPhase(t,'transit',Math.ceil(t.stops[0].distance/VEHICLES[v.type].speed));continue;
  }
  if(t.status==='returnUnloading'){
   const returns=(s.returns||[]).filter(r=>r.tourId===t.id&&r.status==='onTour');

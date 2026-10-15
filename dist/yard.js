@@ -3,12 +3,17 @@
 // Dock-Regel wie transport.js/tours.js/service.js: Dock frei, wenn type 'dock', enabled, condition>0 und ohne b.task.
 // Belegung b.task=arrival.id von toDock bis Ende unloading. Eigene Abläufe prüfen ebenfalls !b.task → keine Doppelbelegung.
 import {workRate,UNLOAD_BASE,GATE_ROLE} from './workforce.js';
+import {BUILDINGS} from './catalog.js';
 export const PHASES=['approach','gate','queue','toDock','docking','unloading','exit','gone'];
 export const DURATION={approach:15,gate:2,toDock:2,docking:1,exit:3};
 export const UNLOAD_RATE=UNLOAD_BASE; // Pakete je Minute einer Standardkraft; tatsächlich workRate(Kraft) (A06 W1b)
 export const SORT_RATE=4;           // Pakete je Minute für die atRisk-Schätzung (Sortierplatz 240/h)
 export const KEEP_GONE=1440;        // abgefertigte Einträge bleiben einen Spieltag im Torbuch
 export const WAIT={gate:'Keine Torkontrolle',dock:'Kein freies Dock',staff:'Keine Lagerkraft am Standort',full:'Lager voll',dockOff:'Dock außer Betrieb'};
+// W2-S2 Paletten (A05/A07): Ankunft mit a.item==='pallet' (nur gesetzt bei Paletten; Paketankünfte unverändert).
+WAIT.forklift='Kein Stapler';WAIT.forkliftCharge='Stapler lädt';WAIT.forkliftPower='Kein Strom für Stapler';
+export const PALLET='pallet';
+export const PALLET_BASE=1; // Paletten je Minute einer Standardkraft mit Stapler; tatsächlich workRate(Kraft,1)
 const AT_DOCK=new Set(['toDock','docking','unloading']);
 const CARRIER_A=['Talgrund','Weidenstein','Ostheiden','Kranichmoor','Lerchental','Fuchsbrunn','Eschenfurt','Moorwiesen','Hohenkamp','Silberau'];
 const CARRIER_B=['Spedition','Logistik','Transporte','Frachtdienst','Güterverkehr'];
@@ -25,7 +30,67 @@ export function init(s){s.yard??=[];}
 // mit WAIT.gate, phaseEnd zeigt dann das frühestmögliche Ende. Bindung nur während gate.
 export const gateKey=a=>`${a.id}:gate`;
 export const unloadKey=a=>`${a.id}:warehouse`;
-const heldRate=(s,key)=>{const w=s.workers.find(w=>w.task===key);return w?workRate(w,UNLOAD_BASE):UNLOAD_RATE;};
+const heldRate=(s,key,base=UNLOAD_BASE)=>{const w=s.workers.find(w=>w.task===key);return w?workRate(w,base):base;};
+const isPallet=a=>a.item===PALLET;
+
+// ── Staplerplatz (W2-S2) ─────────────────────────────────────────────────────────────────────────────────────
+// Je Gebäude 'forklift' ein Stapler. b.charge 0–100 (fehlend = 100, beim ersten Takt gesetzt). Bindung exklusiv über
+// b.task = forkliftKey(Vorgang) (Fremd-Lkw-Entladung `${arrival.id}:forklift`, Lieferung `${shipment.id}:forklift`,
+// Sammeltour `${tour.id}:forklift`). Einsatzbereit: eingeschaltet, condition>0, Strom am Standort (Grundlast wie
+// production.js: Standortenergie + Energieversorgung − Bedarf aller eingeschalteten Nebenanlagen ≥ 0) und charge ≥ 10.
+// Akku: tickForklifts am Ende jeder Minute (yard.step läuft nach transport/tours): im Einsatz genutzt −0,5,
+// sonst mit Strom +1 (max. 100). Nutzung meldet der Vorgang mit useForklift in derselben Minute (Laufzeitmarke, nicht
+// gespeichert – zwischen zwei Minuten leer).
+export const FORKLIFT={min:10,work:0.5,charge:1,full:100};
+export const forkliftKey=id=>`${id}:forklift`;
+const forkUse=new WeakMap();
+export function useForklift(s,b){let x=forkUse.get(s);if(!x||x.t!==s.t){x={t:s.t,ids:new Set()};forkUse.set(s,x);}x.ids.add(b.id);}
+const usedNow=(s,b)=>{const x=forkUse.get(s);return !!x&&x.t===s.t&&x.ids.has(b.id);};
+/** Strombilanz der Grundlast am Standort ≥ 0 (gleiche Rechnung wie production.js). */
+export function sitePowered(s,site){
+ const st=s.sites.find(x=>x.id===site);if(!st)return false;let bal=st.energy;
+ for(const b of s.buildings){if(b.site!==site||!b.enabled)continue;const d=BUILDINGS[b.type];if(!d)continue;if(b.type==='power')bal+=d.energy||0;if(!d.recipes?.length)bal-=d.power||0;}
+ return bal>=0;
+}
+const forkUsable=b=>b.enabled&&b.condition>0;
+const charge=b=>b.charge??FORKLIFT.full;
+/** Bindet bzw. hält den Stapler für key. Rückgabe {forklift} oder {forklift:null,reason}. Nicht mehr einsatzbereite
+ * eigene Bindung wird gelöst (lädt dann frei weiter). */
+export function acquireForklift(s,site,key){
+ let held=null,any=false;for(const b of s.buildings)if(b.type==='forklift'&&b.task===key){held=b;break;}
+ const powered=sitePowered(s,site);
+ if(held){if(held.site===site&&forkUsable(held)&&powered&&charge(held)>=FORKLIFT.min)return {forklift:held};held.task=null;}
+ let charging=false;
+ for(const b of s.buildings){
+  if(b.type!=='forklift'||b.site!==site||!forkUsable(b))continue;any=true;
+  if(b.task||!powered)continue;if(charge(b)<FORKLIFT.min){charging=true;continue;}
+  b.charge=charge(b);b.task=key;return {forklift:b};
+ }
+ return {forklift:null,reason:!any?WAIT.forklift:!powered?WAIT.forkliftPower:charging?WAIT.forkliftCharge:WAIT.forklift};
+}
+/** Wie acquireForklift, aber nur lesend: wäre für key jetzt ein Stapler einsatzbereit? */
+export function forkliftAvailable(s,site,key){
+ const powered=sitePowered(s,site);if(!powered)return false;
+ for(const b of s.buildings)if(b.type==='forklift'&&b.site===site&&forkUsable(b)&&(!b.task||b.task===key)&&charge(b)>=FORKLIFT.min)return true;
+ return false;
+}
+export function releaseForklift(s,key){for(const b of s.buildings)if(b.type==='forklift'&&b.task===key)b.task=null;}
+// Bindung gilt nur, solange der Vorgang in der Staplerphase ist; sonst (z. B. Abbruch durch Fremdmodul) gelöst.
+function forkliftHolderActive(s,key){
+ const id=key.slice(0,-':forklift'.length);
+ return s.yard?.some(a=>a.id===id&&a.phase==='unloading')||s.shipments?.some(x=>x.id===id&&x.status==='loading')||(s.tours||[]).some(x=>x.id===id&&x.status==='loading');
+}
+export function tickForklifts(s){
+ let power=null;
+ for(const b of s.buildings){
+  if(b.type!=='forklift')continue;
+  if(b.charge===undefined)b.charge=FORKLIFT.full;
+  if(b.task&&!forkliftHolderActive(s,b.task))b.task=null;
+  if(usedNow(s,b)){b.charge=Math.max(0,b.charge-FORKLIFT.work);continue;}
+  power??=new Map();let p=power.get(b.site);if(p===undefined)power.set(b.site,p=sitePowered(s,b.site));
+  if(p&&b.enabled&&b.charge<FORKLIFT.full)b.charge=Math.min(FORKLIFT.full,b.charge+FORKLIFT.charge);
+ }
+}
 
 const pick=(api,list)=>list[Math.floor(api.random()*list.length)%list.length];
 // Größte-Reste-Verteilung: ganzzahlig, Summe exakt total, Verhältnis nach weights.
@@ -48,13 +113,14 @@ export function schedule(s,api,{contractId,site,parcels,eta,orderIds=[],laneShar
  else if(ids.length)weights=ids.map(()=>1);
  const targets=ids.length?apportion(parcels,weights):[parcels];
  const owners=ids.length?ids:[`contract:${contractId??'unbekannt'}`];
+ const pallet=ids.length?orders.every(o=>o?.item===PALLET):(s.contracts||[]).find(c=>c.id===contractId)?.unit===PALLET;
  const carrier=`${pick(api,CARRIER_A)} ${pick(api,CARRIER_B)}`;
  const plate=`${pick(api,PLATE)}-${pick(api,LETTERS.split(''))}${pick(api,LETTERS.split(''))} ${100+Math.floor(api.random()*9900)%9900}`;
  const a={id:api.id('arrival'),site,contractId:contractId??null,orderIds:ids,carrier,plate,parcels,
   phase:'approach',phaseStart:eta-DURATION.approach,phaseEnd:eta,eta,dock:null,waitReason:null,waitSince:null,
   unloaded:0,atRisk:false,forecast:null,gateAt:null,priority:false,
-  split:owners.map((owner,i)=>({owner,target:targets[i],done:0}))};
- s.yard.push(a);api.log('yard',`${carrier} (${plate}) angekündigt: ${parcels} Pakete, Ankunft Minute ${eta}.`,[a.id]);
+  split:owners.map((owner,i)=>({owner,target:targets[i],done:0})),...(pallet?{item:PALLET}:{})};
+ s.yard.push(a);api.log('yard',`${carrier} (${plate}) angekündigt: ${parcels} ${pallet?'Paletten':'Pakete'}, Ankunft Minute ${eta}.`,[a.id]);
  updateRisk(s,a);
  return a;
 }
@@ -68,12 +134,12 @@ const usable=b=>b&&b.enabled&&b.condition>0;
 function queueOrder(s,site){return s.yard.map((a,i)=>[a,i]).filter(([a])=>a.site===site&&a.phase==='queue').sort((x,y)=>(y[0].priority-x[0].priority)||(x[0].gateAt-y[0].gateAt)||(x[1]-y[1])).map(([a])=>a);}
 
 // Teilt n Pakete auf die Aufträge: jeweils an den Auftrag mit dem größten offenen Anteil. Monoton, Summe exakt.
-function unloadMinute(s,api,a,n){
+function unloadMinute(s,api,a,n,item='parcel',location='inbound'){
  const plan=new Map();
  for(let k=0;k<n;k++){let best=null,score=-1;for(const p of a.split){const open=p.target-p.done-(plan.get(p)||0);if(open<=0)continue;const f=open/p.target;if(f>score+1e-12){score=f;best=p;}}if(!best)break;plan.set(best,(plan.get(best)||0)+1);}
  let added=0;
  for(const p of a.split){const q=plan.get(p);if(!q)continue;
-  const batch=api.inventory.add({item:'parcel',qty:q,site:a.site,location:'inbound',owner:p.owner,quality:100,unitCost:0,mergeKey:a.id});
+  const batch=api.inventory.add({item,qty:q,site:a.site,location,owner:p.owner,quality:100,unitCost:0,mergeKey:a.id});
   if(!batch)return {added,full:true};
   p.done+=q;a.unloaded+=q;added+=q;}
  return {added,full:false};
@@ -87,9 +153,10 @@ function due(s,a){
 }
 // Einfache Prognose: Restzeit im Hof + Warteschlange + Entladen + Sortieren.
 function updateRisk(s,a){
- const unloadRest=Math.ceil((a.parcels-a.unloaded)/heldRate(s,unloadKey(a))),t=s.t;let ready;
+ const base=isPallet(a)?PALLET_BASE:UNLOAD_BASE;
+ const unloadRest=Math.ceil((a.parcels-a.unloaded)/heldRate(s,unloadKey(a),base)),t=s.t;let ready;
  const ahead=a.phase==='queue'?queueOrder(s,a.site).indexOf(a):0;
- const queueWait=ahead*Math.ceil(a.parcels/UNLOAD_RATE);
+ const queueWait=ahead*Math.ceil(a.parcels/base);
  switch(a.phase){
   case 'approach':ready=Math.max(t,a.phaseEnd)+DURATION.gate+DURATION.toDock+DURATION.docking+unloadRest;break;
   case 'gate':ready=Math.max(t,a.phaseEnd)+DURATION.toDock+DURATION.docking+unloadRest;break;
@@ -99,7 +166,7 @@ function updateRisk(s,a){
   case 'unloading':ready=t+unloadRest;break;
   default:ready=a.phaseStart;
  }
- const forecast=ready+Math.ceil(a.parcels/SORT_RATE),limit=due(s,a);
+ const forecast=ready+(isPallet(a)?0:Math.ceil(a.parcels/SORT_RATE)),limit=due(s,a); // Paletten: kein Sortieren
  a.forecast=forecast;
  if(['exit','gone'].includes(a.phase))return;
  a.atRisk=limit!=null&&forecast>limit;
@@ -113,7 +180,25 @@ export function handle(s,c,api){
  a.priority=true;api.log('yard',`${a.plate}: Dockzuteilung vorgezogen.`,[a.id]);return {ok:true};
 }
 
+// Paletten entladen: Stapler zuerst (ohne Stapler bleibt keine Lagerkraft gebunden), dann Lagerkraft; direkt nach stock.
+function unloadPallets(s,api,a,t){
+ const fk=forkliftKey(a.id),f=acquireForklift(s,a.site,fk);
+ if(!f.forklift){api.workforce.release(unloadKey(a));wait(a,f.reason,t);return;}
+ const worker=api.workforce.acquire('warehouse',a.site,unloadKey(a));
+ if(!worker){releaseForklift(s,fk);wait(a,WAIT.staff,t);return;}
+ worker.activity=`Entlädt ${a.plate} mit Stapler`;
+ const r=unloadMinute(s,api,a,Math.min(workRate(worker,PALLET_BASE),a.parcels-a.unloaded),PALLET,'stock');
+ if(r.added)useForklift(s,f.forklift);
+ if(r.full){wait(a,WAIT.full,t);if(!r.added){api.workforce.release(unloadKey(a));releaseForklift(s,fk);}}
+ else{a.waitReason=null;a.waitSince=null;}
+}
+
 export function step(s,api){
+ stepYard(s,api);
+ // Akku nach allen Staplernutzungen der Minute (transport/tours laufen vorher, Entladen oben).
+ for(const b of s.buildings)if(b.type==='forklift'){tickForklifts(s);break;}
+}
+function stepYard(s,api){
  if(!s.yard?.length)return;const t=s.t;
  for(const a of s.yard){
   if(a.phase==='approach'&&t>=a.phaseEnd){setPhase(a,'gate',t);a.gateAt=t;a.gateDone=0;}
@@ -133,7 +218,8 @@ export function step(s,api){
   }
   else if(a.phase==='unloading'){
    const b=dockOf(s,a);
-   if(!usable(b)){api.workforce.release(`${a.id}:warehouse`);wait(a,WAIT.dockOff,t);}
+   if(!usable(b)){api.workforce.release(`${a.id}:warehouse`);if(isPallet(a))releaseForklift(s,forkliftKey(a.id));wait(a,WAIT.dockOff,t);}
+   else if(isPallet(a))unloadPallets(s,api,a,t);
    else{
     const worker=api.workforce.acquire('warehouse',a.site,`${a.id}:warehouse`);
     if(!worker)wait(a,WAIT.staff,t);
@@ -144,7 +230,7 @@ export function step(s,api){
      else{a.waitReason=null;a.waitSince=null;}
     }
    }
-   if(a.unloaded>=a.parcels){api.workforce.release(`${a.id}:warehouse`);releaseDock(s,a);setPhase(a,'exit',t);api.log('yard',`${a.plate}: ${a.parcels} Pakete entladen.`,[a.id]);}
+   if(a.unloaded>=a.parcels){api.workforce.release(`${a.id}:warehouse`);if(isPallet(a))releaseForklift(s,forkliftKey(a.id));releaseDock(s,a);setPhase(a,'exit',t);api.log('yard',`${a.plate}: ${a.parcels} ${isPallet(a)?'Paletten':'Pakete'} entladen.`,[a.id]);}
   }
   else if(a.phase==='exit'&&t>=a.phaseEnd){setPhase(a,'gone',t);}
  }
@@ -169,6 +255,7 @@ export function validate(s){
  const ids=new Set(s.yard.map(a=>a.id)),docks=new Map();
  for(const a of s.yard){
   if(!PHASES.includes(a.phase))fail('Phase');
+  if(a.item!==undefined&&a.item!==PALLET)fail('Ladeeinheit');
   if(!s.sites.some(x=>x.id===a.site))fail('Standort');
   if(typeof a.carrier!=='string'||typeof a.plate!=='string')fail('Spediteur');
   if(!int(a.parcels,1)||!int(a.unloaded)||a.unloaded>a.parcels)fail('Paketmenge');
@@ -192,4 +279,13 @@ export function validate(s){
   }else if(a.dock!==null)fail('Dock ohne Belegung');
  }
  for(const b of s.buildings)if(typeof b.task==='string'&&ids.has(b.task)&&docks.get(b.id)!==b.task)fail('Verwaiste Dockbelegung');
+ // Staplerplätze (W2-S2): Akku 0–100, Bindung nur Staplerschlüssel, je Schlüssel höchstens ein Stapler.
+ const forks=new Set();
+ for(const b of s.buildings){
+  if(b.type!=='forklift')continue;
+  if(b.charge!==undefined&&!(typeof b.charge==='number'&&Number.isFinite(b.charge)&&b.charge>=0&&b.charge<=FORKLIFT.full))fail('Staplerakku');
+  if(b.task==null)continue;
+  if(typeof b.task!=='string'||!b.task.endsWith(':forklift'))fail('Staplerbindung');
+  if(forks.has(b.task))fail('Stapler doppelt gebunden');forks.add(b.task);
+ }
 }

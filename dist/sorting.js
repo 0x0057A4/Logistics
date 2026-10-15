@@ -11,6 +11,7 @@
 import {BUILDINGS} from './catalog.js';
 import {siteItemBatches} from './inventory.js';
 import {onShift, workRate} from './workforce.js';
+import {forkliftAvailable, forkliftKey, PALLET} from './yard.js';
 
 export const ITEM = 'parcel';
 // 3 Pakete/min Grundleistung vor workRate (A01 W1c, vorher 2): eine Lagerkraft sortiert eine Startanlieferung
@@ -41,6 +42,8 @@ function unloadNeed(s, site) {
     // Torkontrolle (A06 W1b, yard-Schlüssel `${arrival.id}:gate`) hat denselben Vorrang wie das Entladen.
     if (a.phase === 'gate') { if (!s.workers.some(w => w.task === `${a.id}:gate`)) n++; continue; }
     if ((a.phase !== 'docking' && a.phase !== 'unloading') || a.unloaded >= a.parcels) continue;
+    // Paletten (W2-S2) gehen nicht durchs Sortieren; ohne einsatzbereiten Stapler braucht die Entladung keine Lagerkraft.
+    if (a.item === PALLET && !forkliftAvailable(s, site, forkliftKey(a.id))) continue;
     const key = `${a.id}:warehouse`;
     if (!s.workers.some(w => w.task === key) && s.buildings.some(b => b.id === a.dock && b.enabled && b.condition > 0)) n++;
   }
@@ -57,14 +60,17 @@ function loadNeed(s, site) {
   let n = 0;
   const waits = (id, at) => !s.workers.some(w => w.task === `${id}:warehouse`) && s.workers.some(w => w.task === `${id}:driver`)
     && s.buildings.some(b => b.task === id && b.type === 'dock' && b.site === at && b.enabled && b.condition > 0);
-  for (const sh of s.shipments || []) if (sh.status === 'loading' && sh.site === site && waits(sh.id, site)) n++;
-  for (const t of s.tours || []) if ((t.status === 'loading' || t.status === 'returnUnloading') && t.site === site && waits(t.id, site)) n++;
+  // Palettenbeladung (W2-S2) ohne einsatzbereiten Stapler bindet keine Lagerkraft → kein Vorrang.
+  const noFork = (id, pallet) => pallet && !forkliftAvailable(s, site, forkliftKey(id));
+  for (const sh of s.shipments || []) if (sh.status === 'loading' && sh.site === site && waits(sh.id, site) && !noFork(sh.id, palletOrder(s, sh.orderId))) n++;
+  for (const t of s.tours || []) if ((t.status === 'loading' || t.status === 'returnUnloading') && t.site === site && waits(t.id, site) && !(t.status === 'loading' && noFork(t.id, t.stops.some(x => x.item === PALLET)))) n++;
   for (const tr of s.transfers || []) {
     const at = tr.status === 'loading' ? tr.site : tr.status === 'unloading' ? tr.toSite : null;
     if (at === site && waits(tr.id, site)) n++;
   }
   return n;
 }
+const palletOrder = (s, id) => s.orders.find(o => o.id === id)?.item === PALLET;
 // Gleiche Bedingungen wie workforce.acquire (ohne task).
 const ready = (s, w, site) => w.role === 'warehouse' && w.site === site && !w.training && !w.relocation && !(w.breakRemaining > 0) && onShift(w, s.t) && w.fatigue < 80;
 const freeWarehouse = (s, site) => { let n = 0; for (const w of s.workers) if (!w.task && ready(s, w, site)) n++; return n; };
