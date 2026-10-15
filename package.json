@@ -1,1 +1,1 @@
-{"name":"industrie-logistik","private":true,"type":"module","scripts":{"test":"node --test tests/*.test.js"}}
+{"name":"industrie-logistik","private":true,"type":"module","scripts":{"test":"node --test tests/*.test.js","test:browser":"node tests/browser/smoke.mjs","perf:browser":"node tests/browser/perf.mjs","perf:save":"node tests/browser/save-timing.mjs"}}

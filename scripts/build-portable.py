@@ -11,6 +11,7 @@ its own strict function scope. Their license files are copied as HTML comments.
 """
 from pathlib import Path
 import json
+import os
 import re
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -127,7 +128,11 @@ def build(root=ROOT):
                + license_comments(vendors, dist) +
                '<script id="portable-runtime">' + code + '</script>')
     html = html.replace(css_tag, '<style>' + css + '</style>', 1).replace(app_tag, payload, 1)
-    (dist / 'portable.html').write_text(html, encoding='utf-8')
+    # Atomar ersetzen: parallele Leser (z. B. gleichzeitig laufende Tests) sehen nie eine halb geschriebene Datei.
+    target = dist / 'portable.html'
+    temp = dist / f'.portable.html.{os.getpid()}.tmp'
+    temp.write_text(html, encoding='utf-8')
+    os.replace(temp, target)
     return len(html.encode('utf-8'))
 
 

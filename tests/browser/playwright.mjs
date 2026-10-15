@@ -12,13 +12,15 @@ function candidates(){
  return list;
 }
 
-/** Liefert {chromium, launchOptions} oder null, falls Playwright fehlt. */
-export function loadPlaywright(){
+/** Liefert {chromium, launchOptions} oder null, falls Playwright fehlt.
+ * Standard ohne Zusatzflags: Chromium nutzt headless ohnehin SwiftShader für WebGL. Gemessen (Chromium 141, 2D-Szene):
+ * mit --use-angle=swiftshader --enable-unsafe-swiftshader sinkt die rAF-Rate auf 3–6 fps (GPU-Compositing über SwiftShader),
+ * ohne Flags 60 fps. swiftshader=true (oder BROWSER_SWIFTSHADER=1) erzwingt die Flags trotzdem. */
+export function loadPlaywright({swiftshader=process.env.BROWSER_SWIFTSHADER==='1'}={}){
  for(const base of candidates()){
   try{
    const {chromium}=createRequire(base)('playwright');
-   // Software-WebGL für Headless-Betrieb ohne GPU.
-   const launchOptions={args:['--use-angle=swiftshader','--enable-unsafe-swiftshader','--ignore-gpu-blocklist']};
+   const launchOptions={args:swiftshader?['--use-angle=swiftshader','--enable-unsafe-swiftshader','--ignore-gpu-blocklist']:[]};
    // Bevorzugt die vollständige Chromium-Binärdatei, nicht die Headless-Shell.
    const root=process.env.PLAYWRIGHT_BROWSERS_PATH||'/opt/pw-browsers';
    for(const path of [process.env.CHROMIUM_PATH,join(root,'chromium')].filter(Boolean))if(existsSync(path)){launchOptions.executablePath=path;break;}
