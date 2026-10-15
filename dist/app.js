@@ -5,7 +5,7 @@ import {createSaveGuard} from './save-guard.js';
 import {report} from './accounting.js';
 import {Simulation} from './core.js';
 import {ITEMS,BUILDINGS,RECIPES,ROLES,VEHICLES,RESEARCH} from './catalog.js';
-import {Scene} from './scene.js';
+import {createScene} from './scene-select.js';
 import {onShift} from './workforce.js';
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -69,7 +69,8 @@ if(portableMode){
  }catch(e){embeddedError=e;started=false;temporary=true;speed=0;}
 }else try{prefs={...prefs,...JSON.parse(localStorage.getItem(prefsKey)||'{}')};const saved=localStorage.getItem(STORE+'-'+prefs.mode);if(saved){sim=Simulation.fromJSON(saved);started=true;}}catch(e){setTimeout(()=>toast('Gespeicherter Stand nicht geladen: '+e.message,true),500);}
 applyPrefs();
-const scene=new Scene($('#world'),{onSelect(id){if(!id)return;if(sim.state.sites.some(x=>x.id===id)){send({type:'selectSite',id});scene.home();return;}selected=id;openPanel('detail');scene.focus?.(id);},onPlace(x,y){if(moving){const r=send({type:'move',id:moving,x,y,rotation});if(r.ok){moving=null;endBuild();}}else if(build)send({type:'build',buildingType:build,x,y,rotation,site:sim.state.selectedSite});},onHover(x,y){if(build)$('#buildHint').textContent=`${name(BUILDINGS,build)} · Raster ${x+1}/${y+1} · ${rotation}° · ${euro(BUILDINGS[build].cost)}`;}});
+// Szenenwahl S1; der Node-UI-Harness stellt nur einen Scene-Stub bereit.
+const scene=(typeof createScene==='function'?createScene:(canvas,callbacks)=>new Scene(canvas,callbacks))($('#world'),{onSelect(id){if(!id)return;if(sim.state.sites.some(x=>x.id===id)){send({type:'selectSite',id});scene.home();return;}selected=id;openPanel('detail');scene.focus?.(id);},onPlace(x,y){if(moving){const r=send({type:'move',id:moving,x,y,rotation});if(r.ok){moving=null;endBuild();}}else if(build)send({type:'build',buildingType:build,x,y,rotation,site:sim.state.selectedSite});},onHover(x,y){if(build)$('#buildHint').textContent=`${name(BUILDINGS,build)} · Raster ${x+1}/${y+1} · ${rotation}° · ${euro(BUILDINGS[build].cost)}`;}});
 scene.setState(sim.state);
 function toast(text,error=false){$('#toast').textContent=text;$('#toast').className='visible'+(error?' error':'');clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('#toast').className='',4500);}
 function send(c,quiet=false){if(!canWrite()){toast(lockMessage(),true);return {ok:false,message:lockMessage()};}try{const r=sim.command(c);if(!r.ok)toast(r.message||'Aktion nicht möglich.',true);else{dirty=true;if(!quiet)toast(r.message||'Änderung übernommen.');}render(true);return r;}catch(e){toast(e.message,true);return {ok:false,message:e.message};}}
@@ -205,7 +206,7 @@ document.addEventListener('visibilitychange',()=>{accumulator=0;lastTick=perform
 window.addEventListener('beforeunload',e=>{if(started&&dirty&&(temporary||!save())){e.preventDefault();e.returnValue='';}});
 window.addEventListener('pagehide',()=>guard.release());
 window.addEventListener('pageshow',e=>{if(e.persisted){writable=false;speed=0;toast('Ansicht wiederhergestellt. Für sicheres Fortsetzen Seite neu laden.',true);render();}});
-setInterval(()=>{const now=performance.now(),dt=Math.min(1000,now-lastTick);lastTick=now;if(!started||switching||document.hidden||$('dialog[open]')||!speed||!canWrite()){accumulator=0;return;}accumulator+=dt*speed;const n=Math.floor(accumulator/1000);if(n){accumulator-=n*1000;try{sim.step(n);dirty=true;render();}catch(e){setSpeed(0);toast('Simulation angehalten: '+e.message,true);}}},100);
+setInterval(()=>{const now=performance.now(),dt=Math.min(1000,now-lastTick);lastTick=now;if(!started||switching||document.hidden||$('dialog[open]')||!speed||!canWrite()){accumulator=0;scene.setClock?.(sim.state.t);return;}accumulator+=dt*speed;const n=Math.floor(accumulator/1000);if(n){accumulator-=n*1000;try{sim.step(n);dirty=true;render();}catch(e){setSpeed(0);toast('Simulation angehalten: '+e.message,true);}}scene.setClock?.(sim.state.t+accumulator/1000);},100);
 setInterval(()=>{if(started&&dirty)save();},20000);
 const ready=bootstrap();
 
