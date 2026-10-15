@@ -82,11 +82,11 @@ test('Neue Angebote periodisch, höchstens drei offen, abgelaufene entfallen',()
  const s=new Simulation();let max=0,seen=new Set();
  for(let d=0;d<10*24;d++){s.step(60);const open=s.state.contracts.filter(k=>k.status==='offer');max=Math.max(max,open.length);open.forEach(k=>{seen.add(k.id);assert.ok(s.state.t<k.expiresAt);});}
  assert.ok(max<=MAX_OFFERS);assert.ok(seen.size>3);assert.doesNotThrow(()=>validateState(s.state));
- // W2-S2: ab Tag 3 Palettenangebote (6–20 Paletten je Ankunft, Preis je Palette 35–55 €), sonst Paketangebote.
+ // W2-S2: ab Tag 3 Palettenangebote (6–20 Paletten je Ankunft, Preis je Palette aus TERMS.pallet.price, W2b: 110–140 €), sonst Paketangebote.
  for(const k of s.state.contracts){const [lo,hi]=k.unit==='pallet'?TERMS.pallet.units:TERMS.offer.parcels.map(x=>x*10);
   assert.ok(['parcel','pallet'].includes(k.unit));
   assert.ok(k.lanes.length<=3&&k.arrivals.length<=2&&k.arrivals.every(a=>a.parcels>=lo&&a.parcels<=hi&&a.minute>=480&&a.minute<=720));
-  if(k.unit==='pallet')assert.ok(k.pricePerParcel>=35&&k.pricePerParcel<=55&&k.offeredAt>=2*1440);}
+  if(k.unit==='pallet'){const [b,st,n]=TERMS.pallet.price;assert.ok(k.pricePerParcel>=b&&k.pricePerParcel<=b+st*n&&k.offeredAt>=2*1440);}}
  assert.ok(s.state.contracts.some(k=>k.unit==='pallet'),'Palettenangebot ab Tag 3');
 });
 

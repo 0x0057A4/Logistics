@@ -116,7 +116,7 @@ test('Palettenangebote: mit Staplerplatz schon am Tag 1, sonst erst ab Tag 3; Au
  // Gleiche Zahl Zufallszüge wie ein Paketangebot: Seed identisch.
  assert.equal(b.state.seed,a.state.seed);
  assert.ok(p.arrivals.every(x=>x.parcels>=TERMS.pallet.units[0]&&x.parcels<=TERMS.pallet.units[1]));
- assert.ok(p.pricePerParcel>=35&&p.pricePerParcel<=55);assert.equal(p.penaltyLate,TERMS.penalty.pallet.late);assert.equal(p.penaltyOpen,TERMS.penalty.pallet.open);
+ {const [lo,st,n]=TERMS.pallet.price;assert.ok(p.pricePerParcel>=lo&&p.pricePerParcel<=lo+st*n);}assert.equal(p.penaltyLate,TERMS.penalty.pallet.late);assert.equal(p.penaltyOpen,TERMS.penalty.pallet.open);
  // Höchstens ein offenes Palettenangebot.
  b.step(OFFER_INTERVAL);assert.equal(b.state.contracts.filter(k=>k.status==='offer'&&k.unit==='pallet').length,1);
  ok(b,{type:'acceptContract',id:p.id});

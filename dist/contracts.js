@@ -23,12 +23,14 @@ const ARRIVAL_MINUTES=[510,540,570,600,630,660,690,720];
 export const TERMS={
  start:{minutes:[540,570],parcels:[20,25],price:8,sla:360,days:7},
  offer:{parcels:[6,11],price:[7,0.25,6],sla:[5,8],days:[5,10]},
- // Palettenverträge (W2-S2): units = Paletten je Ankunft (ohne Zehnerfaktor), price [Basis €, Schritt €, Schritte] je Palette (35–55 €),
+ // Palettenverträge (W2-S2): units = Paletten je Ankunft (ohne Zehnerfaktor), price [Basis €, Schritt €, Schritte] je Palette (W2b A02: 110–140 €,
+ // Ausbau Staplerplatz + Lkw + Fahrer amortisiert in 8–12 Tagen, docs/BALANCING-0.10-W2.md),
  // erst mit Staplerplatz (BUILDINGS.forklift) oder ab Spieltag fromDay (Anzeige „Tag n“). Gleiche Zahl Zufallszüge wie Paketangebote.
- pallet:{units:[6,20],price:[35,4,5],sla:[6,10],days:[5,10],fromDay:3},
+ pallet:{units:[6,20],price:[110,5,6],sla:[6,10],days:[5,10],fromDay:3},
  // Vertragsstrafe (W2-S1) je Einheit: late = zugestellt nach order.due (zusätzlich zum Abschlag 10 %),
- // open = bei Vertragsende + openGrace Minuten nicht zugestellt (Ware geht an den Versender zurück). Vorläufig, Balancing A02.
- penalty:{parcel:{late:1.5,open:4},pallet:{late:8,open:20},openGrace:1440}
+ // open = bei Vertragsende + openGrace Minuten nicht zugestellt (Ware geht an den Versender zurück). W2b A02: Paket
+ // 2,50/8 € (≈ 30 %/100 % des Preises), Palette 25/60 € (≈ 20 %/50 %); Überlast wird damit teurer als guter Betrieb.
+ penalty:{parcel:{late:2.5,open:8},pallet:{late:25,open:60},openGrace:1440}
 };
 const STATUSES=['offer','active','ended'];
 export const UNITS=['parcel','pallet'];
