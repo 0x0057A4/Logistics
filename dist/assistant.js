@@ -117,7 +117,7 @@ function stepAir(s,api,site,cfg,used,state){
   const out=api.command({type:'dispatchAirShuttle',vehicleId:v.id,flight:f.flight,departAt:f.departAt,site});
   if(!out.ok&&out.message==='Befehl unbekannt.'){state.airUnknown=true;return;}
   const reason=`Annahmeschluss Minute ${f.cutoffAt} in ${f.cutoffAt-s.t} Min.`;
-  if(out.ok){used.add(v.id);spend(cfg,Number.isFinite(out.cost)?out.cost:0);record(s,api,site,'air',`Luftzubringer mit ${v.name} zum Flug ${f.flight} gestartet.`,[out.id,v.id,...f.orderIds].filter(Boolean),reason);}
+  if(out.ok){used.add(v.id);spend(cfg,Number.isFinite(out.cost)?out.cost:0);record(s,api,site,'air',`Luftzubringer mit ${v.name} zum Flug ${String(Math.floor(f.flight/60)).padStart(2,'0')}:${String(f.flight%60).padStart(2,'0')} Uhr gestartet.`,[out.id,v.id,...f.orderIds].filter(Boolean),reason);}
   else refuse(s,api,site,cfg,key,'blocked','Luftzubringer abgelehnt.',[v.id,...f.orderIds],out.message);
  }
 }
