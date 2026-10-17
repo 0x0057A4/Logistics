@@ -112,6 +112,9 @@ export function handle(s,c,api){
 
 export function step(s,api){
  const list=s.contracts;
+ // QS-W1-04 (A01): Stand ohne jeden Vertrag (z. B. migrierter 0.8-Stand, fromJSON ruft kein init) erhält sofort ein
+ // Startangebot wie init – deterministisch aus api.random, unabhängig von Laden/Neuladen (Bedingung nur aus dem Zustand).
+ if(!list.length){const k=makeOffer(s,api,true);list.push(k);api.log('contract',`Neues Vertragsangebot: ${k.shipper}.`,[k.id]);}
  // Abgelaufene Angebote entfallen (keine Referenzen); erreichte Laufzeit beendet den Vertrag.
  for(let i=list.length-1;i>=0;i--){const k=list[i];
   if(k.status==='offer'&&s.t>=k.expiresAt){list.splice(i,1);api.log('contract',`Vertragsangebot von ${k.shipper} abgelaufen.`,[]);}

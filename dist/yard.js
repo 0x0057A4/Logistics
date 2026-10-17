@@ -135,6 +135,13 @@ function wait(a,reason,t){if(a.waitReason!==reason){a.waitReason=reason;a.waitSi
 function dockOf(s,a){return a.dock?s.buildings.find(b=>b.id===a.dock&&b.task===a.id)||null:null;}
 function releaseDock(s,a){for(const b of s.buildings)if(b.task===a.id)b.task=null;a.dock=null;}
 const usable=b=>b&&b.enabled&&b.condition>0;
+// QS-W1-03 (A01): Dock in docking/unloading abgeschaltet und anderes Dock frei → Wechsel: altes Dock frei, Phase toDock
+// zum neuen Dock, Fortschritt unloaded bleibt (Kraft/Stapler löst der Aufrufer). Kein Dock frei → false (Wartegrund).
+function switchDock(s,api,a,t){
+ const n=freeDock(s,a.site);if(!n)return false;
+ const from=a.dock;releaseDock(s,a);n.task=a.id;a.dock=n.id;setPhase(a,'toDock',t);
+ api.log('yard',`${a.plate}: Dock außer Betrieb, wechselt zu freiem Dock.`,[a.id,from,n.id].filter(Boolean));return true;
+}
 // FIFO: vorgezogene zuerst, dann nach Ankunft am Tor, dann Anlagereihenfolge.
 function queueOrder(s,site){return s.yard.map((a,i)=>[a,i]).filter(([a])=>a.site===site&&a.phase==='queue').sort((x,y)=>(y[0].priority-x[0].priority)||(x[0].gateAt-y[0].gateAt)||(x[1]-y[1])).map(([a])=>a);}
 
@@ -216,14 +223,19 @@ function stepYard(s,api){
     if(a.gateDone>=DURATION.gate){api.workforce.release(gateKey(a));delete a.gateDone;setPhase(a,'queue',t);}
    }
   }
-  else if((a.phase==='toDock'||a.phase==='docking')){
+  else if(a.phase==='toDock'){
    const b=dockOf(s,a);
    if(!usable(b)){releaseDock(s,a);setPhase(a,'queue',t);api.log('yard',`${a.plate}: Dock nicht verfügbar, zurück in die Warteschlange.`,[a.id]);}
-   else if(t>=a.phaseEnd){if(a.phase==='toDock')setPhase(a,'docking',t);else setPhase(a,'unloading',t);}
+   else if(t>=a.phaseEnd)setPhase(a,'docking',t);
+  }
+  else if(a.phase==='docking'){
+   const b=dockOf(s,a);
+   if(!usable(b)){if(!switchDock(s,api,a,t))wait(a,WAIT.dockOff,t);}
+   else if(t>=a.phaseEnd)setPhase(a,'unloading',t);
   }
   else if(a.phase==='unloading'){
    const b=dockOf(s,a);
-   if(!usable(b)){api.workforce.release(`${a.id}:warehouse`);if(isPallet(a))releaseForklift(s,forkliftKey(a.id));wait(a,WAIT.dockOff,t);}
+   if(!usable(b)){api.workforce.release(`${a.id}:warehouse`);if(isPallet(a))releaseForklift(s,forkliftKey(a.id));if(!switchDock(s,api,a,t))wait(a,WAIT.dockOff,t);}
    else if(isPallet(a))unloadPallets(s,api,a,t);
    else{
     const worker=api.workforce.acquire('warehouse',a.site,`${a.id}:warehouse`);

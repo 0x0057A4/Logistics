@@ -88,8 +88,8 @@ test('Wartegründe Stapler: „Stapler lädt“ mit Akku, Glocke Akku < 20 %, �
  ui.run(`${fk}.charge=5`);ui.run('sim.step(1)');ui.run('render(true)'); // Ausgangslage: Akku leer
  const a=()=>JSON.parse(ui.run("JSON.stringify(sim.state.yard.find(a=>a.item==='pallet'&&a.phase==='unloading'))"));
  assert.equal(a().waitReason,'Stapler lädt');fa=alerts(ui).find(x=>x.key.startsWith('fk:'));assert.equal(fa.tone,'bad');assert.match(fa.sub,/Nicht einsatzbereit/);
- press(ui,{panel:'yard'});assert.match(body(ui),/Stapler lädt<br><small class="muted">Akku \d+ % · einsatzbereit ab 10 %<\/small>/);
- assert.match(body(ui),/Lädt · nicht einsatzbereit/);
+ press(ui,{panel:'yard'});assert.match(body(ui),/Stapler lädt<br><small class="muted">Akku \d+ % · lädt bis 30 %<\/small>/);
+ assert.match(body(ui),/Lädt bis 30 % · nicht einsatzbereit/);
  ui.run(`${fk}.charge=100;sim.state.sites.find(x=>x.id===sim.state.selectedSite).energy=-50`);ui.run('sim.step(1)');ui.run('render(true)'); // Ausgangslage: Strom fehlt
  assert.equal(a().waitReason,'Kein Strom für Stapler');press(ui,{panel:'yard'});assert.match(body(ui),/Kein Strom für Stapler<br><small class="muted">Energieversorgung am Standort ausbauen/);
  assert.match(body(ui),/<span class="chip tone-bad">Kein Strom<\/span>/);
@@ -137,4 +137,23 @@ test('Finanzen: Kategorie Vertragsstrafe mit aktivem Vertrag auch bei 0 € sich
  press(ui,{panel:'finance'});assert.match(body(ui),/<span>Vertragsstrafe<\/span><b><span class="money-plus">0 €<\/span>/);assert.match(body(ui),/<span>Vertragsstrafen<\/span><b><span class="">0 €<\/span> · 0 Buchungen/);
  press(ui,{panel:'help'});const h=body(ui);
  assert.match(h,/Paletten und Stapler/);assert.match(h,/Kein Strom für Stapler/);assert.match(h,/Vertragsstrafen/);assert.match(h,/Paket 2,50 €, Palette 25 €/);assert.match(h,/Paket 8 €, Palette 60 €/);assert.match(h,/Abrechnung wartet/);
+});
+
+test('QS-W1-05 Leiste ohne Fertigung/Einkauf/Entwicklung bis Nutzung; Baumenü Hub zuerst; Handbuch erreichbar; Paletten versandbereit',async()=>{
+ const sim=palletSim();const ui=await load(sim);
+ const hid=id=>ui.nodes.get('#'+id).hidden;
+ for(const id of ['production','purchasing','research'])assert.equal(hid('rail-'+id),true,'Einstieg: '+id+' ausgeblendet');
+ ui.click('build','dock');const tray=ui.nodes.get('#buildItems').innerHTML,vas=tray.indexOf('Mehrwertdienste / Fertigung');
+ const pos=t=>tray.indexOf(`data-build="${t}"`);assert.ok(tray.indexOf('>Hub<')>=0&&tray.indexOf('>Hub<')<pos('dock'));
+ for(const t of ['dock','sorter','forklift','rack','power'])assert.ok(pos(t)>=0&&pos(t)<vas,t+' in Gruppe Hub');
+ for(const t of ['assembly','testing','packing','research','workshop','coldstore','terminal'])assert.ok(pos(t)>vas,t+' in Gruppe Mehrwertdienste');
+ press(ui,{panel:'help'});assert.match(body(ui),/data-action="panel-production"/);assert.match(body(ui),/data-action="panel-purchasing"/);
+ assert.equal(ui.run("sim.command({type:'build',buildingType:'assembly',x:8,y:6,rotation:0}).message||'ok'"),'ok');ui.run('render(true)');
+ for(const id of ['production','purchasing','research'])assert.equal(hid('rail-'+id),false,'mit Fertigungsanlage sichtbar: '+id);
+ // Paletten im Lager (echter Ablauf: Palettenvertrag annehmen, Lkw entlädt mit Stapler) → eigene Zeile im Standortfluss.
+ assert.equal(hid('stl-outPallet'),true);
+ const p=sim.state.contracts.find(k=>k.status==='offer'&&k.unit==='pallet');ui.run(`sim.command({type:'acceptContract',id:'${p.id}'})`);
+ until(ui,"sim.state.batches.some(b=>b.item==='pallet'&&b.location==='stock'&&b.qty>0)");
+ const n=JSON.parse(ui.run(`JSON.stringify(sim.state.batches.filter(b=>b.item==='pallet'&&b.location==='stock'&&b.site===sim.state.selectedSite).reduce((n,b)=>n+b.qty,0))`));
+ assert.equal(hid('stl-outPallet'),false);assert.equal(text(ui,'st-outPallet-n'),String(n));assert.match(text(ui,'st-outPallet-sub'),/Palette/);
 });

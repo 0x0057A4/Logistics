@@ -1,4 +1,4 @@
-// A11 · QS Welle 1 (0.9): Befundtests (todo, schlagen bis zur Behebung fehl). Details docs/QS-0.9-W1.md.
+// A11 · QS Welle 1 (0.9): Befundtests (01–04 behoben, aktiv). Details docs/QS-0.9-W1.md.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
@@ -26,15 +26,28 @@ test('QS-W1-01b Dock während Tour-Beladung abgeschaltet: abgeschaltetes Dock bl
  assert.deepEqual(docks(r.sim.state).filter(b=>b.task).map(b=>b.id+':'+b.task),[],'Dock während Fahrt weiter belegt');
 });
 
-test('QS-W1-03 Lkw am abgeschalteten Dock wechselt zum freien zweiten Dock (oder Warteschlange)',{todo:'QS-W1-03 (A07/A01, Regel fehlt)'},()=>{
+test('QS-W1-03 Lkw am abgeschalteten Dock wechselt zum freien zweiten Dock (oder Warteschlange)',()=>{
  const r=depot({minute:600,warehouse:2,docks:2});until(r,s=>s.yard[0]?.phase==='unloading'&&s.yard[0].unloaded>0);
  const a=()=>r.sim.state.yard[0],dock=a().dock;cmd(r.sim,{type:'toggleBuilding',id:dock});r.sim.step(10);
  assert.notEqual(a().waitReason,WAIT.dockOff,'Lkw steht am abgeschalteten Dock, obwohl ein Dock frei ist');
 });
 
-test('QS-W1-04 Migrierter 0.8-Stand erhält sofort ein Vertragsangebot (nicht erst um 17:00/05:00)',{todo:'QS-W1-04 (A08/A12)'},()=>{
+test('QS-W1-04 Migrierter 0.8-Stand erhält sofort ein Vertragsangebot (nicht erst um 17:00/05:00)',()=>{
  // 0.8-Stand ohne contracts/yard (Format wie bf76e22): aktueller Neubeginn, Hub-Listen entfernt.
  const s=JSON.parse(new Simulation({mode:'guided',seed:808}).serialize());delete s.contracts;delete s.yard;s.t=780;
  const sim=Simulation.fromJSON(JSON.stringify(s));sim.step(1);
  assert.ok(sim.state.contracts.some(k=>k.status==='offer'),'kein Angebot nach Migration');
+});
+
+test('QS-W1-03b Wechsel: neues Dock, Fortschritt bleibt, Kraft frei, Ablauf vollständig; kein Dock frei → Wartegrund',()=>{
+ const r=depot({minute:600,warehouse:2,docks:2});until(r,s=>s.yard[0]?.phase==='unloading'&&s.yard[0].unloaded>0);
+ const a=()=>r.sim.state.yard[0],old=a().dock,u=a().unloaded;cmd(r.sim,{type:'toggleBuilding',id:old});r.sim.step(1);
+ assert.equal(a().phase,'toDock');assert.notEqual(a().dock,old);assert.equal(a().unloaded,u);
+ assert.equal(docks(r.sim.state).find(b=>b.id===old).task,null,'altes Dock frei');
+ assert.ok(r.sim.state.workers.every(w=>w.task!==`${a().id}:warehouse`),'Lagerkraft gelöst');
+ r.sim=reload(r.sim);until(r,s=>s.yard[0].phase==='gone');assert.equal(a().unloaded,a().parcels);
+ const q=depot({minute:600,warehouse:2,docks:2});until(q,s=>s.yard[0]?.phase==='unloading'&&s.yard[0].unloaded>0);
+ const b=()=>q.sim.state.yard[0];for(const d of docks(q.sim.state))if(d.id!==b().dock)cmd(q.sim,{type:'toggleBuilding',id:d.id});
+ cmd(q.sim,{type:'toggleBuilding',id:b().dock});const n=b().unloaded;q.sim.step(5);
+ assert.equal(b().phase,'unloading');assert.equal(b().waitReason,WAIT.dockOff);assert.equal(b().unloaded,n);
 });
