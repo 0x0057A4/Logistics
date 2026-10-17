@@ -1,6 +1,6 @@
 // Browserprüfung der WebGL-Szene (nicht Teil von npm test).
 // Voraussetzung: Root-index.html aus `python3 scripts/package.py`, Playwright global, Chromium unter /opt/pw-browsers.
-// Aufruf: node tests/browser/scene3d.mjs   Ergebnis: JSON-Bericht, Screenshots docs/assets/scene3d-0.9.png, szene-0.11-nacht.png u. a.
+// Aufruf: node tests/browser/scene3d.mjs   Ergebnis: JSON-Bericht, Screenshots docs/assets/scene3d-0.9.png, szene-0.11-nacht.png, netz-0.12.png u. a.
 // Hinweis: Headless-Chromium rendert per SwiftShader (Software). Frame-Zeiten sind nicht repräsentativ für echte GPUs.
 import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
@@ -255,6 +255,59 @@ try {
   check('W2c: Nacht unter 150 Draw Calls', w2c.nightInfo.drawCalls < 150 && w2cEsc.info.drawCalls < 150, `${w2c.nightInfo.drawCalls}/${w2cEsc.info.drawCalls}`);
   check('W2c: Spielzustand unverändert', w2c.unchanged);
   await page.evaluate(() => { window.__w2c.s.destroy(); window.__w2c.host.remove(); });
+  // Welle 3a: Linienverkehr (W3-S2) – Netzansicht mit 2 Standorten, Linie A→B (aktiv), B→A (inaktiv), Fahrt im Hauptlauf; Verfolgen; Standortansicht.
+  const netz = await page.evaluate(async () => {
+    const { Scene3D } = await import('./scene3d.js');
+    const host = document.createElement('div'); host.style.cssText = 'position:fixed;inset:0;z-index:999;background:#fff'; document.body.appendChild(host);
+    const canvas = document.createElement('canvas'); canvas.style.cssText = 'width:100%;height:100%;display:block'; host.appendChild(canvas);
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const B = (id, type, site, x, y, extra = {}) => ({ id, type, site, x, y, rotation: 0, status: 'idle', enabled: true, condition: 100, ...extra });
+    const state = { t: 600, selectedSite: 's1', sites: [{ id: 's1', name: 'Hub Nord', x: 0, y: 0, width: 20, height: 16, energy: 60 }, { id: 's2', name: 'Hub Süd', x: 60, y: 30, width: 20, height: 16, energy: 60 }],
+      buildings: [B('d1', 'dock', 's1', 5, 13), B('r1', 'rack', 's1', 2, 6), B('d2', 'dock', 's2', 5, 13)], batches: [], workers: [], jobs: [], research: [],
+      vehicles: [{ id: 'vehicle-1', type: 'truck', site: 's1', status: 'linehaul', linehaul: 'linehaul-1', condition: 90 }, { id: 'vehicle-2', type: 'van', site: 's1', status: 'idle', condition: 90 }],
+      lines: [{ id: 'line-1', from: 's1', to: 's2', departures: [600], vehicleId: 'vehicle-1', cutoff: 30, active: true, missed: 0, wait: null, waitAt: null }, { id: 'line-2', from: 's2', to: 's1', departures: [1200], vehicleId: null, cutoff: 30, active: false, missed: 0, wait: null, waitAt: null }],
+      linehauls: [{ id: 'linehaul-1', lineId: 'line-1', vehicleId: 'vehicle-1', from: 's1', to: 's2', status: 'transit', cargo: [], orders: [{ orderId: 'order-1', qty: 40 }], qty: 40, pallet: false, remaining: 15, duration: 40, distance: 67, departAt: 575, dock: null, driver: 'w9', worker: null, blocked: null }],
+      shipments: [], transfers: [], tours: [], freights: [], returns: [], yard: [] };
+    const before = JSON.stringify(state), r = {};
+    const s = new Scene3D(canvas, {}); s.setState(state); s.setView('network'); s.setLabels('all');
+    let clock = 600; s.setClock(clock); await sleep(1500);
+    r.trips = s.trips.length; r.markers = s.inst.marker.count; r.lineTris = s.netLineMesh.geometry.attributes.position.count / 3;
+    r.lineColors = s.netLineList.map(l => `${l.id}:${l.active}`);
+    const m0 = { x: s.trips[0].x, z: s.trips[0].z };
+    clock += .6; s.setClock(clock);
+    let m1 = { x: s.trips[0].x, z: s.trips[0].z }; for (let i = 0; i < 40 && m1.x === m0.x; i++) { await sleep(100); m1 = { x: s.trips[0].x, z: s.trips[0].z }; }
+    r.moved = Math.hypot(m1.x - m0.x, m1.z - m0.z);
+    r.chips = [...host.querySelectorAll('.scene3d-chip')].filter(c => c.style.display !== 'none').map(c => c.textContent);
+    r.info = s.renderInfo();
+    r.followOk = s.follow('vehicle-1'); r.mode = s.cameraMode();
+    clock += 1; s.setClock(clock); await sleep(1200);
+    r.followGap = Math.hypot(s.goal.tx - s.trips[0].x, s.goal.tz - s.trips[0].z);
+    r.followUnknown = s.follow('vehicle-9');
+    s.follow(null);
+    s.home(); await sleep(900); r.infoHome = s.renderInfo();
+    window.__netz = { s, host, state };
+    r.unchanged = JSON.stringify(state) === before;
+    return r;
+  });
+  await page.screenshot({ path: path.join(root, 'docs/assets/netz-0.12.png') });
+  // Standortansicht: Lkw fährt am Start ab (früh im Hauptlauf), am Ziel steht er beim Entladen am Dock d2.
+  const netzSite = await page.evaluate(async () => {
+    const { s, state } = window.__netz, sleep = ms => new Promise(r => setTimeout(r, ms)), r = {};
+    const st = JSON.parse(JSON.stringify(state)); st.linehauls[0].remaining = 39; s.setState(st); s.setView('site'); s.setClock(600.2); await sleep(1200);
+    const p = s.fleet.find(f => f.v.id === 'vehicle-1'); r.out = p && { mode: p.plan.mode, shown: p.shown, label: p.label, z: +p.z.toFixed(2) };
+    const st2 = JSON.parse(JSON.stringify(st)); st2.selectedSite = 's2'; st2.linehauls[0].status = 'unloading'; st2.linehauls[0].remaining = 3; st2.linehauls[0].duration = 5; st2.linehauls[0].dock = 'd2'; st2.buildings[2].task = 'linehaul-1';
+    s.setState(st2); await sleep(1200);
+    const q = s.fleet.find(f => f.v.id === 'vehicle-1'); r.dock = q && { mode: q.plan.mode, dock: q.dock, shown: q.shown, label: q.label };
+    r.info = s.renderInfo(); s.destroy(); window.__netz.host.remove(); return r;
+  });
+  report.netz = { ...netz, site: netzSite };
+  check('W3a Netz: Linien als Band mit Pfeilen (aktiv/inaktiv), Linien-Lkw als Marker', netz.trips === 1 && netz.markers === 1 && netz.lineTris >= 4 && netz.lineColors.join() === 'line-1:true,line-2:false', JSON.stringify({ t: netz.trips, m: netz.markers, tri: netz.lineTris, c: netz.lineColors }));
+  check('W3a Netz: Marker bewegt sich mit gebrochener Uhr', netz.moved > 1e-3, String(netz.moved));
+  check('W3a Netz: Label „Linie Hub Nord→Hub Süd · NN %“', netz.chips.some(c => /^Linie Hub Nord→Hub Süd · \d+ %$/.test(c)), netz.chips.join(' | '));
+  check('W3a Netz: follow(Linien-Lkw) in der Netzansicht, unbekanntes Ziel abgelehnt', netz.followOk && netz.mode?.id === 'vehicle-1' && netz.followGap < .6 && netz.followUnknown === false, JSON.stringify({ ok: netz.followOk, gap: netz.followGap, u: netz.followUnknown }));
+  check('W3a Standort: Hauptlauf fährt Zufahrt ab, Entladen am Dock des Ziels, Labels deutsch', netzSite.out?.mode === 'out' && netzSite.out.shown && netzSite.out.label === 'LKW-1 · Hauptlauf → Hub Süd' && netzSite.dock?.mode === 'site' && netzSite.dock.dock === 'd2' && netzSite.dock.label === 'LKW-1 · Entladen Hauptlauf', JSON.stringify(netzSite));
+  check('W3a: unter 150 Draw Calls', netz.info.drawCalls < 150 && netz.infoHome.drawCalls < 150 && netzSite.info.drawCalls < 150, `${netz.info.drawCalls}/${netz.infoHome.drawCalls}/${netzSite.info.drawCalls}`);
+  check('W3a: Spielzustand unverändert', netz.unchanged);
   // W1b: Probe-Zustand aus tests/ui-hub-probe.js über den echten Importweg (Befund A01: Fremd-Lkw an Dock 1 unsichtbar).
   {
     const { Simulation } = await import(pathToFileURL(path.join(root, 'dist/core.js')).href);

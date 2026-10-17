@@ -122,6 +122,7 @@ export function phaseProgress(task, v, clock, stateT) {
 export function vehicleTag(v) { const n = String(v?.id || '').match(/(\d+)$/)?.[1] || '?'; return `${({ van: 'LW', truck: 'LKW', refrigerated: 'KF' })[v?.type] || 'FZ'}-${n}`; }
 /** Darstellungsplan je Fahrzeug, aus Zustand abgeleitet (nur lesend). */
 export function vehiclePlan(state, v, siteId) {
+  if (v?.status === 'linehaul') return linehaulPlan(state, v, siteId);
   const a = vehicleActivity(state, v);
   if (vehicleAtSite(state, v, siteId)) {
     const tone = a.task?.blocked ? 'wait' : v.status === 'idle' ? 'idle' : 'dock';
@@ -135,6 +136,36 @@ export function vehiclePlan(state, v, siteId) {
   } else if (v.site === siteId) dir = OUT.includes(a.status) ? 'out' : IN.includes(a.status) ? 'in' : null;
   if (!dir || !phaseDuration(t, v)) return { mode: 'away', tone: 'move', status: a.status, task: t, kind: a.kind };
   return { mode: dir, tone: 'move', status: a.status, task: t, kind: a.kind };
+}
+// ---------- Linienverkehr (W3-S2), nur lesend ----------
+const LH_ACTIVE = ['loading', 'transit', 'unloading', 'returning'];
+/** Laufende Linienfahrt eines Fahrzeugs (v.status 'linehaul', v.linehaul = Fahrt-ID), sonst null. */
+export function linehaulOf(state, v) {
+  if (v?.status !== 'linehaul') return null;
+  const list = state?.linehauls || [];
+  return list.find(x => x.id === v.linehaul && LH_ACTIVE.includes(x.status)) || list.find(x => x.vehicleId === v.id && LH_ACTIVE.includes(x.status)) || null;
+}
+const siteName = (state, id) => state?.sites?.find(x => x.id === id)?.name || 'Standort';
+/** Deutscher Fahrzeugstatus einer Linienfahrt (· Wartegrund, falls blockiert). */
+export function linehaulStatus(state, lh) {
+  const base = lh?.status === 'loading' ? 'Beladen Hauptlauf' : lh?.status === 'unloading' ? 'Entladen Hauptlauf' : lh?.status === 'transit' ? `Hauptlauf → ${siteName(state, lh.to)}` : lh?.status === 'returning' ? 'Rückfahrt' : 'Ferntransport';
+  return lh?.blocked ? `${base} · ${lh.blocked}` : base;
+}
+/**
+ * Darstellungsplan eines Linien-Lkw: Beladen am Dock des Startstandorts, Entladen am Dock des Zielstandorts (Dock über b.task = Fahrt-ID),
+ * Hauptlauf fährt am Start ab (out) und am Ziel an (in), Rückfahrt umgekehrt – wie Standorttransfer.
+ */
+export function linehaulPlan(state, v, siteId) {
+  const lh = linehaulOf(state, v), away = { mode: 'away', tone: 'move', status: lh?.status || 'linehaul', task: lh, kind: 'linehaul' };
+  if (!lh) return away;
+  const at = lh.status === 'loading' ? lh.from : lh.status === 'unloading' ? lh.to : null;
+  if (at) return at === siteId ? { ...away, mode: 'site', tone: lh.blocked ? 'wait' : 'dock' } : away;
+  const dir = lh.status === 'transit' ? (lh.from === siteId ? 'out' : lh.to === siteId ? 'in' : null) : (lh.to === siteId ? 'out' : lh.from === siteId ? 'in' : null);
+  return dir && phaseDuration(lh, v) ? { ...away, mode: dir } : away;
+}
+/** Fahrzeug-Label „Kennung · Status“; Linien-Lkw mit Hauptlauf-Status. statusLabel: Übersetzung der übrigen Status. */
+export function vehicleLabel(state, plan, v, statusLabel = x => x) {
+  return `${vehicleTag(v)} · ${plan.kind === 'linehaul' && plan.task ? linehaulStatus(state, plan.task) : statusLabel(plan.status)}`;
 }
 /** Sichtbarer Wegabschnitt: t (0 = Stellplatz, 1 = Straßenende) oder null, wenn außer Sicht. */
 export function vehicleT(plan, v, clock, stateT, visibleMinutes = 8) {
@@ -214,6 +245,56 @@ export function networkLayout(sites, k = .26) {
   const pins = sites.map(s => ({ id: s.id, x: ((s.x || 0) - cx) * k, z: ((s.y || 0) - cy) * k }));
   let ext = 12; for (const p of pins) ext = Math.max(ext, Math.abs(p.x) + 6, Math.abs(p.z) + 6);
   return { pins, ext };
+}
+
+export const NET_PIN_R = 2.2, NET_OFFSET = .55, NET_WIDTH = .32;
+export const NET_TONE = { active: '#3f8f78', inactive: '#a9b3ae' };
+/** Linien der Netzansicht: Verbindung Start → Ziel zwischen den Pins, um den Pinradius gekürzt und quer versetzt (Gegenrichtung liegt daneben). */
+export function networkLines(state, pins) {
+  const out = [];
+  for (const l of state?.lines || []) {
+    const a = pins.find(p => p.id === l.from), b = pins.find(p => p.id === l.to); if (!a || !b) continue;
+    const dx = b.x - a.x, dz = b.z - a.z, len = Math.hypot(dx, dz); if (len < 1e-6) continue;
+    const ux = dx / len, uz = dz / len, nx = -uz * NET_OFFSET, nz = ux * NET_OFFSET, cut = Math.min(NET_PIN_R, len * .3);
+    out.push({ id: l.id, from: l.from, to: l.to, active: l.active !== false, x0: a.x + ux * cut + nx, z0: a.z + uz * cut + nz, x1: b.x - ux * cut + nx, z1: b.z - uz * cut + nz, heading: Math.atan2(dz, dx) });
+  }
+  return out;
+}
+/** Punkt auf einer Netzlinie bei Anteil p (0 = Start, 1 = Ziel). Schreibt in out. */
+export function linePoint(line, p, out = {}) { const u = Math.max(0, Math.min(1, p)); out.x = line.x0 + (line.x1 - line.x0) * u; out.z = line.z0 + (line.z1 - line.z0) * u; return out; }
+/** Dreiecke (Position, Farbe) für Linienband und Richtungspfeile; ein Draw Call. */
+export function networkLineMesh(lines) {
+  const pos = [], colr = [], y = .05, ya = .055;
+  const rgb = h => { const n = parseInt(h.slice(1), 16); return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255]; };
+  for (const l of lines) {
+    const c = rgb(l.active ? NET_TONE.active : NET_TONE.inactive), dx = l.x1 - l.x0, dz = l.z1 - l.z0, len = Math.hypot(dx, dz); if (len < 1e-6) continue;
+    const ux = dx / len, uz = dz / len, w = NET_WIDTH / 2, nx = -uz * w, nz = ux * w;
+    const quad = [[l.x0 + nx, l.z0 + nz], [l.x1 + nx, l.z1 + nz], [l.x1 - nx, l.z1 - nz], [l.x0 - nx, l.z0 - nz]];
+    for (const i of [0, 1, 2, 0, 2, 3]) { pos.push(quad[i][0], y, quad[i][1]); colr.push(...c); }
+    const arrows = Math.max(1, Math.min(4, Math.floor(len / 9)));
+    for (let k = 1; k <= arrows; k++) {
+      const m = k / (arrows + 1), cx = l.x0 + dx * m, cz = l.z0 + dz * m, ax = -uz * .62, az = ux * .62;
+      pos.push(cx + ux * .8, ya, cz + uz * .8, cx - ux * .5 + ax, ya, cz - uz * .5 + az, cx - ux * .5 - ax, ya, cz - uz * .5 - az); colr.push(...c, ...c, ...c);
+    }
+  }
+  return { pos, colr };
+}
+/** Fortschritt eines Linien-Lkw auf seiner Verbindung: Beladen 0, Hauptlauf p, Entladen 1, Rückfahrt 1 − p. */
+export function linehaulNetProgress(lh, v, clock, stateT) {
+  if (lh.status === 'loading') return 0; if (lh.status === 'unloading') return 1;
+  const p = phaseProgress(lh, v, clock, stateT) ?? 0; return lh.status === 'returning' ? 1 - p : p;
+}
+/** Netz-Label „Linie A→B · 63 %“ (Hauptlauf), sonst Phase (Rückfahrt mit Anteil), · Wartegrund. */
+export function linehaulNetLabel(state, lh, pct) {
+  const name = `Linie ${siteName(state, lh.from)}→${siteName(state, lh.to)}`;
+  const phase = lh.status === 'transit' ? `${pct} %` : lh.status === 'returning' ? `Rückfahrt ${pct} %` : linehaulStatus(state, { ...lh, blocked: null });
+  return `${name} · ${phase}${lh.blocked ? ` · ${lh.blocked}` : ''}`;
+}
+/** Verfolgungsziel in der Netzansicht: Linien-Lkw (Fahrzeug- oder Fahrt-ID). */
+export function netFollowTarget(trips, id) {
+  if (id == null) return null;
+  for (const t of trips || []) if (t.vehicleId === id || t.id === id) return { x: t.x, z: t.z, kind: 'linehaul' };
+  return null;
 }
 
 // ---------- Tageszeit (W2c): Licht, Himmel, Bodentönung aus der Spielzeit (nur Darstellung) ----------
@@ -661,7 +742,7 @@ export class Scene3D {
     this.build = null; this.buildRotation = 0; this.movingId = null; this.hover = null; this.selected = null; this.ghostCache = null;
     this.dead = false; this.listeners = []; this.width = 1; this.height = 1; this.signature = ''; this.sigDirty = true; this.dynDirty = true; this.needs = true;
     this.quarter = 0; this.scale = 1; this.cam = { tx: 10, tz: 8, dist: 30, yaw: Math.PI / 4 }; this.goal = { tx: 10, tz: 8, dist: 30, yaw: Math.PI / 4 }; this.animating = false;
-    this.clock = { base: null, at: 0, rate: 0, shown: null }; this.fleet = []; this.yardFleet = []; this.yardMap = null; this.boxes = []; this.infra = []; this.pins = []; this.transfers = [];
+    this.clock = { base: null, at: 0, rate: 0, shown: null }; this.fleet = []; this.yardFleet = []; this.yardMap = null; this.boxes = []; this.infra = []; this.pins = []; this.transfers = []; this.trips = []; this.netLineKey = null;
     this.res = { ratio: Math.min(window.devicePixelRatio || 1, 1.5), max: Math.min(window.devicePixelRatio || 1, 1.5), min: .75, avg: 0, cond: null, since: null, lastDrop: null };
     this.lastFrame = 0; this.renderedLast = false; this.layout = yardLayout(defaultSite(null));
     // Wiederverwendete Objekte für die Hot-Loop.
@@ -678,7 +759,7 @@ export class Scene3D {
     const sun = this.sun = new THREE.DirectionalLight(0xfff4e2, 2.0); sun.position.set(-18, 34, 22); scene.add(sun);
     this.themeMode = 'auto'; this.themeKey = null; this.themeNow = null; this.camMode = null;
     this.persp = new THREE.PerspectiveCamera(40, 1, .5, 400); this.ortho = new THREE.OrthographicCamera(-10, 10, 10, -10, .5, 400);
-    this.mat = { solid: new THREE.MeshLambertMaterial({ vertexColors: true }), inst: new THREE.MeshLambertMaterial({ vertexColors: true }), lamp: new THREE.MeshBasicMaterial({ color: 0xffffff }), plate: new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: .55, depthWrite: false }), ghost: new THREE.MeshLambertMaterial({ color: 0x55caad, transparent: true, opacity: .55, depthWrite: false }), grid: new THREE.LineBasicMaterial({ color: 0x6f858b, transparent: true, opacity: .22 }), select: new THREE.LineBasicMaterial({ color: 0x199b83 }), route: new THREE.LineDashedMaterial({ color: 0x4f9a85, dashSize: .8, gapSize: .6 }), net: new THREE.LineBasicMaterial({ color: 0xa9b8ae }),
+    this.mat = { solid: new THREE.MeshLambertMaterial({ vertexColors: true }), inst: new THREE.MeshLambertMaterial({ vertexColors: true }), lamp: new THREE.MeshBasicMaterial({ color: 0xffffff }), plate: new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: .55, depthWrite: false }), ghost: new THREE.MeshLambertMaterial({ color: 0x55caad, transparent: true, opacity: .55, depthWrite: false }), grid: new THREE.LineBasicMaterial({ color: 0x6f858b, transparent: true, opacity: .22 }), select: new THREE.LineBasicMaterial({ color: 0x199b83 }), route: new THREE.LineDashedMaterial({ color: 0x4f9a85, dashSize: .8, gapSize: .6 }), net: new THREE.LineBasicMaterial({ color: 0xa9b8ae }), netline: new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide }),
       // Nachtbeleuchtung ohne Echtzeitlichter: Leuchtkörper (unbeleuchtet) und additive Lichtkegel/-flächen mit Verlauf in der Vertexfarbe.
       head: new THREE.MeshBasicMaterial({ vertexColors: true, color: 0x9aa39f }), glow: new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }) };
     this.siteGroup = new THREE.Group(); this.netGroup = new THREE.Group(); scene.add(this.siteGroup, this.netGroup);
@@ -732,10 +813,11 @@ export class Scene3D {
     this.camMode = { mode: 'tour', stops, i: 0, from: { ...this.cam }, at: null, cut: this.reducedMotion() };
     this.callbacks.onCameraMode?.('tour', { stop: stops[0].key, label: stops[0].label }); this.needs = true; return stops;
   }
-  /** Kamera folgt Fremd-Lkw (arrival-ID) oder eigenem Fahrzeug; follow(null) beendet. false, wenn Ziel nicht im Bild. */
+  /** Kamera folgt Fremd-Lkw (arrival-ID) oder eigenem Fahrzeug; in der Netzansicht Linien-Lkw (Fahrzeug-/Fahrt-ID). follow(null) beendet. false, wenn Ziel nicht im Bild. */
   follow(id) {
     if (id == null) { if (this.camMode?.mode === 'follow') this.stopCamera('user'); return false; }
-    if (this.view === 'network' || !followTarget(this.fleet, this.yardFleet, id)) return false;
+    const net = this.view === 'network'; if (net) this.sync();
+    if (!(net ? netFollowTarget(this.trips, id) : followTarget(this.fleet, this.yardFleet, id))) return false;
     this.stopCamera('replace'); this.camMode = { mode: 'follow', id };
     if (this.scale < 1.5) { this.scale = 1.5; this.goal.dist = this.homeDist / this.scale; }
     this.callbacks.onCameraMode?.('follow', { id }); this.needs = true; return true;
@@ -854,6 +936,7 @@ export class Scene3D {
       const g = rayGround(ray.origin, ray.direction, 0, {}); if (!g) return;
       let best = null, bd = 2.6; for (const pin of this.pins) { const d = Math.hypot(pin.x - g.x, pin.z - g.z); if (d < bd) { bd = d; best = pin.id; } }
       for (const t of this.transfers) { const d = Math.hypot(t.x - g.x, t.z - g.z); if (d < Math.min(bd, 1.4)) { bd = d; best = t.id; } }
+      for (const t of this.trips) { const d = Math.hypot(t.x - g.x, t.z - g.z); if (d < Math.min(bd, 1.4)) { bd = d; best = t.vehicleId; } }
       if (best) this.callbacks.onSelect?.(best); return;
     }
     if (this.build) { const g = rayGround(ray.origin, ray.direction, 0, {}); if (g) { const c = worldToCell(g.x, g.z); this.callbacks.onPlace?.(c.x, c.y); } return; }
@@ -904,10 +987,10 @@ export class Scene3D {
     this.ghost = new THREE.Mesh(prims().box, this.mat.ghost); this.ghost.visible = false; g.add(this.selectBox, this.ghost);
     // Netzansicht
     const n = this.netGroup; n.visible = false;
-    this.netStatic = new THREE.Mesh(new THREE.BufferGeometry(), this.mat.solid); this.netLines = new THREE.LineSegments(new THREE.BufferGeometry(), this.mat.net); this.netRoutes = new THREE.LineSegments(new THREE.BufferGeometry(), this.mat.route);
+    this.netStatic = new THREE.Mesh(new THREE.BufferGeometry(), this.mat.solid); this.netLines = new THREE.LineSegments(new THREE.BufferGeometry(), this.mat.net); this.netRoutes = new THREE.LineSegments(new THREE.BufferGeometry(), this.mat.route); this.netLineMesh = new THREE.Mesh(new THREE.BufferGeometry(), this.mat.netline);
     this.inst.pin = inst(mergedGeo(P => { P.cyl(0, 0, 0, 1.6, .08, '#ffffff', true); P.box(-.9, .08, -.7, 1.8, 1.0, 1.4, '#ffffff'); P.box(-1.05, 1.08, -.85, 2.1, .14, 1.7, '#e9efe9'); P.cyl(0, 1.22, 0, .05, 1.1, '#5d6d70'); P.box(.05, 1.95, -.02, .6, .36, .04, '#f2c363'); }), this.mat.inst, 8);
     this.inst.marker = inst(mergedGeo(P => { P.box(-.7, .15, -.32, 1.4, .6, .64, '#ffffff'); P.box(.4, .15, -.32, .4, .5, .64, '#ebac53'); }), this.mat.inst, 8);
-    n.add(this.netStatic, this.netLines, this.netRoutes, this.inst.pin, this.inst.marker);
+    n.add(this.netStatic, this.netLines, this.netRoutes, this.netLineMesh, this.inst.pin, this.inst.marker);
   }
   /** Instanzpuffer bei Bedarf vergrößern (selten, nie pro Frame). */
   ensure(key, n) {
@@ -973,7 +1056,7 @@ export class Scene3D {
     this.buildNetwork();
   }
   buildNetwork() {
-    const sites = this.state?.sites || [this.site()], { pins } = networkLayout(sites), P = new Parts(); this.pins = pins;
+    const sites = this.state?.sites || [this.site()], { pins } = networkLayout(sites), P = new Parts(); this.pins = pins; this.netLineKey = null;
     P.quad(-90, -70, 180, 140, -.02, '#cfe0c8');
     for (let i = 0; i < 26; i++) { const x = ((i * 53) % 150) - 75, z = ((i * 31) % 110) - 55; P.quad(x, z, 6 + (i % 4) * 2, 4 + (i % 3) * 2, -.015, i % 2 ? '#c3d8bb' : '#d7e5cf'); }
     for (const p of pins) P.cyl(p.x, -.01, p.z, 3.4, .02, '#bdd3b6', true);
@@ -1012,7 +1095,7 @@ export class Scene3D {
     this.finish(car, cars);
     // Fahrzeugpläne; Positionen folgen pro Frame
     const plans = fleetPlans(st, s.id, buildings, L);
-    for (const p of plans) Object.assign(p, { path: p.plan.mode === 'site' ? null : vehiclePath(L, p.pose, p.plan.mode), x: p.pose.x, z: p.pose.z, heading: p.pose.heading, shown: false, label: `${vehicleTag(p.v)} · ${this.statusLabel(p.plan.status)}` });
+    for (const p of plans) Object.assign(p, { path: p.plan.mode === 'site' ? null : vehiclePath(L, p.pose, p.plan.mode), x: p.pose.x, z: p.pose.z, heading: p.pose.heading, shown: false, label: vehicleLabel(st, p.plan, p.v, x => this.statusLabel(x)) });
     this.fleet = plans; this.ensure('vbox', plans.length); this.ensure('vcab', plans.length); this.ensure('vbase', plans.length);
     for (const p of plans) { p.hit = { id: p.v.id, box: { x0: 0, x1: 0, y0: 0, y1: 1.9, z0: 0, z1: 0 }, fleet: p }; this.boxes.push(p.hit); }
     // Fremd-Lkw aus s.yard (W1-S4); Positionen folgen pro Frame. Phasenwechsel übernehmen die zuletzt gezeigte Pose (nur Darstellung).
@@ -1069,7 +1152,21 @@ export class Scene3D {
     const pts = [];
     for (const t of active) { const a = this.pins.find(p => p.id === (t.fromSite || t.site)), b = this.pins.find(p => p.id === t.toSite); if (!a || !b) continue; pts.push(a.x, .05, a.z, b.x, .05, b.z); this.transfers.push({ id: t.id, t, a, b, x: a.x, z: a.z, heading: Math.atan2(b.z - a.z, b.x - a.x), label: `${t.qty} Stk. · ${this.statusLabel(t.status)}`, blocked: !!t.blocked }); }
     const og = this.netRoutes.geometry; this.netRoutes.geometry = new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(pts.length ? pts : [0, 0, 0, 0, 0, 0], 3)); this.netRoutes.computeLineDistances(); og.dispose();
-    this.ensure('marker', this.transfers.length);
+    // Linien (W3-S2): Band mit Richtungspfeilen, Geometrie nur bei Änderung von Linien/Pins neu.
+    const lines = networkLines(st, this.pins), key = lines.map(l => `${l.id}:${l.from}>${l.to}:${l.active ? 1 : 0}`).join(',') + '|' + this.pins.map(p => `${p.id}@${p.x},${p.z}`).join(',');
+    if (key !== this.netLineKey) {
+      this.netLineKey = key; const { pos, colr } = networkLineMesh(lines), g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(colr, 3)); if (pos.length) g.computeBoundingSphere();
+      const ol = this.netLineMesh.geometry; this.netLineMesh.geometry = g; ol.dispose();
+    }
+    this.netLineList = lines; const prev = new Map(this.trips.map(t => [t.id, t])); this.trips = [];
+    for (const lh of st?.linehauls || []) {
+      if (!['loading', 'transit', 'unloading', 'returning'].includes(lh.status)) continue;
+      const line = lines.find(l => l.id === lh.lineId && l.from === lh.from) || networkLines({ lines: [{ id: lh.lineId, from: lh.from, to: lh.to }] }, this.pins)[0]; if (!line) continue;
+      const old = prev.get(lh.id), v = st.vehicles?.find(x => x.id === lh.vehicleId);
+      this.trips.push({ id: lh.id, vehicleId: lh.vehicleId, lh, v, line, x: old?.x ?? line.x0, z: old?.z ?? line.z0, pct: -1, label: '', heading: line.heading, blocked: !!lh.blocked });
+    }
+    this.ensure('marker', this.transfers.length + this.trips.length);
   }
 
   // ----- Frame -----
@@ -1082,9 +1179,7 @@ export class Scene3D {
     const dt = this.lastFrame ? Math.min(.1, (now - this.lastFrame) / 1000) : 0;
     if (this.renderedLast && this.lastFrame && adaptResolution(this.res, now - this.lastFrame, now)) { this.renderer.setPixelRatio(this.res.ratio); this.renderer.setSize(this.width, this.height, false); }
     this.lastFrame = now;
-    // Signatur nur nach setState prüfen (keine String-Erzeugung pro Frame).
-    if (this.sigDirty) { this.sigDirty = false; const sig = sceneSignature(this.state, this.site().id); if (sig !== this.signature) { this.signature = sig; this.rebuildStatic(); this.dynDirty = true; } }
-    if (this.dynDirty) { this.dynDirty = false; this.updateDynamic(); this.needs = true; }
+    this.sync();
     // Kamera sanft zum Ziel (Drehen, Home, Fokus); Rundgang setzt die Pose direkt, Verfolgen setzt das Ziel.
     const tourMoving = this.camMode?.mode === 'tour' && this.stepTour(now);
     const c = this.cam, g = this.goal, k = 1 - Math.exp(-dt * 9); let moving = tourMoving;
@@ -1092,13 +1187,18 @@ export class Scene3D {
     if (moving || this.needs) this.applyCamera();
     const net = this.view === 'network'; this.siteGroup.visible = !net; this.netGroup.visible = net;
     const clock = this.displayClock(now), animated = net ? this.placeTransfers(clock) : !!(this.placeVehicles(clock) | this.placeYard(clock) | this.placeForklifts(clock));
-    if (this.camMode?.mode === 'follow' && !net) {
-      const f = followTarget(this.fleet, this.yardFleet, this.camMode.id);
+    if (this.camMode?.mode === 'follow') {
+      const f = net ? netFollowTarget(this.trips, this.camMode.id) : followTarget(this.fleet, this.yardFleet, this.camMode.id);
       if (!f) this.stopCamera('lost'); else if (Math.abs(f.x - g.tx) > 1e-3 || Math.abs(f.z - g.tz) > 1e-3) { g.tx = f.x; g.tz = f.z; this.needs = true; }
     }
     const render = moving || this.needs || animated || this.pointer?.moved;
     if (render) { this.renderer.render(this.scene, this.camera()); this.updateLabels(); this.needs = false; }
     this.renderedLast = render;
+  }
+  /** Statische Geometrie und Instanzen nach setState/Ansichtswechsel nachziehen (keine String-Erzeugung pro Frame). */
+  sync() {
+    if (this.sigDirty) { this.sigDirty = false; const sig = sceneSignature(this.state, this.site().id); if (sig !== this.signature) { this.signature = sig; this.rebuildStatic(); this.dynDirty = true; } }
+    if (this.dynDirty) { this.dynDirty = false; this.updateDynamic(); this.needs = true; }
   }
   /** Rundgang: Fahrt (TOUR_TRAVEL s, sanft) zur Station, Halt (TOUR_DWELL s), dann nächste; nach „Ausgang“ Ende. */
   stepTour(now) {
@@ -1159,6 +1259,14 @@ export class Scene3D {
       tr.x = tr.a.x + (tr.b.x - tr.a.x) * p; tr.z = tr.a.z + (tr.b.z - tr.a.z) * p;
       this.setInst(m, n++, tr.x, 0, tr.z, -tr.heading, 1, 1, 1, tr.blocked ? '#e4ab4b' : '#ffffff');
     }
+    // Linien-Lkw: Fortschritt aus remaining/duration, mit Anzeigeuhr interpoliert; Label nur bei neuem Prozentwert.
+    const pt = this.tmp.pose;
+    for (const tr of this.trips) {
+      const lh = tr.lh, p = linehaulNetProgress(lh, tr.v, clock, st?.t), moving = lh.status === 'transit' || lh.status === 'returning';
+      if (moving) animated = true; linePoint(tr.line, p, pt); tr.x = pt.x; tr.z = pt.z;
+      const pct = Math.round((lh.status === 'returning' ? 1 - p : p) * 100); if (pct !== tr.pct) { tr.pct = pct; tr.label = linehaulNetLabel(st, lh, pct); }
+      this.setInst(m, n++, tr.x, 0, tr.z, -(tr.heading + (lh.status === 'returning' ? Math.PI : 0)), 1, 1, 1, tr.blocked ? '#e4ab4b' : '#d6eee4');
+    }
     this.finish(m, n); return animated;
   }
 
@@ -1181,6 +1289,7 @@ export class Scene3D {
     if (this.view === 'network') {
       if (mode !== 'none') { const st = this.state; for (const p of this.pins) { const s = st?.sites?.find(x => x.id === p.id); this.candidate(p.id, p.x, 3, p.z, `${s?.name || 'Standort'} · ${(st?.buildings || []).filter(b => b.site === p.id).length} Anlagen`, p.id === st?.selectedSite ? 'dock' : 'infra', 1); } }
       if (fleet) for (const tr of this.transfers) this.candidate(tr.id, tr.x, 1.4, tr.z, tr.label, tr.blocked ? 'wait' : 'move', 2);
+      if (fleet) for (const tr of this.trips) this.candidate(tr.vehicleId, tr.x, 1.4, tr.z, tr.label, tr.blocked ? 'wait' : tr.lh.status === 'transit' || tr.lh.status === 'returning' ? 'move' : 'dock', 2);
     } else {
       if (this.ghostInfo) this.candidate('ghost', this.ghostInfo.x, this.ghostInfo.y, this.ghostInfo.z, this.ghostInfo.text, this.ghostInfo.tone, 0);
       if (fleet) for (const p of this.fleet) if (p.shown) this.candidate(p.v.id, p.x, 2.3, p.z, p.label, p.tone, 2);

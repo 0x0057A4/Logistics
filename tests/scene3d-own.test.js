@@ -379,3 +379,81 @@ test('Label-Stil: Kennung/Status getrennt, Text unverändert; Farben über Token
 test('W2c: Tageszeit/Rundgang/Nachtlicht lesen den Zustand nur',()=>{
  const s=frozen(fixture());assert.doesNotThrow(()=>{tourStops(s,'a');themeAt(s.t);nightLights(s.sites[0]);});
 });
+
+// ---------- Welle 3a: Linienverkehr (W3-S2) – Linien-Lkw am Standort und in der Netzansicht, nur lesend ----------
+import * as S3 from '../dist/scene3d.js';
+function lhFixture(status,extra={}){
+ const s=fixture();s.buildings.push({id:'da',type:'dock',site:'a',x:9,y:13,rotation:0,enabled:true,condition:100,task:status==='loading'?'linehaul-1':null},{id:'db',type:'dock',site:'b',x:4,y:13,rotation:0,enabled:true,condition:100,task:status==='unloading'?'linehaul-1':null});
+ s.vehicles.push({id:'vehicle-1',type:'truck',site:'a',status:'linehaul',linehaul:'linehaul-1'},{id:'vehicle-2',type:'van',site:'b',status:'idle'});
+ s.lines=[{id:'line-1',from:'a',to:'b',departures:[600],vehicleId:'vehicle-1',cutoff:30,active:true,missed:0,wait:null,waitAt:null},{id:'line-2',from:'b',to:'a',departures:[900],vehicleId:null,cutoff:30,active:false,missed:0,wait:null,waitAt:null}];
+ s.linehauls=[{id:'linehaul-1',lineId:'line-1',vehicleId:'vehicle-1',from:'a',to:'b',status,cargo:[],orders:[{orderId:'order-1',qty:40}],qty:40,pallet:false,remaining:10,duration:40,distance:48,departAt:600,dock:null,driver:null,worker:null,blocked:null,...extra}];
+ return s;
+}
+test('W3a Linien-Lkw: Beladen am Dock des Starts, Entladen am Dock des Ziels (b.task = Fahrt-ID), Labels deutsch',()=>{
+ for(const [status,site,dock,text] of [['loading','a','da','LKW-1 · Beladen Hauptlauf'],['unloading','b','db','LKW-1 · Entladen Hauptlauf']]){
+  const s=lhFixture(status),before=JSON.stringify(s);frozen(s);const other=site==='a'?'b':'a';
+  const at=s.buildings.filter(b=>b.site===site),L=yardLayout(s.sites[0]);
+  const plan=S3.vehiclePlan(s,s.vehicles[0],site);assert.equal(plan.mode,'site');assert.equal(plan.kind,'linehaul');assert.equal(plan.tone,'dock');
+  assert.equal(S3.vehiclePlan(s,s.vehicles[0],other).mode,'away',`${status}: am anderen Standort unsichtbar`);
+  const p=fleetPlans(s,site,at,L).find(x=>x.v.id==='vehicle-1');assert.equal(p.dock,dock);assert.equal(p.pose.x,dockSlots(L,at).get(dock));
+  assert.equal(S3.vehicleLabel(s,plan,s.vehicles[0]),text);assert.equal(JSON.stringify(s),before);
+ }
+ const w=lhFixture('loading',{blocked:'Keine Lagerkraft'}),pw=S3.vehiclePlan(w,w.vehicles[0],'a');assert.equal(pw.tone,'wait');assert.equal(S3.vehicleLabel(w,pw,w.vehicles[0]),'LKW-1 · Beladen Hauptlauf · Keine Lagerkraft');
+});
+test('W3a Linien-Lkw: Hauptlauf fährt am Start ab und am Ziel an, Rückfahrt umgekehrt; interpoliert mit gebrochener Uhr',()=>{
+ const s=lhFixture('transit',{remaining:39,duration:40});frozen(s);const v=s.vehicles[0];
+ const out=S3.vehiclePlan(s,v,'a'),inn=S3.vehiclePlan(s,v,'b');assert.equal(out.mode,'out');assert.equal(inn.mode,'in');
+ assert.equal(S3.vehicleLabel(s,out,v),'LKW-1 · Hauptlauf → Lindenhain');
+ const t0=vehicleT(out,v,600,600),t1=vehicleT(out,v,600.5,600);assert.ok(t0!=null&&t1>t0,`Abfahrt bewegt sich (${t0}→${t1})`);
+ assert.equal(vehicleT(inn,v,600,600),null,'am Ziel erst gegen Ende des Hauptlaufs sichtbar');
+ const r=lhFixture('returning',{remaining:2,duration:40});frozen(r);
+ assert.equal(S3.vehiclePlan(r,r.vehicles[0],'b').mode,'out');const back=S3.vehiclePlan(r,r.vehicles[0],'a');assert.equal(back.mode,'in');
+ assert.ok(vehicleT(back,r.vehicles[0],600,600)!=null,'Rückkehr am Start sichtbar');assert.equal(S3.vehicleLabel(r,back,r.vehicles[0]),'LKW-1 · Rückfahrt');
+ const gone=lhFixture('transit');gone.linehauls[0].status='complete';assert.equal(S3.vehiclePlan(gone,gone.vehicles[0],'a').mode,'away','ohne laufende Fahrt keine Darstellung');
+});
+test('W3a Netz: Linien zwischen Pins mit Richtung, Gegenrichtung versetzt, aktiv/inaktiv gefärbt',()=>{
+ const s=frozen(lhFixture('transit')),{pins}=networkLayout(s.sites),lines=S3.networkLines(s,pins);
+ assert.equal(lines.length,2);const [ab,ba]=lines;assert.equal(ab.active,true);assert.equal(ba.active,false);
+ const a=pins[0];assert.ok(Math.hypot(ab.x0-a.x,ab.z0-a.z)<Math.hypot(ab.x1-a.x,ab.z1-a.z),'A→B beginnt bei A');
+ assert.ok(Math.hypot(ab.x0-ba.x1,ab.z0-ba.z1)>.9,'Gegenrichtung liegt daneben');
+ const {pos,colr}=S3.networkLineMesh(lines);assert.equal(pos.length,colr.length);assert.equal(pos.length%9,0);
+ const tone=h=>[1,3,5].map(i=>(parseInt(h.slice(i,i+2),16)/255).toFixed(3));
+ assert.deepEqual(colr.slice(0,3).map(x=>x.toFixed(3)),tone(S3.NET_TONE.active));assert.deepEqual(colr.slice(-3).map(x=>x.toFixed(3)),tone(S3.NET_TONE.inactive));
+ assert.equal(S3.networkLines({lines:[{id:'x',from:'a',to:'z'}]},pins).length,0,'unbekannter Standort entfällt');
+});
+test('W3a Netz: Fortschritt aus remaining/duration, Label „Linie A→B · 63 %“, Verfolgen per Fahrzeug-/Fahrt-ID',()=>{
+ const s=frozen(lhFixture('transit',{remaining:15,duration:40})),lh=s.linehauls[0],v=s.vehicles[0];
+ const p=S3.linehaulNetProgress(lh,v,600,600);assert.ok(Math.abs(p-.625)<1e-9);assert.ok(S3.linehaulNetProgress(lh,v,600.4,600)>p,'gebrochene Uhr');
+ assert.equal(S3.linehaulNetLabel(s,lh,Math.round(p*100)),'Linie Morgenfeld→Lindenhain · 63 %');
+ assert.equal(S3.linehaulNetProgress({...lh,status:'loading'},v,600,600),0);assert.equal(S3.linehaulNetProgress({...lh,status:'unloading'},v,600,600),1);
+ assert.ok(Math.abs(S3.linehaulNetProgress({...lh,status:'returning'},v,600,600)-.375)<1e-9,'Rückfahrt läuft zurück');
+ assert.equal(S3.linehaulNetLabel(s,{...lh,status:'returning'},63),'Linie Morgenfeld→Lindenhain · Rückfahrt 63 %');
+ assert.equal(S3.linehaulNetLabel(s,{...lh,status:'loading',blocked:'Kein freies Dock'},0),'Linie Morgenfeld→Lindenhain · Beladen Hauptlauf · Kein freies Dock');
+ const line={x0:0,z0:0,x1:10,z1:0};const q=S3.linePoint(line,.63);assert.ok(Math.abs(q.x-6.3)<1e-9&&q.z===0);
+ const trips=[{id:'linehaul-1',vehicleId:'vehicle-1',x:3,z:4}];assert.deepEqual(S3.netFollowTarget(trips,'vehicle-1'),{x:3,z:4,kind:'linehaul'});assert.deepEqual(S3.netFollowTarget(trips,'linehaul-1'),{x:3,z:4,kind:'linehaul'});
+ assert.equal(S3.netFollowTarget(trips,'vehicle-9'),null);assert.equal(S3.netFollowTarget(trips,null),null);
+});
+test('W3a Echter Ablauf: Linienfahrt durch alle Phasen, Szene zeigt Lkw am richtigen Dock bzw. auf der Zufahrt, Zustand unverändert',()=>{
+ const sim=new Simulation({mode:'sandbox',seed:31}),s=sim.state,ok=c=>{const r=sim.command(c);assert.equal(r.ok,true,`${c.type}: ${r.message}`);return r;};
+ const A='site-1',B=ok({type:'buySite',name:'Ziel-Hub Birkenau'}).id;
+ for(const site of [A,B]){ok({type:'build',buildingType:'dock',site,x:2,y:10,rotation:0});ok({type:'build',buildingType:'rack',site,x:2,y:2,rotation:0});ok({type:'hire',role:'warehouse',site});ok({type:'hire',role:'driver',site});}
+ const truck=ok({type:'buyVehicle',vehicleType:'truck',site:A}).id,k=s.contracts[0];ok({type:'acceptContract',id:k.id});ok({type:'cancelContract',id:k.id});
+ k.unit='parcel';k.lanes=[{id:'lane-1',name:'Nahbezirk',distance:20,site:A},{id:'lane-2',name:'Fernbezirk',distance:25,site:B}];k.laneShare=[.5,.5];
+ const oid=sim.api.id('order');s.orders.push({id:oid,kind:'logistics',source:'hub',contractId:k.id,lane:'lane-2',customer:'Fernbezirk (Testversand)',item:'parcel',qty:30,price:9,due:s.t+3000,quality:0,site:A,deliverySite:B,status:'active',delivered:0,paid:0});
+ assert.ok(sim.api.inventory.add({item:'parcel',qty:30,site:A,owner:oid,location:'stock',quality:100,unitCost:0}));
+ ok({type:'createLine',from:A,to:B,departures:[(s.t+60)%1440],vehicleId:truck});
+ const seen=new Set(),dockOf=site=>s.buildings.find(b=>b.site===site&&b.type==='dock').id;
+ for(let i=0;i<3000&&!(seen.has('returning')&&!S3.linehaulOf(s,s.vehicles.find(x=>x.id===truck)));i++){
+  sim.step(1);const v=s.vehicles.find(x=>x.id===truck),lh=S3.linehaulOf(s,v);if(!lh)continue;
+  const before=JSON.stringify(s.linehauls)+JSON.stringify(s.vehicles);
+  for(const site of [A,B]){
+   const L=yardLayout(s.sites.find(x=>x.id===site)),b=s.buildings.filter(x=>x.site===site),p=fleetPlans(s,site,b,L).find(x=>x.v.id===truck);
+   const want=lh.status==='loading'?(site===A?'site':null):lh.status==='unloading'?(site===B?'site':null):lh.status==='transit'?(site===A?'out':'in'):(site===B?'out':'in');
+   if(want===null){assert.equal(p,undefined,`${lh.status}: nicht an ${site}`);continue;}
+   assert.equal(p.plan.mode,want,`${lh.status} an ${site}`);
+   if(want==='site'&&lh.dock)assert.equal(p.dock,dockOf(site),`${lh.status}: am Dock von ${site}`);
+  }
+  assert.equal(JSON.stringify(s.linehauls)+JSON.stringify(s.vehicles),before,'Szene liest nur');seen.add(lh.status);
+ }
+ assert.deepEqual([...seen].sort(),['loading','returning','transit','unloading']);
+});
