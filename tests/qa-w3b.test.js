@@ -229,7 +229,7 @@ test('QS-W3b-01: Docks aus → Wartegrund „Dock außer Betrieb“ statt „Kei
  assert.equal(c.waitReason,WAIT.dockOff);
 });
 // Befund QS-W3b-02 (todo bis Behebung): Versionsanzeige.
-test('QS-W3b-02: Versionsanzeige 0.13',async()=>{
+test('QS-W3b-02: Versionsanzeige mindestens 0.13',async()=>{
  const {readFileSync}=await import('node:fs');
- assert.match(readFileSync(new URL('../dist/app.js',import.meta.url),'utf8'),/VERSION='0\.13/);
+ assert.match(readFileSync(new URL('../dist/app.js',import.meta.url),'utf8'),/VERSION='0\.1[3-9]/);
 });

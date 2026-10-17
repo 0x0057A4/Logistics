@@ -1,5 +1,13 @@
 # Änderungen
 
+## 0.14 – 17.10.2026 · Luftexport, Dispositionsassistent, Replay (Entwicklungsfassung)
+
+- Luftexport zum fiktiven Frachtterminal Heidmoor: Verträge mit Flugplan und Annahmeschluss (11–14 €/Paket), eigener Zubringer (Fenster „Luftexport“, Taste X), Übergabe = Zustellung mit sofortiger Zahlung; verpasster Annahmeschluss → nächster Flug, Strafe höchstens einmal je Auftrag.
+- Dispositionsassistent je Standort (Taste J, Schalter in der Kopfzeile): Zustellung, Linien, Tor, Luftzubringer – nur reguläre Befehle, Tagesbudget, Protokoll mit Begründung.
+- Replay der letzten 60 Spielminuten (Taste Z): nur Ansicht, Befehle gesperrt, Speichern sichert Live-Stand; teure Aufnahmen werden automatisch seltener (60-FPS-Schutz).
+- 3D: Luftzubringer am Standort, Frachtterminal in der Netzansicht, startendes Flugzeug.
+- Unabhängige Prüfung docs/QS-0.14.md: Fix QS-W3c-01 (keine Doppelstrafe Flug/Vertragsende), QS-W3c-02 (Assistent-Budget mit echter Terminal-Distanz).
+
 ## 0.13 – 17.10.2026 · Containerhof und Seeimport (Entwicklungsfassung)
 
 - Seeimport-Verträge (ab Containerhof oder Tag 5): 1–3 Container je Ankunft mit 18–22 Paletten oder 500–700 Paketen; Handling 250–450 € je Container zusätzlich zum Inhalt; 24 Std. Freizeit, danach 12 €/Std. Lagergeld je Container.

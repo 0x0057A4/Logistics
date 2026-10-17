@@ -113,7 +113,7 @@ test('Verpasster Flug ohne Zubringer: Strafe genau einmal je Auftrag und Flug, U
  runUntil(sim,()=>s.airShuttles[0].status==='complete');
  sim.step(Math.max(0,f1+1440-CUTOFF+1-s.t));
  assert.equal(oa.status,'fulfilled');assert.equal(s.ledger.some(l=>l.key===`air-missed:${a}:${f1+1440}`),false);
- const again=s.ledger.find(l=>l.key===`air-missed:${b}:${f1+1440}`);assert.ok(again);assert.equal(again.amount,-15*k.penaltyMissed);
+ /* QS-W3c-01 (A01): höchstens eine Flugstrafe je Auftrag – zweiter verpasster Flug kostet keine weitere Strafe */assert.equal(s.ledger.some(l=>l.key===`air-missed:${b}:${f1+1440}`),false);
  assert.equal(ob.delivered,5);assert.equal(keys(s,'air:').length,1);validateState(s);
 });
 

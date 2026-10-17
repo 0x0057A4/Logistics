@@ -94,7 +94,7 @@ test('Verpasster Flug (echtes Angebot, kein Zubringer): Strafe genau einmal je A
  globalThis.__qaBoth={orders:orders.length,both:both.length,missed:missed.length,open:open.length};
 });
 
-test.todo('QS-W3c-01 Vertragsende: Luftauftrag mit Flugstrafen erhält zusätzlich penaltyOpen für dieselben offenen Pakete (Doppelstrafe)',()=>{
+test('QS-W3c-01 Vertragsende: Luftauftrag mit Flugstrafen erhält zusätzlich penaltyOpen für dieselben offenen Pakete (Doppelstrafe)',()=>{
  const env=world({seed:7,accept:['air'],line:false}),{sim,s,k}=env;sim.step((k.air.durationDays+3)*1440);
  for(const o of s.orders.filter(o=>o.contractId===k.air.id))assert.ok(!(keys(s,`penalty-open:${o.id}`).length&&keys(s,`air-missed:${o.id}:`).length),o.id);
 });
@@ -196,13 +196,13 @@ test('Assistent Tagesbudget 120 € (Pakete + Linie, ohne Luft): tatsächliche F
  const e=assisted(true,{budget:120});e.sim.step(3*1440);
  for(const [d,c] of budgetUse(e))assert.ok(c<=120+0.01,`Tag ${d+1}: ${c} €`);
 });
-test.todo('QS-W3c-02 Assistent-Budget: Luftzubringer wird mit 30-km-Schätzung geprüft, gebucht wird die Flughafendistanz (Budget überschritten)',()=>{
+test('QS-W3c-02 Assistent-Budget: Luftzubringer wird mit 30-km-Schätzung geprüft, gebucht wird die Flughafendistanz (Budget überschritten)',()=>{
  const env=airFixture(),{sim,s,order}=env;order(30);
  const v=s.vehicles.find(v=>v.type==='truck'),est=cents(2*30*VEHICLES.truck.runningCost),real=AX.tripCost(v,AX.airportDistance(s,'site-1'));
  cmd(sim,{type:'setAssistant',site:'site-1',enabled:true,budget:est});sim.step(400);
  const spent=-keys(s,'air-trip:').reduce((n,l)=>n+l.amount,0);
  assert.ok(spent<=est+0.01,`Budget ${est} €, gebucht ${spent} € (Fahrt real ${real} €)`);
 });
-test.todo('QS-W3c-03 Versionsanzeige auf 0.14 anheben',async()=>{
+test('QS-W3c-03 Versionsanzeige auf 0.14 anheben',async()=>{
  const {readFileSync}=await import('node:fs');assert.match(readFileSync(new URL('../dist/app.js',import.meta.url),'utf8'),/VERSION='0\.14/);
 });

@@ -210,7 +210,8 @@ function missedFlights(s,api){
   const k=contractOf(s,o);if(!k||!Array.isArray(k.flights)||!k.flights.length)continue;
   for(let guard=0;guard<400&&s.t>o.flightT-k.cutoff;guard++){
    const open=o.qty-o.delivered,flightT=o.flightT;
-   if(open>0&&k.penaltyMissed>0){
+   // QS-W3c-01: Strafe höchstens einmal je Auftrag; spätere Umbuchungen kosten nur Lagergeld.
+   if(open>0&&k.penaltyMissed>0&&!o.missedFlights){
     const amount=cents(open*k.penaltyMissed);
     if(api.book(`air-missed:${o.id}:${flightT}`,-amount,'Vertragsstrafe',`Luftfracht ${k.shipper}: Flug ${clock(flightT)} verpasst, ${open} Pakete`,[k.id,o.id])){
      o.missedFlights=(o.missedFlights||0)+1;

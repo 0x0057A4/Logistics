@@ -311,7 +311,7 @@ function settleOrder(s,api,k,o){
  const batches=s.batches.filter(b=>b.owner===o.id&&b.qty>0);
  if(batches.some(b=>b.reserved>0||b.location==='vehicle')){o.settleWait='Ware reserviert';return false;}
  const parts=[];for(const b of batches){const part=api.inventory.remove(b.id,b.qty);if(part)parts.push(part);}
- const returned=parts.reduce((n,p)=>n+p.qty,0),open=Math.max(0,o.qty-o.delivered),amount=cents(open*k.penaltyOpen);
+ const returned=parts.reduce((n,p)=>n+p.qty,0),open=Math.max(0,o.qty-o.delivered),amount=o.missedFlights?0:cents(open*k.penaltyOpen);/* QS-W3c-01: keine zweite Strafe nach Flugstrafe */
  if(amount>0)api.book(`penalty-open:${o.id}`,-amount,'Vertragsstrafe',`Vertragsstrafe ${k.shipper}: ${open} ${unitWord(k,open)} nicht zugestellt`,[k.id,o.id]);
  o.status='cancelled';o.cancelReason='contractEnd';o.returnedQty=returned;o.penaltyOpen=amount;delete o.settleWait;
  api.log('warning',`Vertragsende ${k.shipper}: ${open} ${unitWord(k,open)} nicht zugestellt (${o.customer}), Strafe ${amount.toFixed(2)} €; ${returned} ${unitWord(k,returned)} an Versender zurückgegeben.`,[k.id,o.id,...parts.map(p=>p.id)]);

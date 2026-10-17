@@ -15,6 +15,7 @@ import {VEHICLES} from './catalog.js';
 import {maxLoad,deliverableAt} from './transport.js';
 import {committedQty,planTour} from './tours.js';
 import {WAIT as LINE_WAIT,MIN_CONDITION} from './linehaul.js';
+import {tripCost as airTripCost,airportDistance} from './airexport.js';
 
 export const TICK=5;            // Spielminuten zwischen zwei Takten
 export const URGENT=180;        // Zustellung starten, wenn Frist in weniger als 3 h
@@ -112,7 +113,7 @@ function stepAir(s,api,site,cfg,used,state){
  for(const f of [...flights.values()].sort((a,b)=>a.departAt-b.departAt)){
   const key='air:'+f.departAt;if(held(s,cfg,key))continue;
   const v=freeVehicles(s,site,used).sort((a,b)=>(b.capacity-a.capacity))[0];if(!v)continue;
-  const est=cents(2*DELIVERY_DISTANCE*VEHICLES[v.type].runningCost),why=affordable(s,cfg,est);
+  const est=airTripCost(v,airportDistance(s,site)??DELIVERY_DISTANCE),why=affordable(s,cfg,est);/* QS-W3c-02: echte Distanz zum Terminal */
   if(why){refuse(s,api,site,cfg,key,'blocked','Luftzubringer zurückgestellt.',[v.id,...f.orderIds],why);continue;}
   const out=api.command({type:'dispatchAirShuttle',vehicleId:v.id,flight:f.flight,departAt:f.departAt,site});
   if(!out.ok&&out.message==='Befehl unbekannt.'){state.airUnknown=true;return;}
