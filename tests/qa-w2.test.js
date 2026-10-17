@@ -247,7 +247,7 @@ test('QS-W1-03 Paletten-Lkw: Dock aus während Entladen → Wechsel, Stapler/Kra
 });
 
 // ── Befunde (todo bis Behebung) ─────────────────────────────────────────────────────────────────────────────────
-test('QS-W2-01 Blockierte Palettenbeladung (Fahrtkosten nicht gedeckt) hält Stapler, leert Akku, Fremd-Lkw wartet „Kein Stapler“',{todo:'A05/A07: Stapler ohne Fortschritt nicht binden/verbrauchen'},()=>{
+test('QS-W2-01 Blockierte Palettenbeladung (Fahrtkosten nicht gedeckt) hält Stapler, leert Akku, Fremd-Lkw wartet „Kein Stapler“',()=>{
  const r=hub({minute:540,docks:2,warehouse:2});const S=r.sim.state,k=S.contracts.find(x=>x.unit===PAL&&x.status==='active');
  until(r,s=>s.yard.some(a=>a.phase==='gone'));
  // Testdatum: zusätzliche Ankunft 11:00 desselben Tages, gesetzt VOR deren Ankündigung
@@ -258,5 +258,5 @@ test('QS-W2-01 Blockierte Palettenbeladung (Fahrtkosten nicht gedeckt) hält Sta
  assert.equal(sh.blocked,'Betriebskosten können nicht bezahlt werden');
  assert.ok(f.charge>=99,`Akku sinkt ohne Fortschritt: ${f.charge}`);
  until(r,s=>s.yard.some(a=>a.phase==='unloading'),300);r.sim.step(30);
- const a=S.yard.find(a=>a.phase==='unloading');assert.ok(a.unloaded>0,`Fremd-Lkw wartet „${a.waitReason}“, Stapler gebunden an ${f.task}`);
+ const a=S.yard.at(-1);/* Fix wirkt: Lkw kann schon fertig sein */assert.ok(a.unloaded>0,`Fremd-Lkw wartet „${a.waitReason}“, Stapler gebunden an ${f.task}`);
 });

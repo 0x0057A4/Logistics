@@ -77,14 +77,16 @@ export function step(s,api){
   const driver=api.workforce.acquire('driver',sh.site,`${sh.id}:driver`);if(!driver){sh.blocked='Fahrpersonal oder Schicht fehlt';if(pallet)releaseForklift(s,forkliftKey(sh.id));continue;}sh.driver=driver.id;
   if(sh.status==='loading'){
    // Paletten (W2-S2): Stapler zuerst; ohne Stapler bleibt keine Lagerkraft gebunden, ohne Lagerkraft kein Stapler.
+   // QS-W2-01: Ladezeit erfüllt (loadDone) → Abfahrt braucht weder Stapler noch Lagerkraft; Warten auf Geld/Ladung verbraucht keinen Akku.
+   if(sh.loadDone){if(pallet)releaseForklift(s,forkliftKey(sh.id));api.workforce.release(`${sh.id}:warehouse`);sh.worker=null;}else{
    let fork=null;if(pallet){const f=acquireForklift(s,sh.site,forkliftKey(sh.id));if(!f.forklift){api.workforce.release(`${sh.id}:warehouse`);sh.worker=null;sh.blocked=f.reason;continue;}fork=f.forklift;}
    const worker=api.workforce.acquire('warehouse',sh.site,`${sh.id}:warehouse`);if(!worker){sh.blocked='Lagerpersonal für Beladung fehlt';if(fork)releaseForklift(s,forkliftKey(sh.id));continue;}sh.worker=worker.id;sh.blocked=null;
    if(fork)useForklift(s,fork);
-   if(--sh.remaining>0)continue;
+   if(--sh.remaining>0)continue;sh.loadDone=true;}
    const cost=Math.round(sh.distance*2*VEHICLES[v.type].runningCost*100)/100;
-   if(s.money<cost){sh.remaining=1;sh.blocked='Betriebskosten können nicht bezahlt werden';continue;}
-   const cargo=api.inventory.transfer(sh.id,'vehicle',sh.site);if(!cargo){sh.remaining=1;sh.blocked='Ladung nicht verfügbar';continue;}
-   sh.cargo=cargo.map(b=>b.id);sh.materialCost=o.kind==='logistics'?0:Math.round(cargo.reduce((n,b)=>n+b.qty*b.unitCost,0)*100)/100;sh.transportCost=cost;sh.tripCost=cost;const dock=s.buildings.find(b=>b.task===sh.id);if(dock){const k=dock.task;for(const b of s.buildings)if(b.task===k)b.task=null;};api.book(`trip:${sh.id}`,-cost,'Transport',`Tour ${sh.id}`,[sh.id,v.id,o.id]);api.workforce.release(`${sh.id}:warehouse`);if(pallet)releaseForklift(s,forkliftKey(sh.id));sh.worker=null;sh.status='transit';v.status='transit';sh.remaining=Math.ceil(sh.distance/VEHICLES[v.type].speed);sh.departedAt=s.t;
+   if(s.money<cost){sh.remaining=1;sh.blocked='Betriebskosten können nicht bezahlt werden';/* QS-W2-01: Stapler/Kraft beim Warten freigeben */if(pallet)releaseForklift(s,forkliftKey(sh.id));api.workforce.release(`${sh.id}:warehouse`);sh.worker=null;continue;}
+   const cargo=api.inventory.transfer(sh.id,'vehicle',sh.site);if(!cargo){sh.remaining=1;sh.blocked='Ladung nicht verfügbar';/* QS-W2-01: Stapler/Kraft beim Warten freigeben */if(pallet)releaseForklift(s,forkliftKey(sh.id));api.workforce.release(`${sh.id}:warehouse`);sh.worker=null;continue;}
+   delete sh.loadDone;sh.cargo=cargo.map(b=>b.id);sh.materialCost=o.kind==='logistics'?0:Math.round(cargo.reduce((n,b)=>n+b.qty*b.unitCost,0)*100)/100;sh.transportCost=cost;sh.tripCost=cost;const dock=s.buildings.find(b=>b.task===sh.id);if(dock){const k=dock.task;for(const b of s.buildings)if(b.task===k)b.task=null;};api.book(`trip:${sh.id}`,-cost,'Transport',`Tour ${sh.id}`,[sh.id,v.id,o.id]);api.workforce.release(`${sh.id}:warehouse`);if(pallet)releaseForklift(s,forkliftKey(sh.id));sh.worker=null;sh.status='transit';v.status='transit';sh.remaining=Math.ceil(sh.distance/VEHICLES[v.type].speed);sh.departedAt=s.t;
   }else{
    sh.blocked=null;if(--sh.remaining>0)continue;
    if(sh.status==='transit'){sh.status='unloading';v.status='unloading';sh.remaining=2+Math.ceil(sh.qty/10);}

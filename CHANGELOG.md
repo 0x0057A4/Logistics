@@ -8,6 +8,7 @@
 - UI: Strafsätze und angefallene Strafen, Stapler-Akku, neue Wartegründe und Meldungen; Einstieg zeigt Fertigung erst bei Bedarf, Baumenü Hub zuerst.
 - Rechtsklick bricht ab wie Esc (Bau, Fenster, Auswahl); Browsermenü nur in Eingabefeldern.
 - Fixes aus unabhängiger Abnahme 0.9 (docs/QS-0.9-W1.md): verwaiste Dockbelegung, Weiterlaufen nach Migration, Dockwechsel bei abgeschaltetem Dock, Startangebot nach Übernahme.
+- Fix QS-W2-01: blockierte Abfahrt (Kasse/Ladung) hält weder Stapler noch Lagerkraft, kein Akkuverbrauch beim Warten (Lieferung und Sammeltour). Unabhängige Kurzprüfung: docs/QS-0.10.md.
 - Balancing: docs/BALANCING-0.10-W2.md.
 
 ## 0.9 – 15.10.2026 · Hub-Umbau (Entwicklungsfassung)
