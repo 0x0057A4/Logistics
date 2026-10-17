@@ -82,7 +82,7 @@ export function releaseForklift(s,key){for(const b of s.buildings)if(b.type==='f
 // Bindung gilt nur, solange der Vorgang in der Staplerphase ist; sonst (z. B. Abbruch durch Fremdmodul) gelöst.
 function forkliftHolderActive(s,key){
  const id=key.slice(0,-':forklift'.length);
- return s.yard?.some(a=>a.id===id&&a.phase==='unloading')||s.shipments?.some(x=>x.id===id&&x.status==='loading')||(s.tours||[]).some(x=>x.id===id&&x.status==='loading');
+ return s.yard?.some(a=>a.id===id&&a.phase==='unloading')||s.shipments?.some(x=>x.id===id&&x.status==='loading')||(s.tours||[]).some(x=>x.id===id&&x.status==='loading')||(s.linehauls||[]).some(x=>x.id===id&&(x.status==='loading'||x.status==='unloading'));
 }
 export function tickForklifts(s){
  let power=null;

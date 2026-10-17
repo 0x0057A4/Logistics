@@ -68,6 +68,11 @@ function loadNeed(s, site) {
     const at = tr.status === 'loading' ? tr.site : tr.status === 'unloading' ? tr.toSite : null;
     if (at === site && waits(tr.id, site)) n++;
   }
+  // Linienfahrt (W3-S2): Beladen am Start vor Ladeende, Entladen am Ziel; Fahrpersonal ist dem Startstandort gebunden.
+  for (const lh of s.linehauls || []) {
+    const at = lh.status === 'loading' && !lh.loadDone ? lh.from : lh.status === 'unloading' && lh.remaining > 0 ? lh.to : null;
+    if (at === site && waits(lh.id, site) && !noFork(lh.id, lh.pallet)) n++;
+  }
   return n;
 }
 const palletOrder = (s, id) => s.orders.find(o => o.id === id)?.item === PALLET;

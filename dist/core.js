@@ -17,7 +17,8 @@ import * as sorting from './sorting.js';
 import * as linehaul from './linehaul.js';
 import { BUILDINGS, ITEMS, RECIPES, VEHICLES, ROLES } from './catalog.js';
 import { reachable, footprint } from './world.js';
-const MODULES=[inventory,workforce,economy,transport,production,management,service,network,tours,special,multimodal,rental,customerService,contracts,yard,sorting,linehaul];
+// linehaul vor yard: Staplernutzung der Linienfahrt fließt wie bei transport/tours in denselben Akkutakt (yard.tickForklifts).
+const MODULES=[inventory,workforce,economy,transport,production,management,service,network,tours,special,multimodal,rental,customerService,contracts,linehaul,yard,sorting];
 /** Ladegrenzen (A12, W1b). Text: 30 Mio. Zeichen. Listen: 100.000, `batches` 1.000.000 – Chargen wachsen im großen
  * Szenario um ≈ 650–1.770 je Spieltag und erreichten 100.000 nach ≈ 55 Tagen (PERF-SIM-0.9). Bei ≈ 210 Zeichen je Charge
  * greift für batches praktisch zuerst die Textgrenze (≈ 140.000 Chargen); die App warnt ab 60 % und speichert nichts,
@@ -79,7 +80,7 @@ export function validateState(s){
  for(const o of s.orders)if(!ITEMS[o.item]||!finite(o.qty,Number.EPSILON)||!finite(o.delivered,0,o.qty)||!finite(o.price,0)||!finite(o.paid,0)||!finite(o.due,0))fail('Kundenauftrag beschädigt.');
  const vehicles=new Map(s.vehicles.map(v=>[v.id,v]));const orders=new Map(s.orders.map(o=>[o.id,o]));const shipments=new Map(s.shipments.map(sh=>[sh.id,sh]));
  for(const o of s.orders)if(!['offer','active','fulfilled','cancelled'].includes(o.status)||!finite(o.quality,0,100))fail('Auftragsstatus beschädigt.');
- for(const v of s.vehicles){if(!VEHICLES[v.type]||v.capacity!==VEHICLES[v.type].capacity||!finite(v.condition,0,100)||!['idle','loading','transit','unloading','returning','maintenance','service','transfer','tour','rentalReturned'].includes(v.status))fail('Fahrzeug beschädigt.');if(v.shipment&&!(shipments.has(v.shipment)&&shipments.get(v.shipment).vehicleId===v.id)&&!s.returns.some(r=>r.id===v.shipment&&r.vehicleId===v.id)&&!s.transfers.some(r=>r.id===v.shipment&&r.vehicleId===v.id))fail('Fahrzeugzuordnung beschädigt.');}
+ for(const v of s.vehicles){if(!VEHICLES[v.type]||v.capacity!==VEHICLES[v.type].capacity||!finite(v.condition,0,100)||!['idle','loading','transit','unloading','returning','maintenance','service','transfer','tour','rentalReturned','linehaul'].includes(v.status))fail('Fahrzeug beschädigt.');if(v.shipment&&!(shipments.has(v.shipment)&&shipments.get(v.shipment).vehicleId===v.id)&&!s.returns.some(r=>r.id===v.shipment&&r.vehicleId===v.id)&&!s.transfers.some(r=>r.id===v.shipment&&r.vehicleId===v.id))fail('Fahrzeugzuordnung beschädigt.');}
  for(const p of s.purchases){if(!ITEMS[p.item]||!Number.isInteger(p.qty)||p.qty<1||!finite(p.cost,0)||!finite(p.quality,0,100)||!finite(p.eta,0)||!finite(p.remaining,0)||!['ordered','waiting','receiving','checking','storing','stored'].includes(p.status)||!['standard','express','quality'].includes(p.supplier))fail('Einkauf beschädigt.');if(['receiving','checking','storing'].includes(p.status)&&(!batches.has(p.batchId)||batches.get(p.batchId).item!==p.item))fail('Liefercharge fehlt.');}
  for(const sh of s.shipments){const o=orders.get(sh.orderId),v=vehicles.get(sh.vehicleId);if(!o||!v||!sites.has(sh.site)||!Number.isInteger(sh.qty)||sh.qty<1||sh.qty>o.qty||!finite(sh.remaining,0)||!finite(sh.distance,0)||!Array.isArray(sh.cargo)||typeof sh.paid!=='boolean'||!['loading','transit','unloading','returning','complete','cancelled'].includes(sh.status))fail('Transport beschädigt.');
   if(!['complete','cancelled'].includes(sh.status)&&(v.shipment!==sh.id||v.status!==sh.status))fail('Aktive Fahrzeugzuordnung widersprüchlich.');

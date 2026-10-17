@@ -43,6 +43,8 @@ export function planTour(s,vehicleId,entries){
   if(!Number.isInteger(returnQty)||returnQty<0)return fail('Rückladung benötigt ganze, nicht negative Menge.');
   if(returnQty&&(o.kind==='logistics'||!returnSources(s,o.id,returnQty)))return fail('Rückladung benötigt eigene, bereits gelieferte und noch nicht retournierte Ware.');
   if(ITEMS[o.item].cold&&!type.cold)return fail('Kühlware benötigt gekühltes Fahrzeug.');
+  // W3-S2: Fremdware nur am Zustellstandort (wie contracts.deliverySiteOf; Import dort wäre ein Modulzyklus).
+  if(o.kind==='logistics'&&(o.deliverySite??o.site)!==undefined&&(o.deliverySite??o.site)!==v.site)return fail('Zustellgebiet gehört zu einem anderen Standort. Ware per Linie dorthin bringen.');
   volume+=entry.qty*(ITEMS[o.item].volume||1);weight+=entry.qty*(ITEMS[o.item].weight||1);total+=entry.qty;
   stops.push({orderId:o.id,item:o.item,qty:entry.qty,returnQty,distance:stops.length?20:30});
  }
