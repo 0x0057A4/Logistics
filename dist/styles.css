@@ -464,3 +464,20 @@ body.scene-only .hud,body.scene-only .rail,body.scene-only .panel{display:none!i
 @media(max-width:1360px){.cmd{flex-basis:220px}.site-label{max-width:240px}.cash small{display:none}}
 @media(max-width:1180px){.kpi{width:152px}.vrow{gap:6px;padding:5px 8px}body.panel-open .kpis{display:none}body.panel-open .view-switch{top:12px}body.panel-open .flow{top:52px;max-height:calc(100% - 52px - var(--sb) - var(--vbar-h) - 18px)}}
 @media(max-width:900px){.kpis,.view-switch,.flow,.mission,.cash,.clock small,.site-text small,.sb-stats>span:nth-child(-n+3),.icon-btn[data-action=keys]{display:none}.cmd{min-width:120px}body.panel-open{--pw:calc(100vw - var(--left) - var(--tools))}.vbar{right:var(--tools)}body.panel-open .vbar{display:none}.welcome-art{display:none}.welcome-body{padding:25px}.keys-list{grid-template-columns:1fr}}
+
+/* Linienverkehr W3a-2 (A10): Paketreise als Stationenleiste, ausgegrautes Versandformular */
+.journey{list-style:none;margin:10px 0 6px;padding:0}
+.journey li{position:relative;display:grid;grid-template-columns:18px 1fr auto;column-gap:10px;row-gap:1px;align-items:start;padding:6px 2px 9px 0}
+.journey li::after{content:"";position:absolute;left:8px;top:21px;bottom:-5px;width:2px;background:var(--c-line)}
+.journey li:last-child::after{display:none}
+.journey .j-dot{grid-row:1/3;width:12px;height:12px;margin:2px 0 0 3px;border-radius:50%;border:2px solid var(--c-line-strong);background:var(--c-surface);position:relative;z-index:1}
+.journey b{font-size:12px;font-weight:var(--w-med)}
+.journey strong{font-variant-numeric:tabular-nums}
+.journey small{grid-column:2/4;color:var(--c-muted);line-height:1.5}
+.journey .is-pending b,.journey .is-pending strong{color:var(--c-muted)}
+.journey .is-done .j-dot{background:var(--c-ok);border-color:var(--c-ok)}
+.journey .is-done::after{background:var(--c-ok)}
+.journey .is-active .j-dot{background:var(--c-accent);border-color:var(--c-accent);box-shadow:0 0 0 3px var(--c-accent-soft)}
+.journey .is-active.tone-wait .j-dot{background:var(--c-wait);border-color:var(--c-wait);box-shadow:0 0 0 3px var(--c-wait-bg)}
+.journey .is-active.tone-bad .j-dot{background:var(--c-bad);border-color:var(--c-bad);box-shadow:0 0 0 3px var(--c-bad-bg)}
+.dispatch-off{opacity:.5;pointer-events:none}
