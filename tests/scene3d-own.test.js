@@ -314,3 +314,68 @@ test('W2b Echter Ablauf: Palettenankunft entlädt mit Stapler, Szene zeigt Pende
  assert.deepEqual(fp2.map(p=>[p.dock,p.label,p.carry]),fp.map(p=>[p.dock,p.label,p.carry]));assert.deepEqual(forkliftPose(fp2[0],st.t+.3,{}),forkliftPose(fp[0],s.t+.3,{}),'nach Laden gleiche Pose');
  assert.deepEqual(palletLoads(st,site).pallets,pl.pallets);
 });
+
+// ---------- W2c Leitstand-Design: Tageszeit, Rundgang, Verfolgen, Label-Stil ----------
+import {THEMES,THEME_STOPS,THEME_MODES,themeAt,themeFor,mixHex,mixTheme,dayMinute,nightLights,tourStops,tourPose,angleDelta,followTarget,splitLabel,TOUR_TRAVEL,TOUR_DWELL,CHIP_CSS,CHIP_TONES} from '../dist/scene3d.js';
+const lum=h=>{const n=parseInt(h.slice(1),16);return ((n>>16)&255)+((n>>8)&255)+(n&255);};
+test('Tageszeit: Stützstellen treffen die Stimmungen exakt (Nacht, Morgen, Tag, Abend)',()=>{
+ assert.deepEqual(THEME_MODES,['auto','day','night']);
+ for(const [m,k] of THEME_STOPS){const th=themeAt(m);assert.equal(th.key,k,`${m}`);for(const f of ['sky','hemiSky','tint','sun'])assert.equal(th[f],THEMES[k][f],`${m} ${f}`);assert.equal(th.night,THEMES[k].night);}
+ assert.equal(themeAt(12*60).night,0);assert.equal(themeAt(2*60).night,1);assert.equal(themeAt(12*60).name,'Tag');assert.equal(themeAt(23*60).name,'Nacht');
+});
+test('Tageszeit: Übergänge stetig und monoton (Morgen heller werdend, Abend dunkler), über Mitternacht und Folgetage gleich',()=>{
+ let prev=themeAt(300);for(let m=301;m<=510;m++){const th=themeAt(m);assert.ok(th.night<=prev.night+1e-9,`Morgen ${m}`);assert.ok(Math.abs(th.hemiI-prev.hemiI)<.05,`Sprung ${m}`);prev=th;}
+ prev=themeAt(1020);for(let m=1021;m<=1260;m++){const th=themeAt(m);assert.ok(th.night>=prev.night-1e-9,`Abend ${m}`);assert.ok(Math.abs(th.sunI-prev.sunI)<.05,`Sprung ${m}`);prev=th;}
+ const mid=themeAt(450);assert.ok(mid.night>0&&mid.night<THEMES.morning.night);assert.ok(lum(mid.sky)>lum(THEMES.night.sky));
+ assert.deepEqual(themeAt(1439.99).sky,themeAt(0).sky);assert.deepEqual(themeAt(1440*3+600),themeAt(600));assert.deepEqual(themeAt(-60),themeAt(1380));assert.equal(dayMinute(1500),60);
+ assert.ok(lum(themeAt(12*60).sky)>lum(themeAt(20*60).sky)&&lum(themeAt(20*60).sky)>lum(themeAt(0).sky));
+});
+test('Tageszeit: feste Themen ignorieren die Uhr, Mischfunktionen exakt',()=>{
+ assert.equal(themeFor('night',720).night,1);assert.equal(themeFor('day',0).night,0);assert.equal(themeFor('auto',0).night,1);assert.equal(themeFor('bogus',720).key,'day');
+ assert.equal(mixHex('#000000','#ffffff',.5),'#808080');assert.equal(mixHex('#102030','#102030',.7),'#102030');
+ assert.equal(mixTheme(THEMES.day,THEMES.night,0).sky,THEMES.day.sky);assert.equal(mixTheme(THEMES.day,THEMES.night,1).hemiI,THEMES.night.hemiI);
+});
+test('Nachtbeleuchtung: begrenzte Leuchten, Hofmasten mit Kegel, Hallenflächen innerhalb der Halle',()=>{
+ const site={id:'a',width:20,height:16},L=yardLayout(site),l=nightLights(site,L,[2.5,6.5]);
+ assert.ok(l.masts.length>=6&&l.masts.length<=10);assert.ok(l.pools.length<=60);assert.equal(l.pools.filter(p=>p.cone).length,l.masts.length);
+ const hall=l.pools.filter(p=>p.y>.05);assert.equal(hall.length,20);assert.ok(hall.every(p=>p.x>0&&p.x<20&&p.z>0&&p.z<16));
+ for(const m of l.masts)assert.ok(!(m.x>=0&&m.x<=20&&m.z>=0&&m.z<=16),'Mast nicht in der Halle');
+ assert.ok(l.pools.some(p=>Math.abs(p.x-6.5)<1e-9&&p.z>16),'Wandleuchte je Dock');
+});
+test('Rundgang: Tor → Docks → Sortierung → Lager → Ausgang, fehlende Stationen entfallen, Ziele an der Station',()=>{
+ const s=fixture();s.buildings=[{id:'d1',type:'dock',site:'a',x:2,y:13},{id:'d2',type:'dock',site:'a',x:8,y:13},{id:'so',type:'sorter',site:'a',x:8,y:8},{id:'r1',type:'rack',site:'a',x:2,y:5},{id:'x',type:'rack',site:'b',x:15,y:1}];
+ const st=tourStops(s,'a'),L=yardLayout(s.sites[0]);
+ assert.deepEqual(st.map(p=>p.key),['gate','docks','sorting','storage','exit']);assert.deepEqual(st.map(p=>p.label),['Tor','Docks','Sortierung','Lager','Ausgang']);
+ for(const p of st)for(const k of ['tx','tz','dist','yaw'])assert.ok(Number.isFinite(p[k]),`${p.key}.${k}`);
+ assert.ok(Math.abs(st[0].tx-L.exitX)<1e-9&&Math.abs(st[0].tz-(L.yardGateZ-1))<1e-9);
+ const b0=buildingBox(s.buildings[0]),b1=buildingBox(s.buildings[1]);assert.ok(Math.abs(st[1].tx-(b0.x0+b0.x1+b1.x0+b1.x1)/4)<1e-9&&st[1].tz>16);
+ const so=buildingBox(s.buildings[2]);assert.ok(Math.abs(st[2].tx-(so.x0+so.x1)/2)<1e-9&&Math.abs(st[2].tz-(so.z0+so.z1)/2)<1e-9);
+ const rb=buildingBox(s.buildings[3]);assert.ok(Math.abs(st[3].tx-(rb.x0+rb.x1)/2)<1e-9,'nur Regale des Standorts');
+ assert.ok(st[4].tz>L.laneZ&&st[4].tx<0);
+ assert.deepEqual(tourStops(fixture(),'a').map(p=>p.key),['gate','docks','exit']);
+ assert.ok(TOUR_TRAVEL>1&&TOUR_DWELL>1);
+});
+test('Rundgang: Fahrt sanft (Start/Ende ruhig), Drehung auf kürzestem Weg',()=>{
+ const a={tx:0,tz:0,dist:20,yaw:3},b={tx:10,tz:4,dist:12,yaw:-3};
+ assert.deepEqual(tourPose(a,b,0),{tx:0,tz:0,dist:20,yaw:3});const e=tourPose(a,b,1);assert.ok(Math.abs(e.tx-10)<1e-9&&Math.abs(e.dist-12)<1e-9);
+ assert.ok(Math.abs(Math.sin(e.yaw)-Math.sin(-3))<1e-9&&Math.abs(Math.cos(e.yaw)-Math.cos(-3))<1e-9);
+ assert.ok(Math.abs(angleDelta(3,-3)-(2*Math.PI-6))<1e-9,'über ±π statt Umweg');
+ assert.ok(tourPose(a,b,.05).tx<10*.05,'langsamer Anlauf');assert.ok(Math.abs(tourPose(a,b,.5).tx-5)<1e-9);
+ let last=-1;for(let u=0;u<=1;u+=.05){const x=tourPose(a,b,u).tx;assert.ok(x>=last-1e-12);last=x;}
+});
+test('Verfolgen: Ziel aus Fremd-Lkw (arrival-ID) oder eigenem Fahrzeug im Bild, sonst null',()=>{
+ const fleet=[{v:{id:'vehicle-1'},x:3,z:20,shown:true},{v:{id:'vehicle-2'},x:9,z:20,shown:false}],yard=[{id:'arrival-4',x:-6,z:22}];
+ assert.deepEqual(followTarget(fleet,yard,'arrival-4'),{x:-6,z:22,kind:'arrival'});assert.deepEqual(followTarget(fleet,yard,'vehicle-1'),{x:3,z:20,kind:'vehicle'});
+ assert.equal(followTarget(fleet,yard,'vehicle-2'),null);assert.equal(followTarget(fleet,yard,'arrival-9'),null);assert.equal(followTarget(fleet,yard,null),null);
+ yard[0].x=-2;assert.equal(followTarget(fleet,yard,'arrival-4').x,-2,'Ziel folgt der aktuellen Pose');
+});
+test('Label-Stil: Kennung/Status getrennt, Text unverändert; Farben über Tokens mit Rückfall, Nachtvariante',()=>{
+ for(const t of ['LKW-1 · Beladen','TGD-KA 1237 · Entladen · Keine Lagerkraft am Standort','Stapler · 54 %','Fläche nicht verfügbar','']){const p=splitLabel(t);assert.equal(p.head+p.sep+p.rest,t);}
+ assert.deepEqual(splitLabel('TGD-KA 1237 · Entladen · Kein Personal'),{head:'TGD-KA 1237',sep:' · ',rest:'Entladen · Kein Personal'});
+ for(const tone of CHIP_TONES)assert.ok(CHIP_CSS.includes(`tone-${tone}`),tone);
+ for(const v of ['--wait,','--move,','--good,','--bad,','--chip-bg,','--chip-bg-night,'])assert.ok(CHIP_CSS.includes(`var(${v}`),v);
+ assert.ok(/\.scene3d-labels\.night \.scene3d-chip\{/.test(CHIP_CSS));assert.ok(!/var\(--[\w-]+\)/.test(CHIP_CSS.replace(/var\(--dot\)/g,'')),'jede Variable mit Rückfallwert');
+});
+test('W2c: Tageszeit/Rundgang/Nachtlicht lesen den Zustand nur',()=>{
+ const s=frozen(fixture());assert.doesNotThrow(()=>{tourStops(s,'a');themeAt(s.t);nightLights(s.sites[0]);});
+});

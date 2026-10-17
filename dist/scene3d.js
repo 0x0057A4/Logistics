@@ -216,6 +216,90 @@ export function networkLayout(sites, k = .26) {
   return { pins, ext };
 }
 
+// ---------- Tageszeit (W2c): Licht, Himmel, Bodentönung aus der Spielzeit (nur Darstellung) ----------
+
+/** Stimmungen je Tageszeit. sun*: Richtung der Hauptlichtquelle (nachts Mond), tint: Faktor auf Material-/Bodenfarben, night: 0…1 Lampenstärke. */
+export const THEMES = {
+  morning: { name: 'Morgen', sky: '#eedccb', hemiSky: '#ffe8d2', hemiGround: '#9ea78f', hemiI: 1.65, sun: '#ffcb9e', sunI: 1.55, sunX: -34, sunY: 14, sunZ: 16, tint: '#f6ebe2', night: .3 },
+  day: { name: 'Tag', sky: '#dfe9e6', hemiSky: '#f6f9ff', hemiGround: '#b5c2a2', hemiI: 2.1, sun: '#fff4e2', sunI: 2.0, sunX: -18, sunY: 34, sunZ: 22, tint: '#ffffff', night: 0 },
+  evening: { name: 'Abend', sky: '#e3b897', hemiSky: '#ffd8bd', hemiGround: '#8e8ea8', hemiI: 1.35, sun: '#ffad72', sunI: 1.6, sunX: 32, sunY: 12, sunZ: 18, tint: '#f1ddd0', night: .5 },
+  night: { name: 'Nacht', sky: '#17232c', hemiSky: '#6a7f9c', hemiGround: '#28313a', hemiI: 1.0, sun: '#a9bde3', sunI: .5, sunX: 12, sunY: 30, sunZ: -14, tint: '#a3b0c8', night: 1 }
+};
+/** Stützstellen in Minuten des Tages (0–1440); dazwischen weicher Übergang (smoothstep). */
+export const THEME_STOPS = [[0, 'night'], [300, 'night'], [390, 'morning'], [510, 'day'], [1020, 'day'], [1140, 'evening'], [1260, 'night'], [1440, 'night']];
+export const THEME_MODES = ['auto', 'day', 'night'];
+const hexRgb = h => { const n = parseInt(String(h).slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
+const rgbHex = c => '#' + c.map(v => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0')).join('');
+/** Mischung zweier Hexfarben (u 0…1). */
+export function mixHex(a, b, u) { const p = hexRgb(a), q = hexRgb(b); return rgbHex(p.map((v, i) => v + (q[i] - v) * u)); }
+/** Mischung zweier Stimmungen: Farben (#…) und Zahlen linear, name der näheren Stimmung. */
+export function mixTheme(a, b, u) {
+  const out = {}; for (const k of Object.keys(a)) out[k] = typeof a[k] === 'number' ? a[k] + (b[k] - a[k]) * u : typeof a[k] === 'string' && a[k][0] === '#' ? mixHex(a[k], b[k], u) : (u < .5 ? a[k] : b[k]);
+  return out;
+}
+/** Minute des Tages aus der Spielzeit (state.t in Minuten, Tag = 1440). */
+export function dayMinute(t) { return (((Number.isFinite(t) ? t : 480) % 1440) + 1440) % 1440; }
+/** Stimmung zur Spielzeit t (Minuten); stetig auch über Mitternacht. */
+export function themeAt(t) {
+  const m = dayMinute(t);
+  for (let i = 1; i < THEME_STOPS.length; i++) {
+    const [m1, k1] = THEME_STOPS[i]; if (m > m1) continue;
+    const [m0, k0] = THEME_STOPS[i - 1], u = m1 > m0 ? (m - m0) / (m1 - m0) : 1, s = u * u * (3 - 2 * u);
+    if (s <= 0 || s >= 1 || k0 === k1) { const k = s < .5 ? k0 : k1; return { ...THEMES[k], key: k }; }
+    return { ...mixTheme(THEMES[k0], THEMES[k1], s), key: s < .5 ? k0 : k1 };
+  }
+  return { ...THEMES.night, key: 'night' };
+}
+/** Stimmung je Modus: 'day'/'night' fest, sonst ('auto') aus der Spielzeit. */
+export function themeFor(mode, t) { return mode === 'day' || mode === 'night' ? { ...THEMES[mode], key: mode } : themeAt(t); }
+/**
+ * Nachtbeleuchtung je Standort (nur Darstellung): Hofmasten mit Lichtkegel, Wandleuchten über den Docks, Hallenleuchten als Lichtflächen.
+ * Liefert {masts:[{x,z,h}], heads:[{x,y,z}], pools:[{x,z,y,r,k,cone,h}]}; Anzahl begrenzt (keine Echtzeitlichter).
+ */
+export function nightLights(site, L = yardLayout(site), docks = []) {
+  const W = L.W, H = L.H, masts = [], heads = [], pools = [];
+  const mast = (x, z, r = 3.4) => { masts.push({ x, z, h: 4.4 }); heads.push({ x, y: 4.35, z }); pools.push({ x, z, y: .012, r, k: 1, cone: true, h: 4.3 }); };
+  mast(-1, L.yardGateZ + .6, 3); mast(-14, H + .3); mast(-7.5, H + .3); mast(-10, L.roadInZ + 1.7, 3);
+  mast(W + 1, H + .35); mast(W + 1.4 + FLEET_PARK * 1.9, H + .35); mast(W + 10.8, H * .3, 3); mast(W + 10.8, H * .7, 3);
+  for (const x of (docks.length ? docks : L.bays).slice(0, 8)) { heads.push({ x, y: 2.35, z: H + .2 }); pools.push({ x, z: H + 2.2, y: .014, r: 2.2, k: .75, cone: false, h: 0 }); }
+  for (let x = 2; x < W; x += 4) for (let z = 2; z < H; z += 4) pools.push({ x, z, y: .085, r: 2.0, k: .42, cone: false, h: 0 });
+  for (let x = 0; x <= W; x += 4) heads.push({ x, y: 2.32, z: -.1 }, { x, y: 2.32, z: H + .1 });
+  return { masts, heads, pools };
+}
+
+// ---------- Kamerarundgang und Verfolgen (W2c), nur Darstellung ----------
+
+export const TOUR_TRAVEL = 2.6, TOUR_DWELL = 2.4; // Sekunden je Fahrt bzw. Halt
+/** Stationen des Rundgangs: Tor → Docks → Sortierung → Lager → Ausgang. Fehlende Sortierung/Lager entfallen. */
+export function tourStops(state, siteId) {
+  const s = state?.sites?.find(x => x.id === siteId) || defaultSite(state), L = yardLayout(s), b = (state?.buildings || []).filter(o => o.site === s.id);
+  const mid = list => { let x = 0, z = 0; for (const o of list) { const box = buildingBox(o); x += (box.x0 + box.x1) / 2; z += (box.z0 + box.z1) / 2; } return { x: x / list.length, z: z / list.length }; };
+  const docks = b.filter(o => o.type === 'dock'), sorters = b.filter(o => o.type === 'sorter'), racks = b.filter(o => RACK.test(o.type)), out = [];
+  out.push({ key: 'gate', label: 'Tor', tx: L.exitX, tz: L.yardGateZ - 1, dist: 17, yaw: Math.PI / 5 });
+  const d = docks.length ? mid(docks) : { x: (L.bays[0] + L.bays[L.bays.length - 1]) / 2, z: L.H };
+  out.push({ key: 'docks', label: 'Docks', tx: d.x, tz: L.H + 1.5, dist: 19, yaw: 0 });
+  if (sorters.length) { const p = mid(sorters); out.push({ key: 'sorting', label: 'Sortierung', tx: p.x, tz: p.z, dist: 13, yaw: Math.PI / 4 }); }
+  if (racks.length) { const p = mid(racks); out.push({ key: 'storage', label: 'Lager', tx: p.x, tz: p.z, dist: 14, yaw: -Math.PI / 4 }); }
+  out.push({ key: 'exit', label: 'Ausgang', tx: L.entryX, tz: L.roadOutZ - 1.5, dist: 18, yaw: Math.PI / 3 });
+  return out;
+}
+/** Kürzeste Winkeldifferenz b − a im Bereich (−π, π]. */
+export function angleDelta(a, b) { let d = (b - a) % (2 * Math.PI); if (d > Math.PI) d -= 2 * Math.PI; if (d <= -Math.PI) d += 2 * Math.PI; return d; }
+/** Kamerapose zwischen zwei Stationen (u 0…1, sanft beschleunigt/abgebremst, Drehung auf kürzestem Weg). Schreibt in out. */
+export function tourPose(from, to, u, out = {}) {
+  const v = Math.max(0, Math.min(1, u)), s = v * v * (3 - 2 * v);
+  out.tx = from.tx + (to.tx - from.tx) * s; out.tz = from.tz + (to.tz - from.tz) * s; out.dist = from.dist + (to.dist - from.dist) * s; out.yaw = from.yaw + angleDelta(from.yaw, to.yaw) * s; return out;
+}
+/** Verfolgungsziel: Fremd-Lkw (arrival-ID, yardFleet) oder eigenes Fahrzeug (fleet, nur wenn im Bild). Liefert {x,z,kind} oder null. */
+export function followTarget(fleet, yardFleet, id) {
+  if (id == null) return null;
+  for (const p of yardFleet || []) if (p.id === id) return { x: p.x, z: p.z, kind: 'arrival' };
+  for (const p of fleet || []) if (p.v?.id === id) return p.shown ? { x: p.x, z: p.z, kind: 'vehicle' } : null;
+  return null;
+}
+/** Label „Kennung · Status …“ in Kennung (fett) und Status (klein) teilen; Trenner bleibt im Text erhalten. */
+export function splitLabel(text) { const s = String(text ?? ''), i = s.indexOf(' · '); return i < 0 ? { head: s, sep: '', rest: '' } : { head: s.slice(0, i), sep: ' · ', rest: s.slice(i + 3) }; }
+
 // ---------- Hof: Fremd-Lkw aus s.yard (W1-S2/W1-S4), nur lesend ----------
 
 export const FOREIGN_LEN = 5.0;            // Sattelzug (Zugmaschine + Auflieger), Weltmaß
@@ -550,7 +634,22 @@ function mergedGeo(build) { const P = new Parts(); build(P); return P.geometry()
 // ---------- Szene ----------
 
 const TONE_HEX = { active: '#3cbb8e', blocked: '#e4ab4b', idle: '#95aaa5' };
-const CHIP = { wait: ['#fff3cf', '#e0a83a', '#7a5312'], move: ['#e3eefc', '#5b8fd6', '#244a7a'], gate: ['#eef0ee', '#9aa7a3', '#4b5a57'], dock: ['#e3f3ea', '#3cbb8e', '#22604a'], idle: ['#fbfcf8', '#c9d3cf', '#405960'], infra: ['#fbfcf8', '#23574e', '#23574e'], bad: ['#fbe4df', '#cb675d', '#8f3e36'] };
+export const CHIP_TONES = ['wait', 'move', 'gate', 'dock', 'idle', 'infra', 'bad'];
+/**
+ * Label-Stil (W2c). Tokens von A10 über :root, hier nur mit Rückfallwerten gelesen: --wait/--move/--neutral/--good/--bad/--teal (Punktfarbe),
+ * --wait-bg/--bad-bg (Hintergrund wartend/Fehler), --chip-bg/--chip-ink/--chip-muted/--chip-line, nachts --chip-bg-night/--chip-ink-night/--chip-muted-night.
+ */
+export const CHIP_CSS = `.scene3d-chip{display:flex;align-items:center;gap:4px;padding:2px 7px 2px 5px;border-radius:999px;font:500 10px/1.3 var(--chip-font,system-ui,-apple-system,"Segoe UI",sans-serif);font-variant-numeric:tabular-nums;color:var(--chip-ink,var(--ink,#182d2a));background:var(--chip-bg,rgba(255,255,255,.93));border:1px solid var(--chip-line,var(--glass-line,rgba(24,45,42,.12)));box-shadow:0 1px 4px rgba(20,40,35,.16)}
+.scene3d-chip b{font-weight:700;letter-spacing:.1px}.scene3d-chip small{font-size:9px;color:var(--chip-muted,var(--muted,#5d6b66))}.scene3d-chip small:empty{display:none}
+.scene3d-sep{display:none}.scene3d-dot{flex:none;width:7px;height:7px;border-radius:50%;background:var(--dot);box-shadow:0 0 0 1.5px rgba(255,255,255,.7)}
+.scene3d-chip.tone-wait{--dot:var(--wait,#d39a12);background:var(--wait-bg,#fff3d1)}.scene3d-chip.tone-bad{--dot:var(--bad,#c4452f);background:var(--bad-bg,#fbe3dd)}
+.scene3d-chip.tone-move{--dot:var(--move,#2f6bd0)}.scene3d-chip.tone-gate,.scene3d-chip.tone-idle{--dot:var(--neutral,#8f9a96)}.scene3d-chip.tone-dock{--dot:var(--good,#3f8a57)}.scene3d-chip.tone-infra{--dot:var(--teal,#267a68)}
+.scene3d-labels.night .scene3d-chip{color:var(--chip-ink-night,#eef4f0);background:var(--chip-bg-night,rgba(17,29,30,.86));border-color:rgba(255,255,255,.14);box-shadow:0 1px 6px rgba(0,0,0,.35)}
+.scene3d-labels.night .scene3d-chip small{color:var(--chip-muted-night,#b3c2bc)}.scene3d-labels.night .scene3d-dot{box-shadow:0 0 5px var(--dot)}
+.scene3d-labels.night .scene3d-chip.tone-wait{background:var(--chip-wait-night,rgba(74,54,8,.9))}.scene3d-labels.night .scene3d-chip.tone-bad{background:var(--chip-bad-night,rgba(84,30,22,.9))}
+.scene3d-labels.night .scene3d-chip.tone-infra{--dot:var(--accent,#c7ed76)}`;
+/** Stilblock einmal je Dokument einfügen. */
+function injectChipStyle(doc) { if (!doc?.head || doc.getElementById('scene3d-chip-style')) return; const st = doc.createElement('style'); st.id = 'scene3d-chip-style'; st.textContent = CHIP_CSS; doc.head.appendChild(st); }
 const CAM_KEYS = ['tx', 'tz', 'dist', 'yaw'];
 export const VEH_LEN = { van: 3.0, truck: 4.2, refrigerated: 4.0 };
 const CAB_HEX = { van: '#5ea7a3', truck: '#ebac53', refrigerated: '#6b9fd6' };
@@ -575,24 +674,28 @@ export class Scene3D {
     Object.defineProperty(canvas, '__scene', { value: this, configurable: true });
     canvas.setAttribute('aria-label', 'Betriebsgelände – 3D-Ansicht. Ziehen zum Verschieben, Mausrad zum Zoomen. Gebäude alternativ in Fertigungsübersicht auswählen.');
     const scene = this.scene = new THREE.Scene(); scene.background = new THREE.Color(0xdfe9e6); scene.fog = new THREE.Fog(0xdfe9e6, 70, 150);
-    scene.add(new THREE.HemisphereLight(0xf6f9ff, 0xb5c2a2, 2.1));
-    const sun = new THREE.DirectionalLight(0xfff4e2, 2.0); sun.position.set(-18, 34, 22); scene.add(sun);
+    const hemi = this.hemi = new THREE.HemisphereLight(0xf6f9ff, 0xb5c2a2, 2.1); scene.add(hemi);
+    const sun = this.sun = new THREE.DirectionalLight(0xfff4e2, 2.0); sun.position.set(-18, 34, 22); scene.add(sun);
+    this.themeMode = 'auto'; this.themeKey = null; this.themeNow = null; this.camMode = null;
     this.persp = new THREE.PerspectiveCamera(40, 1, .5, 400); this.ortho = new THREE.OrthographicCamera(-10, 10, 10, -10, .5, 400);
-    this.mat = { solid: new THREE.MeshLambertMaterial({ vertexColors: true }), inst: new THREE.MeshLambertMaterial({ vertexColors: true }), lamp: new THREE.MeshBasicMaterial({ color: 0xffffff }), plate: new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: .55, depthWrite: false }), ghost: new THREE.MeshLambertMaterial({ color: 0x55caad, transparent: true, opacity: .55, depthWrite: false }), grid: new THREE.LineBasicMaterial({ color: 0x6f858b, transparent: true, opacity: .22 }), select: new THREE.LineBasicMaterial({ color: 0x199b83 }), route: new THREE.LineDashedMaterial({ color: 0x4f9a85, dashSize: .8, gapSize: .6 }), net: new THREE.LineBasicMaterial({ color: 0xa9b8ae }) };
+    this.mat = { solid: new THREE.MeshLambertMaterial({ vertexColors: true }), inst: new THREE.MeshLambertMaterial({ vertexColors: true }), lamp: new THREE.MeshBasicMaterial({ color: 0xffffff }), plate: new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: .55, depthWrite: false }), ghost: new THREE.MeshLambertMaterial({ color: 0x55caad, transparent: true, opacity: .55, depthWrite: false }), grid: new THREE.LineBasicMaterial({ color: 0x6f858b, transparent: true, opacity: .22 }), select: new THREE.LineBasicMaterial({ color: 0x199b83 }), route: new THREE.LineDashedMaterial({ color: 0x4f9a85, dashSize: .8, gapSize: .6 }), net: new THREE.LineBasicMaterial({ color: 0xa9b8ae }),
+      // Nachtbeleuchtung ohne Echtzeitlichter: Leuchtkörper (unbeleuchtet) und additive Lichtkegel/-flächen mit Verlauf in der Vertexfarbe.
+      head: new THREE.MeshBasicMaterial({ vertexColors: true, color: 0x9aa39f }), glow: new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }) };
     this.siteGroup = new THREE.Group(); this.netGroup = new THREE.Group(); scene.add(this.siteGroup, this.netGroup);
     this.createDynamic();
 
     // HTML-Labels über der Szene; Position per CSS-Transform.
     const host = canvas.parentElement;
-    if (host) { const el = this.labelRoot = document.createElement('div'); el.className = 'scene3d-labels'; el.setAttribute('aria-hidden', 'true'); el.style.cssText = 'position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;overflow:hidden;'; canvas.after(el); }
+    if (host) { injectChipStyle(document); const el = this.labelRoot = document.createElement('div'); el.className = 'scene3d-labels'; el.setAttribute('aria-hidden', 'true'); el.style.cssText = 'position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;overflow:hidden;'; canvas.after(el); }
     this.chips = [];
 
     const on = (target, type, fn, options) => { target.addEventListener(type, fn, options); this.listeners.push([target, type, fn, options]); };
-    on(canvas, 'pointerdown', e => { if (e.button !== 0) return; canvas.setPointerCapture?.(e.pointerId); const p = this.local(e), g = this.groundAt(p.x, p.y); this.pointer = { x: e.clientX, y: e.clientY, moved: false, gx: g?.x, gz: g?.z }; });
+    on(canvas, 'pointerdown', e => { if (this.camMode?.mode === 'tour') this.stopCamera('input'); if (e.button !== 0) return; try { canvas.setPointerCapture?.(e.pointerId); } catch { /* synthetische Zeiger */ } const p = this.local(e), g = this.groundAt(p.x, p.y); this.pointer = { x: e.clientX, y: e.clientY, moved: false, gx: g?.x, gz: g?.z }; });
     on(canvas, 'pointermove', e => {
       const p = this.local(e); this.needs = true;
       if (this.pointer) {
         if (Math.hypot(e.clientX - this.pointer.x, e.clientY - this.pointer.y) > 5) this.pointer.moved = true;
+        if (this.pointer.moved && this.camMode) this.stopCamera('input');
         if (this.pointer.moved && this.pointer.gx != null) { const g = this.groundAt(p.x, p.y); if (g) { this.cam.tx += this.pointer.gx - g.x; this.cam.tz += this.pointer.gz - g.z; this.goal.tx = this.cam.tx; this.goal.tz = this.cam.tz; this.applyCamera(); } }
       }
       const g = this.groundAt(p.x, p.y); if (!g || this.view === 'network') return;
@@ -602,31 +705,56 @@ export class Scene3D {
     on(canvas, 'pointerup', e => { const down = this.pointer; this.pointer = null; if (!down || down.moved) return; this.click(this.local(e)); });
     on(canvas, 'pointercancel', () => { this.pointer = null; });
     on(canvas, 'pointerleave', () => { if (!this.pointer && this.hover) { this.hover = null; this.dynDirty = true; } });
-    on(canvas, 'wheel', e => { e.preventDefault(); const p = this.local(e), before = this.groundAt(p.x, p.y), bx = before?.x, bz = before?.z; this.zoom(e.deltaY < 0 ? 1 : -1, true); if (bx != null) { const after = this.groundAt(p.x, p.y); if (after) { this.cam.tx += bx - after.x; this.cam.tz += bz - after.z; this.goal.tx = this.cam.tx; this.goal.tz = this.cam.tz; this.applyCamera(); } } }, { passive: false });
+    on(canvas, 'wheel', e => { e.preventDefault(); if (this.camMode?.mode === 'tour') this.stopCamera('input'); if (this.camMode?.mode === 'follow') { this.zoom(e.deltaY < 0 ? 1 : -1, true); return; } const p = this.local(e), before = this.groundAt(p.x, p.y), bx = before?.x, bz = before?.z; this.zoom(e.deltaY < 0 ? 1 : -1, true); if (bx != null) { const after = this.groundAt(p.x, p.y); if (after) { this.cam.tx += bx - after.x; this.cam.tz += bz - after.z; this.goal.tx = this.cam.tx; this.goal.tz = this.cam.tz; this.applyCamera(); } } }, { passive: false });
     on(canvas, 'webglcontextlost', e => { e.preventDefault(); this.lost = true; });
     on(canvas, 'webglcontextrestored', () => { this.lost = false; this.signature = ''; this.sigDirty = true; this.needs = true; });
     on(document, 'visibilitychange', () => { this.needs = true; this.lastFrame = 0; });
+    // Rundgang: jede Taste bricht ab; Verfolgen: Esc.
+    on(document, 'keydown', e => { if (this.camMode && (this.camMode.mode === 'tour' || e.key === 'Escape')) this.stopCamera('input'); });
     this.observer = new ResizeObserver(() => this.resize()); this.observer.observe(canvas); this.resize();
-    this.home();
+    this.home(); this.applyTheme(themeFor('auto', 480));
     const loop = now => { if (this.dead) return; this.frame = requestAnimationFrame(loop); if (!document.hidden && !this.lost) { const t0 = performance.now(); this.tick(now); const ms = performance.now() - t0; this.res.cpu = this.res.cpu ? this.res.cpu * .94 + ms * .06 : ms; } };
     this.frame = requestAnimationFrame(loop);
   }
 
   // ----- Öffentliche API (S1) -----
-  setState(s) { this.state = s; this.sigDirty = true; this.dynDirty = true; this.ghostCache = null; this.needs = true; }
+  setState(s) { this.state = s; this.sigDirty = true; this.dynDirty = true; this.ghostCache = null; this.needs = true; if (this.clock.base == null && Number.isFinite(s?.t)) this.updateTheme(s.t); }
   setBuild(type, rotation = 0, movingId = null) { this.build = type; this.buildRotation = rotation; this.movingId = movingId; this.ghostCache = null; this.dynDirty = true; this.canvas.style.cursor = type ? 'crosshair' : 'grab'; }
   setView(view) { if (VIEWS.includes(view)) { this.view = view; this.dynDirty = true; this.home(); } }
+  /** Tageszeit: 'day' oder 'night' fest, 'auto' (bzw. null) folgt der Spielzeit aus setClock. */
+  setTheme(mode) { this.themeMode = THEME_MODES.includes(mode) ? mode : 'auto'; this.themeKey = null; this.updateTheme(this.clock.shown ?? this.clock.base ?? this.state?.t ?? 480); }
+  /** Aktuelle Stimmung (Prüfhilfe/Anzeige): {mode, key, name, night}. */
+  theme() { const t = this.themeNow; return { mode: this.themeMode, key: t?.key || null, name: t?.name || '', night: t?.night ?? 0 }; }
+  /** Kamerarundgang Tor → Docks → Sortierung → Lager → Ausgang; Abbruch durch Eingabe. Liefert die Stationen. */
+  tour() {
+    if (this.view === 'network' || this.view === 'flat') { this.view = 'site'; this.dynDirty = true; this.callbacks.onView?.('site'); }
+    const stops = tourStops(this.state, this.site().id); this.stopCamera('replace');
+    this.camMode = { mode: 'tour', stops, i: 0, from: { ...this.cam }, at: null, cut: this.reducedMotion() };
+    this.callbacks.onCameraMode?.('tour', { stop: stops[0].key, label: stops[0].label }); this.needs = true; return stops;
+  }
+  /** Kamera folgt Fremd-Lkw (arrival-ID) oder eigenem Fahrzeug; follow(null) beendet. false, wenn Ziel nicht im Bild. */
+  follow(id) {
+    if (id == null) { if (this.camMode?.mode === 'follow') this.stopCamera('user'); return false; }
+    if (this.view === 'network' || !followTarget(this.fleet, this.yardFleet, id)) return false;
+    this.stopCamera('replace'); this.camMode = { mode: 'follow', id };
+    if (this.scale < 1.5) { this.scale = 1.5; this.goal.dist = this.homeDist / this.scale; }
+    this.callbacks.onCameraMode?.('follow', { id }); this.needs = true; return true;
+  }
+  /** Laufender Kameramodus (Prüfhilfe): {mode:'tour', stop, index} | {mode:'follow', id} | null. */
+  cameraMode() { const m = this.camMode; return !m ? null : m.mode === 'tour' ? { mode: 'tour', stop: m.stops[m.i]?.key, index: m.i } : { mode: 'follow', id: m.id }; }
+  stopCamera(reason = 'user') { const m = this.camMode; if (!m) return; this.camMode = null; for (const k of CAM_KEYS) this.goal[k] = this.cam[k]; if (reason !== 'replace') this.callbacks.onCameraMode?.(null, { reason, was: m.mode }); this.needs = true; }
+  reducedMotion() { try { return !!document.body?.classList.contains('reduced') || !!globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches; } catch { return false; } }
   setLabels(mode) { if (LABEL_MODES.includes(mode)) { this.labelMode = mode; this.needs = true; } }
   setClock(t) {
-    if (!Number.isFinite(t)) return; const c = this.clock, now = performance.now();
+    if (!Number.isFinite(t)) return; const c = this.clock, now = performance.now(); this.updateTheme(t);
     if (c.base == null || t < c.base - 1.5 || t > c.base + 60) { c.base = t; c.at = now; c.rate = 0; c.shown = t; return; }
     const dt = (now - c.at) / 1000; if (dt > .02) { const r = Math.max(0, (t - c.base) / dt); c.rate = c.rate * .5 + r * .5; }
     c.base = t; c.at = now;
   }
   zoom(delta, immediate = false) { this.scale = Math.max(.45, Math.min(2.7, this.scale * Math.pow(1.13, delta))); this.goal.dist = this.homeDist / this.scale; if (immediate) { this.cam.dist = this.goal.dist; this.applyCamera(); } this.needs = true; }
-  rotate() { this.quarter = (this.quarter + 1) % 4; this.goal.yaw += Math.PI / 2; this.needs = true; this.dynDirty = true; }
+  rotate() { if (this.camMode?.mode === 'tour') this.stopCamera('user'); this.quarter = (this.quarter + 1) % 4; this.goal.yaw += Math.PI / 2; this.needs = true; this.dynDirty = true; }
   home() {
-    const s = defaultSite(this.state), W = s.width || 20, H = s.height || 16; this.scale = 1;
+    this.stopCamera('user'); const s = defaultSite(this.state), W = s.width || 20, H = s.height || 16; this.scale = 1;
     if (this.view === 'network') { const { ext } = networkLayout(this.state?.sites || [s]); this.homeDist = ext * 2.3; this.goal.tx = 0; this.goal.tz = 2; }
     else if (this.view === 'site') { this.homeDist = Math.hypot(W + 28, H + 16) * 1.12; this.goal.tx = W / 2 - 4; this.goal.tz = H / 2 + 4; }
     else if (this.view === 'flat') { this.homeDist = Math.hypot(W, H) * 1.35; this.goal.tx = W / 2; this.goal.tz = H / 2 + 1; }
@@ -635,7 +763,7 @@ export class Scene3D {
   }
   focus(id) {
     const b = this.state?.buildings?.find(o => o.id === id); if (!b || b.site !== defaultSite(this.state).id || this.view === 'network') return false;
-    this.selected = id; this.dynDirty = true; const box = buildingBox(b);
+    this.stopCamera('user'); this.selected = id; this.dynDirty = true; const box = buildingBox(b);
     let tx = (box.x0 + box.x1) / 2, tz = (box.z0 + box.z1) / 2;
     // Seitenfenster und Bauleiste verdecken einen Teil der Szene: Ziel in die freie Fläche verschieben.
     const panel = document.getElementById?.('panel'), cr = this.canvas.getBoundingClientRect();
@@ -653,6 +781,43 @@ export class Scene3D {
     this.scene.traverse(o => { if (o.geometry) o.geometry.dispose(); });
     for (const m of Object.values(this.mat)) m.dispose();
     this.renderer.dispose(); this.renderer.forceContextLoss?.();
+  }
+
+  // ----- Tageszeit -----
+  /** Stimmung nur bei Wechsel (≈ 2 Spielminuten oder Modus) neu setzen: keine Arbeit pro Frame. */
+  updateTheme(t) {
+    const key = this.themeMode === 'auto' ? `a${Math.round(dayMinute(t) / 2)}` : this.themeMode; if (key === this.themeKey) return;
+    this.themeKey = key; this.applyTheme(themeFor(this.themeMode, t));
+  }
+  applyTheme(th) {
+    this.themeNow = th; const sc = this.scene;
+    sc.background.set(th.sky); sc.fog.color.set(th.sky); this.renderer.setClearColor(sc.background, 1);
+    this.hemi.color.set(th.hemiSky); this.hemi.groundColor.set(th.hemiGround); this.hemi.intensity = th.hemiI;
+    this.sun.color.set(th.sun); this.sun.intensity = th.sunI; this.sun.position.set(th.sunX, th.sunY, th.sunZ);
+    this.mat.solid.color.set(th.tint); this.mat.inst.color.set(th.tint);
+    const n = th.night; this.mat.glow.opacity = Math.min(1, n * 1.1); if (this.glow) this.glow.visible = n > .02;
+    this.mat.head.color.set(mixHex('#9aa39f', '#ffffff', Math.min(1, n * 1.4)));
+    this.labelRoot?.classList.toggle('night', n >= .5); this.needs = true;
+  }
+  /** Leuchtkörper und Lichtflächen der Nachtbeleuchtung (je 1 Draw Call). */
+  rebuildLights(site, L, docks) {
+    const lights = nightLights(site, L, docks), H = new Parts();
+    for (const h of lights.heads) { if (h.y > 3) { H.box(h.x - .32, h.y - .1, h.z - .14, .64, .1, .28, '#fff1c8'); } else H.box(h.x - .22, h.y - .08, h.z - .08, .44, .08, .16, '#fff4d6'); }
+    const pos = [], colr = [], seg = 18, warm = [1, .86, .58];
+    const tri = (a, b, c, ca, cb, cc) => { pos.push(...a, ...b, ...c); colr.push(...ca, ...cb, ...cc); };
+    for (const p of lights.pools) {
+      // Lichtfläche mit weichem Abfall: Mitte → Innenring (45 % Stärke) → Rand (0).
+      const center = warm.map(v => v * .5 * p.k), ring = center.map(v => v * .45), zero = [0, 0, 0], ri = p.r * .5;
+      for (let i = 0; i < seg; i++) {
+        const a0 = i / seg * Math.PI * 2, a1 = (i + 1) / seg * Math.PI * 2, c0 = Math.cos(a0), s0 = Math.sin(a0), c1 = Math.cos(a1), s1 = Math.sin(a1);
+        const i0 = [p.x + c0 * ri, p.y, p.z + s0 * ri], i1 = [p.x + c1 * ri, p.y, p.z + s1 * ri], o0 = [p.x + c0 * p.r, p.y, p.z + s0 * p.r], o1 = [p.x + c1 * p.r, p.y, p.z + s1 * p.r];
+        tri([p.x, p.y, p.z], i1, i0, center, ring, ring); tri(i0, i1, o1, ring, ring, zero); tri(i0, o1, o0, ring, zero, zero);
+      }
+      if (p.cone) { const apex = warm.map(v => v * .26 * p.k), r = p.r * .8, top = [p.x, p.h - .1, p.z]; for (let i = 0; i < 12; i++) { const a0 = i / 12 * Math.PI * 2, a1 = (i + 1) / 12 * Math.PI * 2; tri(top, [p.x + Math.cos(a0) * r, .02, p.z + Math.sin(a0) * r], [p.x + Math.cos(a1) * r, .02, p.z + Math.sin(a1) * r], apex, zero, zero); } }
+    }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(colr, 3)); g.computeBoundingSphere();
+    const oh = this.heads.geometry, og = this.glow.geometry; this.heads.geometry = H.geometry(); this.glow.geometry = g; oh.dispose(); og.dispose();
+    return lights;
   }
 
   // ----- Hilfen wie in scene.js -----
@@ -701,7 +866,8 @@ export class Scene3D {
   createDynamic() {
     const g = this.siteGroup, inst = (geo, mat, n) => { const m = new THREE.InstancedMesh(geo, mat, n); m.count = 0; m.frustumCulled = false; return m; };
     this.static = new THREE.Mesh(new THREE.BufferGeometry(), this.mat.solid); this.grid = new THREE.LineSegments(new THREE.BufferGeometry(), this.mat.grid);
-    g.add(this.static, this.grid);
+    this.heads = new THREE.Mesh(new THREE.BufferGeometry(), this.mat.head); this.glow = new THREE.Mesh(new THREE.BufferGeometry(), this.mat.glow); this.glow.renderOrder = 2; this.glow.visible = false;
+    g.add(this.static, this.grid, this.heads, this.glow);
     const pallet = mergedGeo(P => { P.box(-.4, 0, -.4, .8, .1, .8, '#c9a26a'); P.box(-.36, .1, -.36, .72, .36, .72, '#e8cf9f'); P.box(-.36, .3, -.37, .72, .03, .74, '#b9965f'); });
     const truckBox = mergedGeo(P => { P.box(-2.1, .45, -.63, 3.0, 1.35, 1.26, '#ffffff'); P.box(-2.12, .5, -.64, .04, 1.25, 1.28, '#d8dcd4'); });
     const truckCab = mergedGeo(P => { P.box(.98, .4, -.62, 1.1, 1.1, 1.24, '#ffffff'); P.box(1.9, .95, -.55, .2, .42, 1.1, '#355862'); P.box(.98, 1.5, -.5, .7, .12, 1.0, '#ffffff'); });
@@ -792,6 +958,9 @@ export class Scene3D {
       P.base.makeRotationY(-THREE.MathUtils.degToRad(rot)).setPosition((box.x0 + box.x1) / 2, .06, (box.z0 + box.z1) / 2);
       buildingModel(P, b.type, d); P.base.identity();
     }
+    // Hofmasten (Leuchtkörper und Lichtkegel separat, s. rebuildLights)
+    const lights = this.rebuildLights(s, L, [...slots.values()]);
+    for (const m of lights.masts) { P.cyl(m.x, 0, m.z, .07, m.h, '#7d8c8f'); P.box(m.x - .35, m.h - .12, m.z - .04, .7, .06, .08, '#7d8c8f'); }
     const old = this.static.geometry; this.static.geometry = P.geometry(); old.dispose();
     const pts = []; for (let x = 0; x <= W; x++) pts.push(x, .065, 0, x, .065, H); for (let y = 0; y <= H; y++) pts.push(0, .065, y, W, .065, y);
     const og = this.grid.geometry; this.grid.geometry = new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(pts, 3)); og.dispose();
@@ -916,15 +1085,32 @@ export class Scene3D {
     // Signatur nur nach setState prüfen (keine String-Erzeugung pro Frame).
     if (this.sigDirty) { this.sigDirty = false; const sig = sceneSignature(this.state, this.site().id); if (sig !== this.signature) { this.signature = sig; this.rebuildStatic(); this.dynDirty = true; } }
     if (this.dynDirty) { this.dynDirty = false; this.updateDynamic(); this.needs = true; }
-    // Kamera sanft zum Ziel (Drehen, Home, Fokus)
-    const c = this.cam, g = this.goal, k = 1 - Math.exp(-dt * 9); let moving = false;
+    // Kamera sanft zum Ziel (Drehen, Home, Fokus); Rundgang setzt die Pose direkt, Verfolgen setzt das Ziel.
+    const tourMoving = this.camMode?.mode === 'tour' && this.stepTour(now);
+    const c = this.cam, g = this.goal, k = 1 - Math.exp(-dt * 9); let moving = tourMoving;
     for (const key of CAM_KEYS) { const d = g[key] - c[key]; if (Math.abs(d) > (key === 'yaw' ? 1e-4 : 1e-3)) { c[key] += dt ? d * k : 0; moving = true; } else c[key] = g[key]; }
     if (moving || this.needs) this.applyCamera();
     const net = this.view === 'network'; this.siteGroup.visible = !net; this.netGroup.visible = net;
     const clock = this.displayClock(now), animated = net ? this.placeTransfers(clock) : !!(this.placeVehicles(clock) | this.placeYard(clock) | this.placeForklifts(clock));
+    if (this.camMode?.mode === 'follow' && !net) {
+      const f = followTarget(this.fleet, this.yardFleet, this.camMode.id);
+      if (!f) this.stopCamera('lost'); else if (Math.abs(f.x - g.tx) > 1e-3 || Math.abs(f.z - g.tz) > 1e-3) { g.tx = f.x; g.tz = f.z; this.needs = true; }
+    }
     const render = moving || this.needs || animated || this.pointer?.moved;
     if (render) { this.renderer.render(this.scene, this.camera()); this.updateLabels(); this.needs = false; }
     this.renderedLast = render;
+  }
+  /** Rundgang: Fahrt (TOUR_TRAVEL s, sanft) zur Station, Halt (TOUR_DWELL s), dann nächste; nach „Ausgang“ Ende. */
+  stepTour(now) {
+    const m = this.camMode; if (m.at == null) m.at = now;
+    const to = m.stops[m.i], travel = m.cut ? 0 : TOUR_TRAVEL * 1000, e = now - m.at;
+    if (e < travel) tourPose(m.from, to, e / travel, this.cam); else Object.assign(this.cam, { tx: to.tx, tz: to.tz, dist: to.dist, yaw: to.yaw });
+    for (const k of CAM_KEYS) this.goal[k] = this.cam[k];
+    if (e >= travel + TOUR_DWELL * 1000) {
+      if (m.i + 1 >= m.stops.length) { this.stopCamera('done'); return true; }
+      m.i++; m.from = { ...this.cam }; m.at = now; this.callbacks.onCameraMode?.('tour', { stop: m.stops[m.i].key, label: m.stops[m.i].label });
+    }
+    return true;
   }
   placeVehicles(clock) {
     const st = this.state, f = this.fleet, box = this.inst.vbox, cab = this.inst.vcab, base = this.inst.vbase, pose = this.tmp.pose; let n = 0, animated = false;
@@ -979,8 +1165,11 @@ export class Scene3D {
   // ----- Labels -----
   chip(i) {
     let el = this.chips[i]; if (el) return el;
+    // Kompakter Chip: Farbpunkt, Kennung fett, Status klein. Farben über CSS-Variablen (injectChipStyle), Trenner bleibt im Text.
     el = document.createElement('div'); el.className = 'scene3d-chip';
-    el.style.cssText = 'position:absolute;left:0;top:0;white-space:nowrap;font:600 10px system-ui,sans-serif;padding:3px 8px;border-radius:5px;border:1px solid;border-left-width:3px;box-shadow:0 2px 6px #1b322418;will-change:transform';
+    el.style.cssText = 'position:absolute;left:0;top:0;white-space:nowrap;will-change:transform';
+    const dot = document.createElement('i'), head = document.createElement('b'), sep = document.createElement('span'), rest = document.createElement('small');
+    dot.className = 'scene3d-dot'; sep.className = 'scene3d-sep'; el.append(dot, head, sep, rest); el._parts = [head, sep, rest];
     this.labelRoot.appendChild(el); this.chips[i] = el; return el;
   }
   candidate(key, x, y, z, text, tone, prio) {
@@ -1000,9 +1189,9 @@ export class Scene3D {
     }
     const out = selectLabels(t.cands, this.width, this.height, MAX_LABELS, t.labelOut);
     for (let i = 0; i < out.length; i++) {
-      const c = out[i], el = this.chip(i), colors = CHIP[c.tone] || CHIP.idle;
-      if (el._text !== c.text) { el.textContent = c.text; el._text = c.text; }
-      if (el._tone !== c.tone) { el.style.background = colors[0]; el.style.borderColor = colors[1]; el.style.color = colors[2]; el._tone = c.tone; }
+      const c = out[i], el = this.chip(i);
+      if (el._text !== c.text) { const t = splitLabel(c.text), [h, sp, r] = el._parts; h.textContent = t.head; sp.textContent = t.sep; r.textContent = t.rest; el._text = c.text; }
+      if (el._tone !== c.tone) { el.className = `scene3d-chip tone-${CHIP_TONES.includes(c.tone) ? c.tone : 'idle'}`; el._tone = c.tone; }
       const x = Math.round(c.sx), y = Math.round(c.sy); if (el._x !== x || el._y !== y) { el.style.transform = `translate3d(${x}px,${y}px,0) translate(-50%,-100%)`; el._x = x; el._y = y; }
       if (el._hidden !== false) { el.style.display = ''; el._hidden = false; }
     }
