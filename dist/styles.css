@@ -497,3 +497,14 @@ body.scene-only .hud,body.scene-only .rail,body.scene-only .panel{display:none!i
 body.replay .mission{display:none}
 body.replay #game::after{content:'';position:absolute;inset:0;border:3px solid var(--c-wait);pointer-events:none;z-index:9}
 @media(max-width:900px){.replay-bar{left:var(--left);flex-wrap:wrap}.replay-range input{width:120px}}
+/* W3c-2 (A10): Kopfzeilen-Schalter Dispositionsassistent, Schalterzeilen und Countdown Luftexport */
+.assist-btn{display:inline-flex;align-items:center;gap:6px;flex:none;height:32px;padding:0 10px;border:1px solid var(--c-line);border-radius:var(--r-pill);background:transparent;color:var(--c-ink-2);font-size:12px;font-weight:var(--w-med);white-space:nowrap}
+.assist-btn .ic{width:16px;height:16px}
+.assist-btn:hover{background:var(--c-surface-2)}
+.assist-btn[aria-pressed=true]{background:var(--c-ok-bg);color:var(--c-ok-ink);border-color:transparent}
+.switch-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid var(--c-line-2)}
+.switch-row small{display:block;color:var(--c-muted)}
+.switch-row button[aria-pressed=true]{background:var(--c-ok-bg);color:var(--c-ok-ink);border-color:transparent}
+.countdown{font-variant-numeric:tabular-nums;font-weight:var(--w-med)}
+.countdown.tone-bad{color:var(--c-bad-ink)}.countdown.tone-wait{color:var(--c-wait-ink)}
+@media(max-width:1100px){.assist-btn span{display:none}.assist-btn{padding:0 8px}}
