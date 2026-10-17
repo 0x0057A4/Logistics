@@ -22,6 +22,7 @@ export function handle(s,c,api){
  }
  if(c.type!=='bookFreight')return null;
  const o=s.orders.find(o=>o.id===c.orderId),mode=FREIGHT_MODES[c.mode],site=c.site||s.selectedSite;
+ if(o?.airExport)return {ok:false,message:'Luftexport: Pakete per Flughafen-Zubringer zum Frachtterminal bringen.'};
  if(!o||o.status!=='active'||!mode||!Number.isInteger(c.qty)||c.qty<1||c.qty>o.qty-o.delivered-committedQty(s,o.id))return {ok:false,message:'Auftrag, Verkehrsart oder offene Menge ungültig.'};
  if(!s.buildings.some(b=>b.site===site&&b.type==='terminal'&&b.enabled&&b.condition>0))return {ok:false,message:'Betriebsbereites Logistikterminal fehlt.'};
  const item=ITEMS[o.item];if(c.qty*(item.volume||1)>mode.capacity||c.qty*(item.weight||1)>mode.weightCapacity)return {ok:false,message:'Volumen oder Gewicht überschreitet Verkehrsmittelkapazität.'};

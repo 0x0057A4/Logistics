@@ -111,7 +111,7 @@ function cutoffLine(s,api,l){
  if(v.status==='maintenance'||v.condition<MIN_CONDITION)return missLine(s,api,l,WAIT.maintenance);
  if(v.status!=='idle'||activeTrip(s,l.id))return missLine(s,api,l,WAIT.busy);
  const cand=[];
- for(let i=0;i<s.orders.length;i++){const o=s.orders[i];if(o.status==='active'&&o.kind==='logistics'&&deliverySiteOf(o)===l.to&&ITEMS[o.item])cand.push([o,i]);}
+ for(let i=0;i<s.orders.length;i++){const o=s.orders[i];if(o.status==='active'&&o.kind==='logistics'&&!o.airExport&&deliverySiteOf(o)===l.to&&ITEMS[o.item])cand.push([o,i]);}
  cand.sort((a,b)=>a[0].due-b[0].due||a[1]-b[1]);
  const plan=[];let usedV=0,usedW=0,qty=0;
  for(const [o]of cand){

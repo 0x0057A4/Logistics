@@ -43,12 +43,16 @@ const SCENARIOS={
 // Welle 3a (A08, W3-S1): gross[3] neu erzeugt, weil das Szenario 6 Standorte besitzt und Folgeangebote nun Gebiete an anderen
 // Standorten (lane.site, Zuschläge, zusätzliche Zufallszüge NACH den bisherigen) tragen. Ein-Standort-Szenarien (klein, dienste,
 // prognose) unverändert. Gegenprobe: assignLaneSites abgeschaltet reproduziert alle vorherigen Hashes exakt (4/4 grün). Node v22.22.0.
+// Welle 3c (A08/A07, W3c-S1): klein[2..3] neu erzeugt, weil das Szenario Dock + Lieferwagen besitzt und damit ab 23:00 ein
+// Luftexportangebot auf eigenem Angebotsplatz entsteht (eigener Zufall airRandom, api.random unberührt; nur api.id verschiebt
+// den ID-Zähler). Übrige Szenarien unverändert. Gegenprobe: airUnlocked=()=>false reproduziert alle vorherigen Hashes exakt
+// (4/4 grün). Node v22.22.0.
 const EXPECTED={
  klein:[
   'f1dafd6deff70c2a198e658ed56ea5fe9c5b7da48aa8eea9943408da8382bd53',
   '8e9d32faad7316d26e0ffcf43ee49d7a648feb6a429f75818904bd8aab173865',
-  '06d39f4700dc82359141a366dcf7430bb0b852ba73c93114eb15d79474973959',
-  'b5b2f89c7094b5cfe0e6019cbe50fb32f70eb8b752dadf8bf5a17accc889af9b',
+  '10e9fdfca33805ab57dd21f2ee36f9f6b008c2134cc5e7775ff5898ce3a9324d',
+  '098c29f1c22f0709f1fadcf977af950fcd87a894a52f1e84f3f20e3f8d993e98',
  ],
  dienste:[
   '07c12c6cb82dcc2feeb696abeeb7fce0f302cbfa592523f7d07dc990cdc85cba',

@@ -3,6 +3,10 @@ import {VEHICLES,ITEMS} from './catalog.js';
 import {acquireForklift,releaseForklift,useForklift,forkliftKey,PALLET} from './yard.js';
 import {deliverySiteOf} from './contracts.js';
 import {loadingTrip,abortLinehaul} from './linehaul.js';
+import {loadingAirShuttle,abortAirShuttle} from './airexport.js';
+/** W3c-S1: laufende Linienfahrt bzw. Flughafen-Zubringer vor Abfahrt; Wartung bricht ihn ab (Reservierung frei, Ware bleibt am Standort). */
+const pendingTrip=(s,v)=>v?.status==='linehaul'?loadingTrip(s,v.id):v?.status==='airshuttle'?loadingAirShuttle(s,v.id):null;
+const abortTrip=(s,api,v,trip)=>v.status==='airshuttle'?abortAirShuttle(s,api,trip,'Wartung'):abortLinehaul(s,api,trip,'Wartung');
 /** W3-S2: Fremdware (Logistikauftrag) wird nur am Zustellstandort zugestellt; eigene Fertigware bleibt standortfrei. */
 export const deliverableAt=(o,site)=>o.kind!=='logistics'||deliverySiteOf(o)===undefined||deliverySiteOf(o)===site;
 export function init(s){s.transfers??=[];}
@@ -29,6 +33,7 @@ export function handle(s,c,api){
   if(!o||o.status!=='active'||!v||v.status!=='idle'||v.site!==site)return {ok:false,message:'Aktiven Auftrag und freies Fahrzeug am Standort wählen.'};
   if(v.condition<15)return {ok:false,message:'Fahrzeug benötigt Wartung.'};
   if(!deliverableAt(o,site))return {ok:false,message:'Zustellgebiet gehört zu einem anderen Standort. Ware per Linie dorthin bringen.'};
+  if(o.airExport)return {ok:false,message:'Luftexport: Pakete per Flughafen-Zubringer zum Frachtterminal bringen.'};
   const committed=committedQty(s,o.id);
   if(!Number.isInteger(c.qty)||c.qty<1||c.qty>o.qty-o.delivered-committed||!fits(v,o.item,c.qty))return {ok:false,message:'Menge überschreitet Restauftrag oder Fahrzeugkapazität.'};
   const id=api.id('shipment');if(!api.inventory.reserve(o.item,c.qty,site,id,o.kind==='logistics'?o.id:'company'))return {ok:false,message:'Verfügbarer Fertigwarenbestand fehlt.'};
@@ -41,21 +46,21 @@ export function handle(s,c,api){
  }
  if(c.type==='maintainVehicle'){
   // W3-S2: Linienfahrt vor Abfahrt wird für die Wartung abgebrochen (Reservierung frei, Ware bleibt am Standort).
-  const v=s.vehicles.find(x=>x.id===c.id),trip=v?.status==='linehaul'?loadingTrip(s,v.id):null;if(!v||(v.status!=='idle'&&!trip))return {ok:false,message:'Nur freies Fahrzeug kann gewartet werden.'};
+  const v=s.vehicles.find(x=>x.id===c.id),trip=pendingTrip(s,v);if(!v||(v.status!=='idle'&&!trip))return {ok:false,message:'Nur freies Fahrzeug kann gewartet werden.'};
   if(v.condition>=100)return {ok:false,message:'Fahrzeug bereits gewartet.'};
   const workshop=s.buildings.find(b=>b.site===v.site&&b.type==='workshop'&&b.enabled&&b.condition>0&&!b.maintenanceTask&&!b.serviceJob);
   if(!workshop)return {ok:false,message:'Freie Wartungswerkstatt fehlt.'};
   const id=api.id('maintenance');if(!api.inventory.reserve('spare',1,v.site,id))return {ok:false,message:'Ein Ersatzteil benötigt.'};
   const cost=maintenanceCost(v);if(!api.book(`vehicle-maintenance:${id}`,-cost,'Wartung',v.name,[v.id])){api.inventory.release(id);return {ok:false,message:'Kapital für Wartung fehlt.'};}
-  api.inventory.consume(id);if(trip)abortLinehaul(s,api,trip,'Wartung');v.status='maintenance';v.maintenance={id,workshop:workshop.id,remaining:20};workshop.maintenanceTask=id;return {ok:true};
+  api.inventory.consume(id);if(trip)abortTrip(s,api,v,trip);v.status='maintenance';v.maintenance={id,workshop:workshop.id,remaining:20};workshop.maintenanceTask=id;return {ok:true};
  }
  if(c.type==='serviceVehicleExternal'){
   // Mobiler Servicepartner am Standort: keine eigene Werkstatt, kein eigenes Ersatzteil, kein eigenes Personal; teurer.
-  const v=s.vehicles.find(x=>x.id===c.id),trip=v?.status==='linehaul'?loadingTrip(s,v.id):null;if(!v||(v.status!=='idle'&&!trip)||!s.sites.some(a=>a.id===v.site))return {ok:false,message:'Nur freies Fahrzeug am Standort kann extern gewartet werden.'};
+  const v=s.vehicles.find(x=>x.id===c.id),trip=pendingTrip(s,v);if(!v||(v.status!=='idle'&&!trip)||!s.sites.some(a=>a.id===v.site))return {ok:false,message:'Nur freies Fahrzeug am Standort kann extern gewartet werden.'};
   if(v.condition>=100)return {ok:false,message:'Fahrzeug bereits gewartet.'};
   const id=api.id('maintenance'),cost=maintenanceCost(v,true);
   if(!api.book(`vehicle-service-external:${id}`,-cost,'Wartung',`${v.name} · externe Wartung`,[v.id]))return {ok:false,message:'Kapital für externe Wartung fehlt.'};
-  if(trip)abortLinehaul(s,api,trip,'Wartung');v.status='maintenance';v.maintenance={id,external:true,remaining:EXTERNAL_SERVICE.minutes,duration:EXTERNAL_SERVICE.minutes,cost};
+  if(trip)abortTrip(s,api,v,trip);v.status='maintenance';v.maintenance={id,external:true,remaining:EXTERNAL_SERVICE.minutes,duration:EXTERNAL_SERVICE.minutes,cost};
   api.log('maintenance',`${v.name}: externe Wartung beauftragt, ${EXTERNAL_SERVICE.minutes} Min. außer Betrieb.`,[v.id]);return {ok:true,id,cost};
  }
  return null;
@@ -108,7 +113,7 @@ export function step(s,api){
 }
 export function validate(s){
  const bad=m=>{throw new Error('Spielstand ungültig: '+m);};
- for(const v of s.vehicles){if(!VEHICLES[v.type]||!Number.isFinite(v.capacity)||v.capacity!==VEHICLES[v.type].capacity||!Number.isFinite(v.condition)||v.condition<0||v.condition>100||!['idle','loading','transit','unloading','returning','maintenance','service','transfer','tour','rentalReturned','linehaul'].includes(v.status))bad('Fahrzeug beschädigt.');if(v.status==='maintenance'&&(!v.maintenance||(v.maintenance.external?!(Number.isFinite(v.maintenance.remaining)&&v.maintenance.remaining>=0&&v.maintenance.remaining<=EXTERNAL_SERVICE.minutes):!s.buildings.some(b=>b.id===v.maintenance.workshop&&b.maintenanceTask===v.maintenance.id))))bad('Fahrzeugwartung beschädigt.');if(v.status==='service'&&!s.returns.some(r=>r.id===v.shipment))bad('Rücktransport beschädigt.');if(!['idle','maintenance','service','transfer','tour','rentalReturned','linehaul'].includes(v.status)&&!s.shipments.some(sh=>sh.id===v.shipment&&sh.vehicleId===v.id&&sh.status===v.status))bad('Fahrzeugzuweisung beschädigt.');}
+ for(const v of s.vehicles){if(!VEHICLES[v.type]||!Number.isFinite(v.capacity)||v.capacity!==VEHICLES[v.type].capacity||!Number.isFinite(v.condition)||v.condition<0||v.condition>100||!['idle','loading','transit','unloading','returning','maintenance','service','transfer','tour','rentalReturned','linehaul','airshuttle'].includes(v.status))bad('Fahrzeug beschädigt.');if(v.status==='maintenance'&&(!v.maintenance||(v.maintenance.external?!(Number.isFinite(v.maintenance.remaining)&&v.maintenance.remaining>=0&&v.maintenance.remaining<=EXTERNAL_SERVICE.minutes):!s.buildings.some(b=>b.id===v.maintenance.workshop&&b.maintenanceTask===v.maintenance.id))))bad('Fahrzeugwartung beschädigt.');if(v.status==='service'&&!s.returns.some(r=>r.id===v.shipment))bad('Rücktransport beschädigt.');if(!['idle','maintenance','service','transfer','tour','rentalReturned','linehaul','airshuttle'].includes(v.status)&&!s.shipments.some(sh=>sh.id===v.shipment&&sh.vehicleId===v.id&&sh.status===v.status))bad('Fahrzeugzuweisung beschädigt.');}
  validateTransfers(s,bad);
  const occupied=new Set();
  for(const sh of s.shipments){
