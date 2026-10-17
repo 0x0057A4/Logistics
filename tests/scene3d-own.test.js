@@ -457,3 +457,105 @@ test('W3a Echter Ablauf: Linienfahrt durch alle Phasen, Szene zeigt Lkw am richt
  }
  assert.deepEqual([...seen].sort(),['loading','returning','transit','unloading']);
 });
+
+// ---------- Welle 3b: Containerhof (W3b-S2) – Container im Hof, Chassis, Umfuhr zum Dock, nur lesend ----------
+import * as CT from '../dist/containers.js';
+function ctFixture(){
+ const s=fixture();
+ s.buildings.push({id:'cy',type:'containeryard',site:'a',x:12,y:6,rotation:0,enabled:true,condition:100,task:'a:containeryard'},{id:'d1',type:'dock',site:'a',x:2,y:13,rotation:0,enabled:true,condition:100,task:null},{id:'f1',type:'forklift',site:'a',x:9,y:9,rotation:0,enabled:true,condition:100,charge:80,task:null},{id:'r1',type:'rack',site:'a',x:2,y:6,rotation:0,enabled:true,condition:100});
+ const C=(id,status,extra={})=>({id,site:'a',contractId:'contract-7',orderIds:[],content:'pallet',qty:20,unloaded:0,status,arrivedAt:status==='arriving'?null:500,freeUntil:status==='arriving'?null:1940,dock:null,split:[{owner:'order-1',target:20,done:0}],teu:2,freeMinutes:1440,demurrageMinutes:0,priority:false,waitReason:null,waitSince:null,statusAt:500,moveEnd:null,arrivalId:'arrival-1',emptyAt:null,pickupAt:null,pickupArrival:null,goneAt:null,...extra});
+ s.containers=[C('container-1','yard'),C('container-2','yard',{arrivedAt:510}),C('container-3','empty',{arrivedAt:520,unloaded:20,emptyAt:590,pickupAt:760,demurrageMinutes:75})];
+ s.yard=[];s.orders=[];
+ return {s,C};
+}
+const A3b=(id,phase,extra={})=>({id,kind:'container',pickup:false,site:'a',contractId:'contract-7',orderIds:[],carrier:'Nordkai Containerdienst',plate:'KRM-CA 2210',parcels:20,containers:1,containerIds:['container-9'],phase,phaseStart:600,phaseEnd:phase==='queue'?null:602,eta:600,dock:null,waitReason:null,waitSince:null,unloaded:0,atRisk:false,forecast:null,gateAt:590,priority:false,split:[],...extra});
+test('W3b Containerhof: Stellplätze erst Boden, dann 2. Ebene (max. 2 hoch), stabil, oberer rutscht nach; Belegung „3/4 Plätze“',()=>{
+ const {s,C}=ctFixture();frozen(s);const before=JSON.stringify(s);
+ assert.equal(S3.yardPlaces(),4,'8 TEU / 2 TEU je 40-Fuß-Container');
+ const r=S3.containerYardSlots(s,'a');assert.equal(r.slots.length,4);
+ const lv=id=>r.map.get(id);assert.deepEqual(['container-1','container-2','container-3'].map(id=>[lv(id).lane,lv(id).level]),[[0,0],[1,0],[0,1]]);
+ assert.ok(r.slots.every(x=>x.level<S3.YARD_LEVELS));
+ const p=S3.yardSlotPose(lv('container-3'));assert.ok(Math.abs(p.y-(S3.YARD_Y+S3.CONTAINER_H))<1e-9,'gestapelt auf Containerhöhe');
+ const box=buildingBox(s.buildings[0]);assert.ok(p.x>box.x0&&p.x<box.x1&&p.z>box.z0&&p.z<box.z1,'Platz liegt im Containerhof');
+ // container-1 fährt zum Dock: oberer Container (container-3) rutscht auf den Boden, container-2 bleibt.
+ const s2=JSON.parse(JSON.stringify(s));s2.containers[0].status='toDock';s2.containers[0].dock='d1';s2.containers[0].moveEnd=603;
+ const r2=S3.containerYardSlots(s2,'a',undefined,r.map);assert.equal(r2.map.get('container-2').key,r.map.get('container-2').key,'stabil');
+ assert.deepEqual([r2.map.get('container-3').lane,r2.map.get('container-3').level],[0,0],'nie schwebend');assert.equal(r2.map.has('container-1'),false);
+ // Fünfter Container ohne Platz (Kapazität), Belegung zählt toDock und angelieferte Container ab toYard.
+ const s3=JSON.parse(JSON.stringify(s));s3.containers.push(C('container-4','yard',{arrivedAt:530}),C('container-5','pickup',{arrivedAt:540,unloaded:20,emptyAt:600,pickupAt:700,pickupArrival:'arrival-5'}));
+ assert.equal(S3.containerYardSlots(s3,'a').map.size,4);
+ assert.deepEqual(S3.containerYardUse(s,'a'),[{id:'cy',used:3,cap:4}]);assert.equal(S3.containerYardLabel(S3.containerYardUse(s,'a')[0]),'Containerhof · 3/4 Plätze');
+ const s4=JSON.parse(JSON.stringify(s));s4.containers.push(C('container-9','arriving'));s4.yard.push(A3b('arrival-9','drop'));assert.equal(S3.containerYardUse(s4,'a')[0].used,4,'Chassis in drop belegt den Platz');
+ s4.yard[0].phase='queue';assert.equal(S3.containerYardUse(s4,'a')[0].used,3,'in der Warteschlange noch nicht');
+ assert.equal(S3.containerYardSlots(s,'b').map.size,0,'anderer Standort ohne Hof');
+ assert.equal(JSON.stringify(s),before,'nur lesend');
+});
+test('W3b Container: Farbe je Vertrag, leer heller mit offener Tür, Lagergeld im Label',()=>{
+ const {s}=ctFixture(),[c1,c2,c3]=s.containers;
+ assert.equal(S3.containerColor(c1),S3.containerColor(c2),'gleicher Vertrag, gleiche Farbe');assert.ok(S3.CONTAINER_HEX.includes(S3.containerColor(c1)));
+ assert.equal(S3.containerEmpty(c1),false);assert.equal(S3.containerEmpty(c3),true);assert.notEqual(S3.containerTint(c3),S3.containerTint(c1));
+ const lum=h=>[1,3,5].reduce((n,i)=>n+parseInt(h.slice(i,i+2),16),0);assert.ok(lum(S3.containerTint(c3))>lum(S3.containerTint(c1)),'leer heller');
+ assert.equal(S3.containerLabel(c1),'CTR-1 · Im Containerhof · 20 Paletten');
+ assert.equal(S3.containerLabel(c3),'CTR-3 · Leer · wartet auf Abholung · Lagergeld 2 Std.');
+ assert.equal(S3.containerLabel({...c1,status:'unstuffing',unloaded:5,dock:'d1'}),'CTR-1 · Entladen 5/20 Paletten');
+ assert.equal(S3.containerLabel({...c1,content:'parcel',qty:600,waitReason:'Kein freies Dock'}),'CTR-1 · Im Containerhof · 600 Pakete · Kein freies Dock');
+});
+test('W3b Chassis: Phasen approach/gate/queue/toYard/drop/exit wie Fremd-Lkw, Halt am Containerhof, beladen bis Abstellen, Labels deutsch',()=>{
+ const {s}=ctFixture(),L=yardLayout(s.sites[0]),yb=S3.yardBayPose(L,s.buildings[0]),box=buildingBox(s.buildings[0]);
+ assert.ok(Math.abs(yb.x-(box.x0+box.x1)/2)<1e-9&&yb.heading===Math.PI/2,'Halt an der Andockreihe in Höhe des Hofs, Heck zur Halle');
+ const g=gatePose(L),plan=(a,ctx={})=>arrivalPlan(L,a,{dock:yb,...ctx});
+ const ap=plan(A3b('arrival-9','approach',{phaseStart:585,phaseEnd:600}));assert.equal(ap.container,true);assert.equal(ap.loaded,true);
+ const e=arrivalPose(ap,600,{});assert.ok(Math.hypot(e.x-g.x,e.z-g.z)<1e-6,'Anfahrt endet am Tor');
+ assert.equal(plan(A3b('arrival-9','queue',{waitReason:'Containerhof voll'}),{rank:0}).label,'KRM-CA 2210 · Wartet · Containerhof voll');
+ const ty=plan(A3b('arrival-9','toYard'),{from:g});assert.equal(ty.label,'KRM-CA 2210 · Containerhof');assert.equal(ty.tone,'move');
+ const a0=arrivalPose(ty,600,{}),a1=arrivalPose(ty,602,{}),mid=arrivalPose(ty,601,{});
+ assert.ok(Math.hypot(a0.x-g.x,a0.z-g.z)<1e-6&&Math.hypot(a1.x-yb.x,a1.z-yb.z)<1e-6,'toYard: Tor → Containerhof');
+ assert.ok(Math.abs(Math.sin(a1.heading)-1)<1e-6,'rückwärts eingesetzt (Heck zur Halle)');assert.ok(arrivalMoving(ty,601)&&!(mid.x===a0.x&&mid.z===a0.z));
+ const fromQueue=plan(A3b('arrival-9','toYard'),{from:queuePlace(L,2)});const q1=arrivalPose(fromQueue,602,{});assert.ok(Math.hypot(q1.x-yb.x,q1.z-yb.z)<1e-6,'auch vom Warteplatz');
+ const dr=plan(A3b('arrival-9','drop'));assert.equal(dr.label,'KRM-CA 2210 · Abstellen');assert.equal(dr.loaded,true);assert.ok(Math.hypot(dr.x-yb.x,dr.z-yb.z)<1e-6);assert.equal(arrivalMoving(dr,601),false);
+ const ex=plan(A3b('arrival-9','exit',{phaseEnd:603,unloaded:20}));assert.equal(ex.loaded,false,'nach Abstellen leer');const x0=arrivalPose(ex,600,{});assert.ok(Math.hypot(x0.x-yb.x,x0.z-yb.z)<1e-6,'Ausfahrt ab Containerhof');
+ assert.ok(arrivalPose(ex,603,{}).x<-40,'Ausfahrt zur Straße');
+ const pk=A3b('arrival-5','toYard',{pickup:true,containerIds:['container-3'],parcels:1});assert.equal(plan(pk,{from:g}).loaded,false);assert.equal(plan(pk,{from:g}).label,'KRM-CA 2210 · Abholung · Containerhof');
+ assert.equal(plan({...pk,phase:'drop'}).label,'KRM-CA 2210 · Abholung · Aufnehmen');const pe=plan({...pk,phase:'exit'});assert.equal(pe.loaded,true);assert.notEqual(pe.ccolor,plan(A3b('arrival-9','drop')).ccolor,'Leercontainer heller');
+ assert.equal(plan(A3b('arrival-9','toYard',{containers:3,containerIds:['c1','c2','c3']}),{from:g}).label,'KRM-CA 2210 · Containerhof · 3 Container');
+ assert.equal(arrivalPlan(L,A3b('arrival-9','gone')),null);assert.equal(arrivalPlan(L,{...A3b('x','toYard'),kind:undefined}),null,'Fremd-Lkw kennen toYard nicht');
+});
+test('W3b Umfuhr: Container fährt in MOVE Minuten vom Hof zum Dock (container.dock), steht beim Entladen am Dock; Stapler pendelt erst beim Entladen',()=>{
+ const {s}=ctFixture(),L=yardLayout(s.sites[0]),b=s.buildings,yb=S3.yardBayPose(L,b[0]),dock=dockPoseFor(L,b,'d1');
+ const st=JSON.parse(JSON.stringify(s));Object.assign(st.containers[0],{status:'toDock',dock:'d1',statusAt:600,moveEnd:603,demurrageMinutes:3});st.buildings[1].task='container-1';st.buildings[2].task='container-1:forklift';frozen(st);const before=JSON.stringify(st);
+ const [p]=S3.dockContainerPlans(st,'a',st.buildings,L,()=>yb);assert.equal(p.id,'container-1');assert.equal(p.demurrage,true);assert.equal(p.label,'CTR-1 · Umfuhr zum Dock · Lagergeld 1 Std.');
+ const m0=arrivalPose(p,600,{}),m1=arrivalPose(p,603,{});assert.ok(Math.hypot(m0.x-yb.x,m0.z-yb.z)<1e-6&&Math.hypot(m1.x-dock.x,m1.z-dock.z)<1e-6,'Hof → Dock');
+ assert.equal(forkliftTarget(st,st.buildings[2]),null,'während der Umfuhr steht der Stapler');
+ const su=JSON.parse(before);Object.assign(su.containers[0],{status:'unstuffing',moveEnd:null,unloaded:4});
+ const [q]=S3.dockContainerPlans(su,'a',su.buildings,L,()=>yb);assert.equal(q.path,null);assert.ok(Math.hypot(q.x-dock.x,q.z-dock.z)<1e-6);assert.equal(q.label,'CTR-1 · Entladen 4/20 Paletten · Lagergeld 1 Std.');
+ const t=forkliftTarget(su,su.buildings[2]);assert.equal(t.dock.id,'d1');assert.equal(t.inbound,true,'Ware Dock → Regal');
+ const fp=forkliftPlans(su,'a').find(f=>f.id==='f1');assert.equal(fp.carry,'out');assert.ok(fp.path);
+ assert.equal(S3.dockContainerPlans(s,'a',s.buildings,L).length,0,'Hofcontainer nicht am Dock');
+ assert.equal(JSON.stringify(st),before);
+});
+test('W3b Echter Ablauf: Chassis → Containerhof → Umfuhr → Entladen → Abholung; Szene liest nur, Belegung = TEU/2, nie mehr als 2 hoch',()=>{
+ const sim=new Simulation({mode:'sandbox'}),s=sim.state,ok=c=>{const r=sim.command(c);assert.equal(r.ok,true,`${c.type}: ${r.message}`);return r;};
+ ok({type:'build',buildingType:'dock',x:2,y:10});ok({type:'build',buildingType:'rack',x:2,y:2});ok({type:'build',buildingType:'rack',x:5,y:2});ok({type:'build',buildingType:'forklift',x:12,y:2});ok({type:'build',buildingType:'containeryard',x:12,y:8});ok({type:'hire',role:'warehouse'});
+ const k=s.contracts[0];ok({type:'acceptContract',id:k.id});ok({type:'cancelContract',id:k.id});
+ const site=s.selectedSite,oid=sim.api.id('order');s.orders.push({id:oid,kind:'logistics',source:'hub',lane:'lane-0',customer:'Gebiet 1 (Testversand)',item:'pallet',qty:20,price:40,due:3000,quality:0,site,status:'active',delivered:0,paid:0});
+ const a=yardMod.schedule(s,sim.api,{kind:'container',contractId:k.id,site,eta:s.t+20,orderIds:[oid],containers:1,content:'pallet',parcels:20});assert.ok(a);
+ const cid=a.containerIds[0],L=yardLayout(s.sites.find(x=>x.id===site)),seen=new Set();let prev=null;
+ for(let i=0;i<900;i++){
+  sim.step(1);const c=s.containers.find(x=>x.id===cid);if(!c)break;
+  const before=JSON.stringify(s.containers)+JSON.stringify(s.yard)+JSON.stringify(s.buildings),b=s.buildings.filter(x=>x.site===site);
+  const yb=S3.yardBayPose(L,b.find(x=>x.type==='containeryard'));
+  const slots=S3.containerYardSlots(s,site,b,prev);prev=slots.map;assert.ok([...slots.map.values()].every(x=>x.level<2));
+  assert.equal(S3.containerYardUse(s,site,b)[0].used,CT.teuUsed(s,site)/CT.TEU,'Belegung wie TEU-Logik');
+  const ch=s.yard.find(y=>y.kind==='container'&&y.containerIds.includes(cid)&&y.phase!=='gone');
+  if(ch&&['toYard','drop','exit'].includes(ch.phase)){const p=arrivalPlan(L,ch,{dock:yb,from:gatePose(L)});seen.add(`${ch.pickup?'P':'A'}:${ch.phase}`);
+   if(ch.phase==='drop'){assert.ok(Math.hypot(p.x-yb.x,p.z-yb.z)<1e-6,'drop am Containerhof');assert.equal(p.loaded,!ch.pickup);}}
+  if(['yard','empty','pickup'].includes(c.status))assert.ok(slots.map.has(cid),`${c.status}: im Hof sichtbar`);
+  const d=S3.dockContainerPlans(s,site,b,L,()=>yb);
+  if(['toDock','unstuffing'].includes(c.status)){assert.equal(d.length,1);assert.equal(d[0].dock,c.dock);seen.add(c.status);
+   if(c.status==='unstuffing'){const dp=dockPoseFor(L,b,c.dock);assert.ok(Math.hypot(d[0].x-dp.x,d[0].z-dp.z)<1e-6,'am Dock');}}
+  else assert.equal(d.length,0);
+  assert.equal(JSON.stringify(s.containers)+JSON.stringify(s.yard)+JSON.stringify(s.buildings),before,'Szene liest nur');
+  seen.add(c.status);if(c.status==='gone')break;
+ }
+ for(const k of ['A:toYard','A:drop','A:exit','toDock','unstuffing','empty','pickup','P:drop','gone'])assert.ok(seen.has(k),`${k} gesehen: ${[...seen]}`);
+});

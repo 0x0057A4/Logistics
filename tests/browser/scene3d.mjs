@@ -308,6 +308,69 @@ try {
   check('W3a Standort: Hauptlauf fährt Zufahrt ab, Entladen am Dock des Ziels, Labels deutsch', netzSite.out?.mode === 'out' && netzSite.out.shown && netzSite.out.label === 'LKW-1 · Hauptlauf → Hub Süd' && netzSite.dock?.mode === 'site' && netzSite.dock.dock === 'd2' && netzSite.dock.label === 'LKW-1 · Entladen Hauptlauf', JSON.stringify(netzSite));
   check('W3a: unter 150 Draw Calls', netz.info.drawCalls < 150 && netz.infoHome.drawCalls < 150 && netzSite.info.drawCalls < 150, `${netz.info.drawCalls}/${netz.infoHome.drawCalls}/${netzSite.info.drawCalls}`);
   check('W3a: Spielzustand unverändert', netz.unchanged);
+  // Welle 3b: Containerhof (W3b-S2) – zwei Containerhöfe, 3 Container im Hof (einer gestapelt, einer leer mit Lagergeld), Chassis in drop (beladen),
+  // Container am Dock d1 beim Entladen (Stapler f1 pendelt), Tag und Nacht, Auswahl zeigt Container-Label.
+  const cyard = await page.evaluate(async () => {
+    const { Scene3D } = await import('./scene3d.js');
+    const host = document.createElement('div'); host.style.cssText = 'position:fixed;inset:0;z-index:999;background:#fff'; document.body.appendChild(host);
+    const canvas = document.createElement('canvas'); canvas.style.cssText = 'width:100%;height:100%;display:block'; host.appendChild(canvas);
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const B = (id, type, x, y, extra = {}) => ({ id, type, site: 's1', x, y, rotation: 0, status: 'idle', enabled: true, condition: 100, ...extra });
+    const C = (id, status, extra = {}) => ({ id, site: 's1', contractId: 'contract-7', orderIds: ['order-1'], content: 'pallet', qty: 20, unloaded: 0, status, arrivedAt: 500, freeUntil: 1940, dock: null, split: [{ owner: 'order-1', target: 20, done: 0 }], teu: 2, freeMinutes: 1440, demurrageMinutes: 0, priority: false, waitReason: null, waitSince: null, statusAt: 500, moveEnd: null, arrivalId: 'arrival-1', emptyAt: null, pickupAt: null, pickupArrival: null, goneAt: null, ...extra });
+    const state = { t: 720, selectedSite: 's1', sites: [{ id: 's1', name: 'Hub Seeimport', x: 0, y: 0, width: 20, height: 16, energy: 60 }],
+      buildings: [B('d1', 'dock', 2, 13, { task: 'container-4' }), B('d2', 'dock', 6, 13), B('r1', 'rack', 2, 8), B('r2', 'rack', 5, 8), B('f1', 'forklift', 9, 9, { charge: 70, task: 'container-4:forklift' }), B('pw', 'power', 17, 1),
+        B('cy1', 'containeryard', 11, 12, { task: 's1:containeryard' }), B('cy2', 'containeryard', 15, 12, { task: 's1:containeryard' })],
+      containers: [C('container-1', 'yard'), C('container-2', 'yard', { contractId: 'contract-8', arrivedAt: 510, waitReason: 'Kein freies Dock' }), C('container-3', 'empty', { arrivedAt: 520, freeUntil: 600, unloaded: 20, split: [{ owner: 'order-1', target: 20, done: 20 }], emptyAt: 650, pickupAt: 850, pickupArrival: 'arrival-5', demurrageMinutes: 120 }),
+        C('container-4', 'unstuffing', { contractId: 'contract-8', dock: 'd1', unloaded: 6, split: [{ owner: 'order-1', target: 20, done: 6 }], statusAt: 700 }), C('container-9', 'arriving', { arrivedAt: null, freeUntil: null, arrivalId: 'arrival-9' })],
+      yard: [{ id: 'arrival-9', kind: 'container', pickup: false, site: 's1', contractId: 'contract-7', orderIds: ['order-1'], carrier: 'Nordkai Containerdienst', plate: 'KRM-CA 2210', parcels: 20, containers: 1, containerIds: ['container-9'], phase: 'drop', phaseStart: 719, phaseEnd: 721, eta: 705, dock: null, waitReason: null, waitSince: null, unloaded: 0, atRisk: false, forecast: null, gateAt: 706, priority: false, split: [] }],
+      orders: [{ id: 'order-1', item: 'pallet', qty: 100 }], batches: [{ id: 'p1', item: 'pallet', site: 's1', qty: 6, location: 'stock', owner: 'order-1' }],
+      workers: [{ id: 'w1', site: 's1', role: 'warehouse', task: 'container-4:warehouse' }], jobs: [], research: [], vehicles: [], shipments: [], transfers: [], tours: [], freights: [], returns: [] };
+    const before = JSON.stringify(state), r = {};
+    const s = new Scene3D(canvas, {}); s.setState(state); s.setView('site'); s.setTheme('day'); s.setLabels('all');
+    let clock = 720.1; s.setClock(clock);
+    s.goal.tx = 10; s.goal.tz = 15.5; s.goal.dist = 21; s.goal.yaw = Math.PI / 5; s.cam = { ...s.goal }; s.applyCamera(); s.needs = true;
+    await sleep(1500);
+    const chips = () => [...host.querySelectorAll('.scene3d-chip')].filter(c => c.style.display !== 'none').map(c => c.textContent);
+    r.counts = { cont: s.inst.cont.count, door: s.inst.cdoor.count, mark: s.inst.cmark.count, chassis: s.inst.cchassis.count, cab: s.inst.fcab.count, trailer: s.inst.ftrailer.count };
+    r.chips = chips(); r.info = s.renderInfo();
+    const chassis = s.yardFleet.find(p => p.id === 'arrival-9'), dockC = s.dockConts.find(p => p.id === 'container-4');
+    r.chassis = chassis && { loaded: chassis.loaded, x: +chassis.x.toFixed(2), z: +chassis.z.toFixed(2), label: chassis.label };
+    r.dockC = dockC && { x: +dockC.x.toFixed(2), dock: dockC.dock, label: dockC.label };
+    r.slots = [...s.contSlots.entries()].map(([id, x]) => `${id}:${x.b.id}:${x.lane}/${x.level}`);
+    const f0 = `${s.forks[0].x.toFixed(2)},${s.forks[0].z.toFixed(2)}`; clock += .3; s.setClock(clock);
+    let f1 = f0; for (let i = 0; i < 40 && f1 === f0; i++) { await sleep(100); f1 = `${s.forks[0].x.toFixed(2)},${s.forks[0].z.toFixed(2)}`; }
+    r.forkMoved = f0 !== f1; r.forkCarry = s.forks[0].carry;
+    window.__cyard = { s, host, state, chips, before };
+    return r;
+  });
+  await page.screenshot({ path: path.join(root, 'docs/assets/containerhof-0.13.png') });
+  const cyard2 = await page.evaluate(async () => {
+    const { s, host, state, chips, before } = window.__cyard, sleep = ms => new Promise(r => setTimeout(r, ms)), r = {};
+    // Auswahl per Klick auf den gestapelten Container (Label nur bei Auswahl).
+    const sel = []; s.callbacks.onSelect = id => sel.push(id);
+    const c3 = s.contLabels.find(c => c.id === 'container-3'), rc = s.canvas.getBoundingClientRect();
+    const { Vector3 } = await import('./vendor/three.module.min.js'); const v = new Vector3(c3.x, c3.y - .55, c3.z).project(s.camera());
+    const px = (v.x + 1) / 2 * s.width, py = (1 - v.y) / 2 * s.height; s.click({ x: px, y: py }); await sleep(900);
+    r.selected = sel.at(-1); r.chipsSel = chips();
+    // Umfuhr: Container fährt vom Hof zum Dock (toDock, 3 Min.), Pose wandert mit der Uhr.
+    const st = JSON.parse(before); Object.assign(st.containers[3], { status: 'toDock', unloaded: 0, split: [{ owner: 'order-1', target: 20, done: 0 }], statusAt: 720, moveEnd: 723 }); st.batches = [];
+    s.setState(st); s.setClock(720.2); await sleep(900); const p0 = s.dockConts[0] && { x: s.dockConts[0].x, z: s.dockConts[0].z };
+    s.setClock(721.6); await sleep(900); const p1 = s.dockConts[0] && { x: s.dockConts[0].x, z: s.dockConts[0].z };
+    r.moved = p0 && p1 ? Math.hypot(p1.x - p0.x, p1.z - p0.z) : 0;
+    // Nacht: gleiche Szene ohne Fehler, Lichtfläche über dem Containerhof.
+    s.setState(JSON.parse(before)); s.setTheme('night'); s.setClock(720.3); await sleep(900); r.night = s.theme().key; r.infoNight = s.renderInfo();
+    r.unchanged = JSON.stringify(state) === before;
+    s.destroy(); host.remove(); return r;
+  });
+  report.containerhof = { ...cyard, ...cyard2 };
+  check('W3b Containerhof: 3 Container im Hof + Chassis-Ladung + Container am Dock (5), offene Tür (1), Lagergeld-Markierung (1), 2 Chassis', cyard.counts.cont === 5 && cyard.counts.door === 1 && cyard.counts.mark === 1 && cyard.counts.chassis === 2 && cyard.counts.cab === 2 && cyard.counts.trailer === 0, JSON.stringify(cyard.counts));
+  check('W3b Containerhof: Stapelung max. 2 hoch, Boden zuerst', cyard.slots.length === 3 && cyard.slots.filter(x => x.endsWith('/1')).length === 1 && cyard.slots.every(x => /\/[01]$/.test(x)), cyard.slots.join(' '));
+  check('W3b Labels: „Containerhof · 4/4 Plätze“ und „1/4“, Chassis „KRM-CA 2210 · Abstellen“', cyard.chips.includes('Containerhof · 4/4 Plätze') && cyard.chips.includes('Containerhof · 1/4 Plätze') && cyard.chips.includes('KRM-CA 2210 · Abstellen'), cyard.chips.join(' | '));
+  check('W3b Chassis in drop beladen am Containerhof, Container am Dock d1, Stapler pendelt (Ware Dock → Regal)', cyard.chassis?.loaded && cyard.chassis.z > 16 && cyard.dockC?.dock === 'd1' && cyard.forkMoved && cyard.forkCarry === 'out', JSON.stringify({ c: cyard.chassis, d: cyard.dockC, f: cyard.forkMoved, carry: cyard.forkCarry }));
+  check('W3b Auswahl: Klick auf Container zeigt Container-Label (nur bei Auswahl)', cyard2.selected === 'container-3' && cyard2.chipsSel.some(c => c.startsWith('CTR-3 · Leer · wartet auf Abholung · Lagergeld 2 Std.')) && !cyard.chips.some(c => c.startsWith('CTR-')), JSON.stringify({ sel: cyard2.selected, chips: cyard2.chipsSel }));
+  check('W3b Umfuhr: Container fährt mit der Uhr vom Hof zum Dock', cyard2.moved > .5, String(cyard2.moved));
+  check('W3b: unter 150 Draw Calls (Tag und Nacht)', cyard.info.drawCalls < 150 && cyard2.infoNight.drawCalls < 150 && cyard2.night === 'night', `${cyard.info.drawCalls}/${cyard2.infoNight.drawCalls}`);
+  check('W3b: Spielzustand unverändert', cyard2.unchanged);
   // W1b: Probe-Zustand aus tests/ui-hub-probe.js über den echten Importweg (Befund A01: Fremd-Lkw an Dock 1 unsichtbar).
   {
     const { Simulation } = await import(pathToFileURL(path.join(root, 'dist/core.js')).href);

@@ -11,7 +11,7 @@ import { Scene, vehicleActivity, vehicleAtSite, coldWarnings } from './scene.js'
 export const VIEWS = ['hall', 'site', 'network', 'flat'];
 export const LABEL_MODES = ['fleet', 'infra', 'all', 'none'];
 export const MAX_LABELS = 40;
-const HEIGHT = { assembly: 1.5, testing: 1.45, packing: 1.2, rack: 1.75, dock: 2.3, power: 1.4, workshop: 1.25, research: 1.6, coldstore: 1.6, terminal: 1.45, sorter: 1.35, forklift: 1.3 };
+const HEIGHT = { assembly: 1.5, testing: 1.45, packing: 1.2, rack: 1.75, dock: 2.3, power: 1.4, workshop: 1.25, research: 1.6, coldstore: 1.6, terminal: 1.45, sorter: 1.35, forklift: 1.3, containeryard: .35 };
 const ACTIVE = ['working', 'running', 'producing', 'active'];
 const BLOCKED = /wait|blocked|paused|material|staff|off|broken|power|storage/;
 const OUT = ['transit', 'collecting', 'linehaul', 'outbound'], IN = ['returning', 'inbound'];
@@ -337,7 +337,7 @@ export function themeFor(mode, t) { return mode === 'day' || mode === 'night' ? 
  * Nachtbeleuchtung je Standort (nur Darstellung): Hofmasten mit Lichtkegel, Wandleuchten über den Docks, Hallenleuchten als Lichtflächen.
  * Liefert {masts:[{x,z,h}], heads:[{x,y,z}], pools:[{x,z,y,r,k,cone,h}]}; Anzahl begrenzt (keine Echtzeitlichter).
  */
-export function nightLights(site, L = yardLayout(site), docks = []) {
+export function nightLights(site, L = yardLayout(site), docks = [], yards = []) {
   const W = L.W, H = L.H, masts = [], heads = [], pools = [];
   const mast = (x, z, r = 3.4) => { masts.push({ x, z, h: 4.4 }); heads.push({ x, y: 4.35, z }); pools.push({ x, z, y: .012, r, k: 1, cone: true, h: 4.3 }); };
   mast(-1, L.yardGateZ + .6, 3); mast(-14, H + .3); mast(-7.5, H + .3); mast(-10, L.roadInZ + 1.7, 3);
@@ -345,6 +345,8 @@ export function nightLights(site, L = yardLayout(site), docks = []) {
   for (const x of (docks.length ? docks : L.bays).slice(0, 8)) { heads.push({ x, y: 2.35, z: H + .2 }); pools.push({ x, z: H + 2.2, y: .014, r: 2.2, k: .75, cone: false, h: 0 }); }
   for (let x = 2; x < W; x += 4) for (let z = 2; z < H; z += 4) pools.push({ x, z, y: .085, r: 2.0, k: .42, cone: false, h: 0 });
   for (let x = 0; x <= W; x += 4) heads.push({ x, y: 2.32, z: -.1 }, { x, y: 2.32, z: H + .1 });
+  // W3b: Containerhof mit eigener Lichtfläche (Leuchtmast im Modell).
+  for (const y of yards.slice(0, 6)) pools.push({ x: y.x, z: y.z, y: .1, r: 2.6, k: .6, cone: false, h: 0 });
   return { masts, heads, pools };
 }
 
@@ -473,6 +475,7 @@ export function carrierColor(carrier) { let h = 0; for (const ch of String(carri
  * Liefert null für gone/unbekannt. path + t0/t1 (absolute Spielminuten) werden nur interpoliert, wenn beide gesetzt sind.
  */
 export function arrivalPlan(L, a, ctx = {}) {
+  if (a?.kind === 'container') return containerChassisPlan(L, a, ctx);
   if (!a || !PHASE_LABEL[a.phase]) return null;
   const g = gatePose(L), dock = ctx.dock || null, timed = Number.isFinite(a.phaseStart) && Number.isFinite(a.phaseEnd);
   const plan = { id: a.id, phase: a.phase, path: null, t0: timed ? a.phaseStart : null, t1: timed ? a.phaseEnd : null, pose: g, fixedHeading: null, tone: arrivalTone(a), label: arrivalLabel(a), color: carrierColor(a.carrier), x: g.x, z: g.z, heading: g.heading, pallet: a.item === 'pallet', pallets: trailerPallets(a) };
@@ -518,6 +521,7 @@ export function parcelLoads(state, siteId, buildings = (state?.buildings || []).
   let inbound = 0, stock = 0;
   for (const a of state?.batches || []) if (a.site === siteId && a.item === 'parcel' && a.qty > 0) { if (a.location === 'inbound') inbound += a.qty; else if (a.location === 'stock') stock += a.qty; }
   const busy = new Set(); for (const a of state?.yard || []) if (a.site === siteId && a.dock && a.phase === 'unloading') busy.add(a.dock);
+  for (const c of state?.containers || []) if (c.site === siteId && c.dock && c.status === 'unstuffing') busy.add(c.dock);
   const docks = buildings.filter(b => b.type === 'dock').sort((p, q) => (busy.has(q.id) ? 1 : 0) - (busy.has(p.id) ? 1 : 0));
   const cages = [], stacks = [];
   const nc = Math.min(MAX_CAGES, docks.length * CAGES_PER_DOCK, Math.ceil(inbound / PARCELS_PER_CAGE));
@@ -553,6 +557,9 @@ export function forkliftLabel(b) { return `Stapler · ${Math.round(forkliftCharg
 export function forkliftTarget(state, b, buildings = state?.buildings || []) {
   const key = typeof b?.task === 'string' && b.task.endsWith(':forklift') ? b.task.slice(0, -':forklift'.length) : null; if (!key) return null;
   const a = (state?.yard || []).find(y => y.id === key && y.site === b.site && y.phase === 'unloading');
+  // W3b: Container wird entladen (Ware Dock → Regal); während der Hofumfuhr (toDock) steht der Stapler.
+  const ct = !a && (state?.containers || []).find(c => c.id === key && c.site === b.site);
+  if (ct) { const dock = ct.status === 'unstuffing' && buildings.find(o => o.id === ct.dock && o.type === 'dock'); return dock ? { dock, inbound: true, key } : null; }
   const dock = a ? buildings.find(o => o.id === a.dock && o.type === 'dock') : buildings.find(o => o.type === 'dock' && o.site === b.site && o.task === key);
   return dock ? { dock, inbound: !!a, key } : null;
 }
@@ -600,6 +607,143 @@ export function palletLoads(state, siteId, buildings = (state?.buildings || []).
   const places = Math.min(MAX_PALLET_STACKS, slots.length, Math.ceil(stock / PALLET_LEVELS)), pallets = [];
   for (let i = 0; i < places; i++) { const [b, lx, lz] = slots[i], n = Math.min(PALLET_LEVELS, stock - i * PALLET_LEVELS); for (let k = 0; k < n; k++) pallets.push(toWorld(b, lx, lz, { anchor: b.id, level: k })); }
   return { stock, places, pallets };
+}
+
+// ---------- Containerhof (W3b-S2), nur lesend ----------
+// s.containers (containers.js): status arriving|yard|toDock|unstuffing|empty|pickup|gone, dock (Dock-ID bei toDock/unstuffing), teu (40 Fuß = 2),
+// demurrageMinutes (Lagergeld läuft). Containerchassis = s.yard-Eintrag kind 'container' (CONTAINER_PHASES), pickup = Leerabholung.
+// Containerhof 4×3 (BUILDINGS.containeryard.teu 8): 2 Spuren × 2 Ebenen = 4 Plätze für 40-Fuß-Container. Chassis halten an der Andockreihe
+// in Höhe des Containerhofs (Reach-Stacker setzt um, nur angedeutet). Alle Positionen rein optisch; keine Buchung, kein Schreiben in den Zustand.
+export const CONTAINER_TEU = 2, YARD_LEVELS = 2;
+export const CONTAINER_LEN = 3.6, CONTAINER_W = .74, CONTAINER_H = .78;
+export const YARD_LX = -.1, YARD_Y = .08;            // Mitte der Stellplätze (lokal x) und Auflagerhöhe im Containerhof
+export const CHASSIS_LX = -.72, CHASSIS_Y = .58;     // Container auf dem Chassis (lokal x, Ladehöhe)
+export const CONTAINER_PHASE_LABEL = { approach: 'Anfahrt', gate: 'Torkontrolle', queue: 'Wartet', toYard: 'Containerhof', drop: 'Abstellen', exit: 'Ausfahrt' };
+export const CONTAINER_HEX = ['#b4553f', '#3f6f9e', '#4f8a5b', '#c98a3a', '#7a8590', '#3f8f8a', '#8a5a7a'];
+export const DEMURRAGE_HEX = '#d0574a';
+const C_IN_YARD = new Set(['yard', 'empty', 'pickup']), C_AT_DOCK = new Set(['toDock', 'unstuffing']), C_OCCUPY = new Set(['yard', 'toDock', 'unstuffing', 'empty', 'pickup']);
+/** Plätze je Containerhof (40-Fuß-Container). */
+export function yardPlaces() { return Math.max(1, Math.floor((BUILDINGS.containeryard?.teu || 8) / CONTAINER_TEU)); }
+const yardLanes = () => Math.ceil(yardPlaces() / YARD_LEVELS);
+/** Lokale Spurmitte (z) im unrotierten 4×3-Grundriss; Südrand bleibt für den Reach-Stacker frei. */
+export function yardLaneZ(lane) { return -.95 + lane * .85; }
+/** Farbe je Vertrag (reedereineutral, deterministisch); ohne Vertrag nach Container-ID. */
+export function containerColor(c) { let h = 0; for (const ch of String(c?.contractId || c?.id || '')) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return CONTAINER_HEX[h % CONTAINER_HEX.length]; }
+/** Leer (empty/pickup bzw. vollständig entladen): optisch heller, Tür offen. */
+export function containerEmpty(c) { return c?.status === 'empty' || c?.status === 'pickup' || c?.status === 'gone' || (c?.qty > 0 && c.unloaded >= c.qty); }
+export function containerTint(c) { const base = containerColor(c); return containerEmpty(c) ? mixHex(base, '#ffffff', .45) : base; }
+export function containerTag(c) { return `CTR-${String(c?.id || '').match(/(\d+)$/)?.[1] || '?'}`; }
+/** Label (nur bei Auswahl): „CTR-3 · Entladen 5/20 Paletten · Lagergeld 2 Std.“ */
+export function containerLabel(c) {
+  const unit = c?.content === 'pallet' ? 'Paletten' : 'Pakete', rest = `${c?.unloaded || 0}/${c?.qty || 0} ${unit}`;
+  const st = { arriving: 'Anlieferung', yard: c?.unloaded > 0 ? `Im Containerhof · ${rest}` : `Im Containerhof · ${c?.qty || 0} ${unit}`, toDock: 'Umfuhr zum Dock', unstuffing: `Entladen ${rest}`, empty: 'Leer · wartet auf Abholung', pickup: 'Leer · Abholung', gone: 'Abgeholt' }[c?.status] || c?.status || '';
+  let s = `${containerTag(c)} · ${st}`;
+  if (c?.waitReason && c.status === 'yard') s += ` · ${c.waitReason}`;
+  if (c?.demurrageMinutes > 0) s += ` · Lagergeld ${Math.ceil(c.demurrageMinutes / 60)} Std.`;
+  return s;
+}
+/**
+ * Stellplätze im Containerhof: Container mit status yard/empty/pickup erhalten je Standort einen Platz {key, b, k, lane, level}.
+ * prev (Map id → Platz bzw. Schlüssel der letzten Zuordnung) hält Plätze stabil; neue Container füllen erst den Boden, dann die zweite Ebene.
+ * Wird ein unterer Platz frei, rutscht der obere Container nach (nie schwebend, höchstens 2 hoch). Überzählige bleiben ohne Platz.
+ */
+export function containerYardSlots(state, siteId, buildings = (state?.buildings || []).filter(b => b.site === siteId), prev = null) {
+  const per = yardPlaces(), lanes = yardLanes(), slots = [], map = new Map(), taken = new Map();
+  for (const b of buildings) if (b.type === 'containeryard') for (let k = 0; k < per; k++) slots.push({ key: `${b.id}:${k}`, b, k, lane: k % lanes, level: Math.floor(k / lanes) });
+  const byKey = new Map(slots.map(x => [x.key, x])), list = [];
+  (state?.containers || []).forEach((c, i) => { if (c && c.site === siteId && C_IN_YARD.has(c.status)) list.push([c, i]); });
+  list.sort((p, q) => (p[0].arrivedAt ?? 0) - (q[0].arrivedAt ?? 0) || p[1] - q[1]);
+  const rest = [];
+  for (const [c] of list) { const o = prev?.get(c.id), key = typeof o === 'string' ? o : o?.key, x = key && byKey.get(key); if (x && !taken.has(key)) { taken.set(key, c); map.set(c.id, x); } else rest.push(c); }
+  for (const c of rest) { const x = slots.find(o => !taken.has(o.key)); if (!x) break; taken.set(x.key, c); map.set(c.id, x); }
+  for (const x of slots) {
+    if (!x.level || !taken.has(x.key)) continue; let to = x;
+    for (let l = x.level - 1; l >= 0; l--) { const d = byKey.get(`${x.b.id}:${x.lane + l * lanes}`); if (!d || taken.has(d.key)) break; to = d; }
+    if (to !== x) { const c = taken.get(x.key); taken.delete(x.key); taken.set(to.key, c); map.set(c.id, to); }
+  }
+  return { map, slots, containers: list.map(p => p[0]) };
+}
+/** Weltpose eines Stellplatzes (Mitte unten, Drehung wie die Anlage). */
+export function yardSlotPose(slot, out = {}) { toWorld(slot.b, YARD_LX, yardLaneZ(slot.lane), out); out.y = YARD_Y + slot.level * CONTAINER_H; return out; }
+/** Belegung je Containerhof in Plätzen wie containers.teuUsed (inkl. angelieferter Container ab toYard), der Reihe nach auf die Höfe verteilt. */
+export function containerYardUse(state, siteId, buildings = (state?.buildings || []).filter(b => b.site === siteId)) {
+  const per = yardPlaces(), admitted = new Set();
+  for (const a of state?.yard || []) if (a?.kind === 'container' && !a.pickup && a.site === siteId && (a.phase === 'toYard' || a.phase === 'drop')) for (const id of a.containerIds || []) admitted.add(id);
+  let teu = 0; for (const c of state?.containers || []) if (c?.site === siteId && (C_OCCUPY.has(c.status) || (c.status === 'arriving' && admitted.has(c.id)))) teu += c.teu || CONTAINER_TEU;
+  let left = Math.ceil(teu / CONTAINER_TEU);
+  return buildings.filter(b => b.type === 'containeryard').map(b => { const used = Math.min(per, left); left -= used; return { id: b.id, used, cap: per }; });
+}
+export function containerYardLabel(u) { return `Containerhof · ${u?.used ?? 0}/${u?.cap ?? yardPlaces()} Plätze`; }
+/** Halteplatz eines Chassis am Containerhof: Andockreihe in Höhe der Hofmitte (Heck zur Halle). */
+export function yardBayPose(L, b, len = FOREIGN_LEN) { const box = buildingBox(b); return dockSlotPose(L, Math.max(1, Math.min(L.W - 1, (box.x0 + box.x1) / 2)), len); }
+/**
+ * Weg zu einem Platz an der Andockreihe (Dock oder Containerhof): vom Warteplatz rückwärts ausparken, von der Andockreihe vorwärts zur Hofgasse,
+ * an der Zielspalte vorbei und rückwärts einsetzen (Heck voran). Funktioniert von Westen und Osten.
+ */
+export function bayPath(L, from, to) {
+  const T = YARD_TURN, pts = [pt(from.x, from.z)], parked = Math.abs(Math.sin(from.heading) + 1) < .05 && from.z < L.laneZ - 1 && from.x < L.queue.x1;
+  let x = from.x;
+  if (parked) { pts.push(pt(from.x, L.laneZ, true), pt(from.x - T, L.laneZ, true)); x = from.x - T; }
+  else if (Math.abs(from.z - L.laneZ) > .05) pts.push(pt(from.x, L.laneZ));
+  pts.push(pt(to.x + (x > to.x ? -T : T), L.laneZ), pt(to.x, L.laneZ, true), pt(to.x, to.z, true));
+  return makePath(pts);
+}
+export function containerArrivalTone(a) {
+  switch (a?.phase) {
+    case 'queue': return 'wait';
+    case 'toYard': return 'move';
+    case 'drop': return a.waitReason ? 'wait' : 'dock';
+    case 'gate': return a.waitReason ? 'wait' : 'gate';
+    default: return 'gate';
+  }
+}
+/** Chassis-Label: „Kennzeichen · Containerhof|Abstellen|…“, Leerabholung „Kennzeichen · Abholung · …“, mehrere Container, Wartegrund. */
+export function containerArrivalLabel(a) {
+  const phase = a?.pickup && a.phase === 'drop' ? 'Aufnehmen' : CONTAINER_PHASE_LABEL[a?.phase] || a?.phase || '', n = a?.containers || a?.containerIds?.length || 1;
+  let s = `${a?.plate || a?.id || 'Chassis'} · ${a?.pickup ? 'Abholung · ' : ''}${phase}`;
+  if (!a?.pickup && n > 1) s += ` · ${n} Container`;
+  return a?.waitReason ? `${s} · ${a.waitReason}` : s;
+}
+/**
+ * Darstellungsplan eines Containerchassis (Zugmaschine + Chassis, Container wenn beladen). ctx wie arrivalPlan; ctx.dock = Halteplatz am Containerhof.
+ * Anlieferung beladen bis Ende drop, Abholung beladen ab exit. Interpolation wie Fremd-Lkw (phaseStart/phaseEnd).
+ */
+export function containerChassisPlan(L, a, ctx = {}) {
+  if (!a || !CONTAINER_PHASE_LABEL[a.phase]) return null;
+  const g = gatePose(L), yard = ctx.dock || null, timed = Number.isFinite(a.phaseStart) && Number.isFinite(a.phaseEnd), loaded = a.pickup ? a.phase === 'exit' : a.phase !== 'exit';
+  const base = containerColor({ contractId: a.contractId, id: a.containerIds?.[0] });
+  const plan = { id: a.id, phase: a.phase, path: null, t0: timed ? a.phaseStart : null, t1: timed ? a.phaseEnd : null, pose: g, fixedHeading: null, tone: containerArrivalTone(a), label: containerArrivalLabel(a), color: carrierColor(a.carrier), x: g.x, z: g.z, heading: g.heading, pallet: false, pallets: 0, container: true, pickup: !!a.pickup, loaded, ccolor: loaded ? (a.pickup ? mixHex(base, '#ffffff', .45) : base) : null };
+  switch (a.phase) {
+    case 'approach': plan.path = approachPath(L); break;
+    case 'gate': break;
+    case 'queue': {
+      const place = plan.pose = queuePlace(L, Math.max(0, ctx.rank ?? 0));
+      if (ctx.slide) { plan.path = makePath([pt(ctx.slide.from.x, ctx.slide.from.z), pt(place.x, place.z)]); plan.t0 = ctx.slide.at; plan.t1 = ctx.slide.at + QUEUE_DRIVE; plan.fixedHeading = place.heading; }
+      else if (Number.isFinite(a.phaseStart)) { plan.path = queueEntryPath(L, place); plan.t0 = a.phaseStart; plan.t1 = a.phaseStart + QUEUE_DRIVE; }
+      break;
+    }
+    case 'toYard': { const from = ctx.from || g; plan.pose = from; if (yard) plan.path = bayPath(L, from, yard); break; }
+    case 'drop': plan.pose = yard || g; plan.t0 = plan.t1 = null; break;
+    case 'exit': plan.path = exitPath(L, yard || g); break;
+  }
+  if (plan.path && plan.t1 == null) plan.pose = pathPose(plan.path, 1, {});
+  arrivalPose(plan, plan.t0 ?? 0, plan);
+  return plan;
+}
+/**
+ * Container am Dock (status toDock/unstuffing, Dock über container.dock): steht auf Hofchassis mit Zugmaschine am Andockplatz.
+ * toDock fährt von fromPose(c) (Containerhof) zwischen statusAt und moveEnd zum Dock (Hofumfuhr), unstuffing steht.
+ */
+export function dockContainerPlans(state, siteId, buildings, L, fromPose = () => null) {
+  const out = [];
+  for (const c of state?.containers || []) {
+    if (c?.site !== siteId || !C_AT_DOCK.has(c.status)) continue;
+    const dock = dockPoseFor(L, buildings, c.dock); if (!dock) continue;
+    const plan = { id: c.id, status: c.status, dock: c.dock, pose: dock, path: null, t0: null, t1: null, fixedHeading: null, x: dock.x, z: dock.z, heading: dock.heading, color: containerTint(c), demurrage: c.demurrageMinutes > 0, label: containerLabel(c) };
+    if (c.status === 'toDock' && Number.isFinite(c.statusAt) && Number.isFinite(c.moveEnd) && c.moveEnd > c.statusAt) { const from = fromPose(c); if (from) { plan.path = bayPath(L, from, dock); plan.t0 = c.statusAt; plan.t1 = c.moveEnd; } }
+    arrivalPose(plan, plan.t0 ?? 0, plan); out.push(plan);
+  }
+  return out;
 }
 
 // ---------- Geometrie-Werkzeuge ----------
@@ -705,6 +849,25 @@ function buildingModel(P, type, d) {
       P.box(-.2, 0, -hh + .04, .4, .1, .26, '#788f96'); P.box(-.16, .1, -hh + .08, .32, 1.05, .18, '#d3dadb'); P.box(-.18, 1.15, -hh + .06, .36, .06, .22, tint);
       P.box(-.13, .3, -hh + .26, .26, .7, .012, '#2e3a3c'); P.box(.12, .55, -hh + .26, .05, .05, .2, '#5d6d70'); P.box(.15, .2, -hh + .44, .03, .37, .03, '#2e3a3c');
       break;
+    case 'containeryard': {
+      // Containerhof 4×3 (W3b): Betonfläche, je Spur Stellplatzmarkierung mit Auflagern (40 Fuß, bis 2 hoch), Fahrspur und Reach-Stacker
+      // (angedeutet) am Südrand, Leuchtmast. Container selbst sind Instanzen (Belegung aus s.containers).
+      P.box(-hw + .04, 0, -hh + .04, d.w - .08, .02, d.h - .08, '#98a2a1');
+      const sl = CONTAINER_LEN + .16, sw = CONTAINER_W + .1, line = '#f4f5ec';
+      for (let lane = 0; lane < Math.ceil(yardPlaces() / YARD_LEVELS); lane++) {
+        const x0 = YARD_LX - sl / 2, z0 = yardLaneZ(lane) - sw / 2;
+        P.box(x0, .02, z0, sl, .006, .035, line); P.box(x0, .02, z0 + sw - .035, sl, .006, .035, line); P.box(x0, .02, z0, .035, .006, sw, line); P.box(x0 + sl - .035, .02, z0, .035, .006, sw, line);
+        for (const x of [x0 + .1, x0 + sl - .18]) for (const z of [z0 + .07, z0 + sw - .15]) P.box(x, .02, z, .08, .03, .08, '#5d6d70');
+      }
+      P.box(-hw + .12, .02, .44, d.w - .24, .006, .035, '#f2c363');
+      // Reach-Stacker: Fahrgestell, Gegengewicht, Kabine, schräger Ausleger mit Spreader über der Spur.
+      P.box(.35, .02, .62, 1.25, .26, .62, '#e9a63c'); P.box(1.42, .02, .6, .2, .46, .66, '#3c4a4d'); P.box(.42, .28, .7, .36, .44, .46, '#355862'); P.box(.4, .72, .68, .4, .04, .5, '#e9a63c');
+      for (const x of [.55, 1.35]) for (const z of [.6, 1.16]) { const r = new THREE.Matrix4().makeRotationX(Math.PI / 2).multiply(new THREE.Matrix4().makeScale(.34, .1, .34)).setPosition(x, .19, z + .04); P.add(prims().cyl10, r, '#2f3a3d'); }
+      { const len = 1.7, ang = .42, cx = .62, cy = 1.0; P.add(prims().box, new THREE.Matrix4().compose(_p.set(cx, cy - .07, .93), _q.setFromAxisAngle(new THREE.Vector3(0, 0, 1), -ang + Math.PI), _s.set(len, .14, .16)), '#e9a63c');
+        const tx = cx - Math.cos(ang) * len / 2; P.box(tx - .06, cy - .1 + Math.sin(ang) * len / 2 - .15, .55, .12, .12, .78, '#3c4a4d'); }
+      P.cyl(hw - .16, .02, hh - .16, .04, 2.5, '#7d8c8f'); P.box(hw - .5, 2.48, hh - .2, .4, .06, .08, '#7d8c8f'); P.box(hw - .5, 2.42, hh - .22, .3, .06, .12, '#fff1c8');
+      break;
+    }
     default:
       plinth(); P.box(-hw + .2, .12, -hh + .2, d.w - .4, .8, d.h - .4, tint);
   }
@@ -882,8 +1045,8 @@ export class Scene3D {
     this.labelRoot?.classList.toggle('night', n >= .5); this.needs = true;
   }
   /** Leuchtkörper und Lichtflächen der Nachtbeleuchtung (je 1 Draw Call). */
-  rebuildLights(site, L, docks) {
-    const lights = nightLights(site, L, docks), H = new Parts();
+  rebuildLights(site, L, docks, yards = []) {
+    const lights = nightLights(site, L, docks, yards), H = new Parts();
     for (const h of lights.heads) { if (h.y > 3) { H.box(h.x - .32, h.y - .1, h.z - .14, .64, .1, .28, '#fff1c8'); } else H.box(h.x - .22, h.y - .08, h.z - .08, .44, .08, .16, '#fff4d6'); }
     const pos = [], colr = [], seg = 18, warm = [1, .86, .58];
     const tri = (a, b, c, ca, cb, cc) => { pos.push(...a, ...b, ...c); colr.push(...ca, ...cb, ...cc); };
@@ -980,7 +1143,28 @@ export class Scene3D {
         P.box(-.05, .93, -.03, .06, .05, .06, '#f2c363');
       }), this.mat.inst, 4),
       charge: inst(prims().box, this.mat.lamp, 4),
-      car: inst(mergedGeo(P => { P.box(-.9, .15, -.42, 1.8, .42, .84, '#ffffff'); P.box(-.5, .57, -.38, .95, .32, .76, '#ffffff'); P.box(-.48, .6, -.39, .9, .24, .78, '#3c5560'); }), this.mat.inst, 16)
+      car: inst(mergedGeo(P => { P.box(-.9, .15, -.42, 1.8, .42, .84, '#ffffff'); P.box(-.5, .57, -.38, .95, .32, .76, '#ffffff'); P.box(-.48, .6, -.39, .9, .24, .78, '#3c5560'); }), this.mat.inst, 16),
+      // W3b Containerhof: 40-Fuß-Container (Länge +x, Türseite −x, Instanzfarbe je Vertrag), offene Türflügel (leer), Lagergeld-Markierung (Dachband),
+      // Containerchassis (Skelettauflieger, Bug +x; Zugmaschine = fcab). Je 1 Draw Call.
+      cont: inst(mergedGeo(P => {
+        const hl = CONTAINER_LEN / 2, hw = CONTAINER_W / 2, h = CONTAINER_H;
+        P.box(-hl, 0, -hw, CONTAINER_LEN, h, CONTAINER_W, '#ffffff');
+        for (let i = 0; i < 14; i++) { const x = -hl + .16 + i * .235; P.box(x, .07, -hw - .012, .08, h - .14, .012, '#d4d4d4'); P.box(x, .07, hw, .08, h - .14, .012, '#d4d4d4'); }
+        P.box(-hl - .006, 0, -hw - .006, CONTAINER_LEN + .012, .06, CONTAINER_W + .012, '#9c9c9c'); P.box(-hl - .006, h - .05, -hw - .006, CONTAINER_LEN + .012, .05, CONTAINER_W + .012, '#c2c2c2');
+        for (const x of [-hl - .006, hl - .06]) for (const z of [-hw - .006, hw - .06]) P.box(x, 0, z, .066, h, .066, '#a8a8a8');
+        for (const z of [-.25, -.08, .08, .25]) P.box(-hl - .02, .07, z - .012, .02, h - .14, .024, '#6e6e6e');
+        for (let i = 0; i < 3; i++) P.box(hl, .1 + i * .22, -hw + .06, .01, .1, CONTAINER_W - .12, '#d4d4d4');
+      }), this.mat.inst, 8),
+      cdoor: inst(mergedGeo(P => { const hl = CONTAINER_LEN / 2, hw = CONTAINER_W / 2, h = CONTAINER_H; P.box(-hl - .03, .05, -hw + .03, .006, h - .1, CONTAINER_W - .06, '#262f30'); P.box(-hl - hw, .04, -hw - .03, hw, h - .08, .025, '#ffffff'); P.box(-hl - hw, .04, hw + .005, hw, h - .08, .025, '#ffffff'); }), this.mat.inst, 8),
+      cmark: inst(mergedGeo(P => { P.box(-1.55, 0, -.05, 3.1, .016, .1, '#ffffff'); P.box(-CONTAINER_LEN / 2 - .035, -.26, -.2, .01, .2, .4, '#ffffff'); }), this.mat.inst, 8),
+      cchassis: inst(mergedGeo(P => {
+        for (const z of [-.42, .3]) P.box(-2.52, .42, z, 3.6, .12, .12, '#3c4a4d');
+        for (let i = 0; i < 6; i++) P.box(-2.45 + i * .68, .44, -.5, .08, .08, 1.0, '#4a585b');
+        P.box(-2.56, .3, -.6, .06, .16, 1.2, '#5d6d70'); P.box(-2.57, .34, -.58, .02, .07, .14, '#cb675d'); P.box(-2.57, .34, .44, .02, .07, .14, '#cb675d');
+        for (const x of [-2.5, .98]) for (const z of [-.5, .38]) P.box(x, .54, z, .1, .04, .12, '#e9b94d');
+        P.box(-.4, .1, -.4, .06, .34, .06, '#5d6d70'); P.box(-.4, .1, .34, .06, .34, .06, '#5d6d70');
+        for (const x of [-2.05, -1.6, -1.15]) for (const z of [-.66, .52]) { const r = new THREE.Matrix4().makeRotationX(Math.PI / 2).multiply(new THREE.Matrix4().makeScale(.56, .14, .56)).setPosition(x, .28, z); P.add(prims().cyl10, r, '#2f3a3d'); }
+      }), this.mat.inst, 4)
     };
     for (const m of Object.values(this.inst)) g.add(m);
     this.selectBox = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1).translate(.5, .5, .5)), this.mat.select); this.selectBox.visible = false;
@@ -1042,7 +1226,8 @@ export class Scene3D {
       buildingModel(P, b.type, d); P.base.identity();
     }
     // Hofmasten (Leuchtkörper und Lichtkegel separat, s. rebuildLights)
-    const lights = this.rebuildLights(s, L, [...slots.values()]);
+    const yards = buildings.filter(b => b.type === 'containeryard').map(b => { const box = buildingBox(b); return { x: (box.x0 + box.x1) / 2, z: (box.z0 + box.z1) / 2 }; });
+    const lights = this.rebuildLights(s, L, [...slots.values()], yards);
     for (const m of lights.masts) { P.cyl(m.x, 0, m.z, .07, m.h, '#7d8c8f'); P.box(m.x - .35, m.h - .12, m.z - .04, .7, .06, .08, '#7d8c8f'); }
     const old = this.static.geometry; this.static.geometry = P.geometry(); old.dispose();
     const pts = []; for (let x = 0; x <= W; x++) pts.push(x, .065, 0, x, .065, H); for (let y = 0; y <= H; y++) pts.push(0, .065, y, W, .065, y);
@@ -1070,11 +1255,12 @@ export class Scene3D {
     const st = this.state, s = this.site(), buildings = (st?.buildings || []).filter(b => b.site === s.id);
     let n = 0, np = 0; this.boxes = []; this.infra = []; const lamp = this.ensure('lamp', buildings.length), plate = this.ensure('plate', buildings.length);
     let pallets = 0; for (const b of buildings) if (/rack|shelf|regal/.test(b.type)) pallets += 3 * Math.max(1, Math.floor(BUILDINGS[b.type]?.w || 2));
-    const pal = this.ensure('pallet', pallets);
+    const pal = this.ensure('pallet', pallets), cuse = new Map(containerYardUse(st, s.id, buildings).map(u => [u.id, u]));
     for (const b of buildings) {
       const box = buildingBox(b), tone = buildingTone(b), cx = (box.x0 + box.x1) / 2, cz = (box.z0 + box.z1) / 2, warn = b.type === 'coldstore' && coldWarnings(st, b.site).length;
       this.boxes.push({ id: b.id, box });
-      if (b.type === 'forklift') { const low = forkliftCharge(b) < FORK_MIN; this.infra.push({ id: b.id, x: cx, y: box.y1 + .75, z: cz, text: forkliftLabel(b), tone: low || tone === 'blocked' ? 'wait' : 'infra', prio: low || tone === 'blocked' ? 1 : 3 }); }
+      if (b.type === 'containeryard') { const u = cuse.get(b.id), full = u && u.used >= u.cap; this.infra.push({ id: b.id, x: cx, y: 2.45, z: cz, text: containerYardLabel(u), tone: full || tone === 'blocked' ? 'wait' : 'infra', prio: full || tone === 'blocked' ? 1 : 3 }); }
+      else if (b.type === 'forklift') { const low = forkliftCharge(b) < FORK_MIN; this.infra.push({ id: b.id, x: cx, y: box.y1 + .75, z: cz, text: forkliftLabel(b), tone: low || tone === 'blocked' ? 'wait' : 'infra', prio: low || tone === 'blocked' ? 1 : 3 }); }
       else this.infra.push({ id: b.id, x: cx, y: box.y1 + .75, z: cz, text: `${BUILDINGS[b.type]?.name || b.type} · ${this.buildingStatus(b)}`, tone: tone === 'blocked' || warn ? 'wait' : 'infra', prio: warn || tone === 'blocked' || (b.type === 'terminal' && b.freightTask) ? 1 : 3 });
       this.setInst(lamp, n, cx, box.y1 + .32, cz, 0, 1, 1, 1, warn ? TONE_HEX.blocked : TONE_HEX[tone]);
       this.setInst(plate, n, cx, .07, cz, 0, box.w + .12, 1, box.h + .12, tone === 'active' ? '#7fd9b4' : tone === 'blocked' || warn ? '#f3c674' : '#d7dfdb'); n++;
@@ -1100,19 +1286,47 @@ export class Scene3D {
     for (const p of plans) { p.hit = { id: p.v.id, box: { x0: 0, x1: 0, y0: 0, y1: 1.9, z0: 0, z1: 0 }, fleet: p }; this.boxes.push(p.hit); }
     // Fremd-Lkw aus s.yard (W1-S4); Positionen folgen pro Frame. Phasenwechsel übernehmen die zuletzt gezeigte Pose (nur Darstellung).
     const prevYard = this.yardMap, yardMap = new Map(), yplans = [], order = queueOrder(st?.yard, s.id), now = this.clock.shown ?? st?.t ?? 0;
+    // W3b: Stellplätze im Containerhof (stabil über this.contSlots), Halteplatz der Chassis je Containerhof.
+    const cy = containerYardSlots(st, s.id, buildings, this.contSlots), yardsHere = buildings.filter(b => b.type === 'containeryard');
+    this.contSlots = cy.map;
+    const yardFor = a => { if (!yardsHere.length) return null; const held = a.containerIds?.map(id => cy.map.get(id)?.b).find(Boolean); if (held) return held;
+      return yardsHere.find(b => (cuse.get(b.id)?.used ?? 0) < (cuse.get(b.id)?.cap ?? 0)) || yardsHere[0]; };
     for (const a of st?.yard || []) {
-      if (a.site !== s.id || !PHASE_LABEL[a.phase]) continue;
+      if (a.site !== s.id || !(a.kind === 'container' ? CONTAINER_PHASE_LABEL : PHASE_LABEL)[a.phase]) continue;
       const p0 = prevYard?.get(a.id), rank = a.phase === 'queue' ? order.indexOf(a.id) : -1, last = p0 ? { x: p0.x, z: p0.z, heading: p0.heading } : null;
       let from = null, slide = null;
       if (a.phase === 'queue' && p0) slide = p0.phase === 'queue' ? (p0.rank === rank ? p0.slide : { from: last, at: now }) : ['toDock', 'docking'].includes(p0.phase) ? { from: last, at: now } : null;
-      if (a.phase === 'toDock') from = p0?.phase === 'toDock' ? p0.from : last;
-      const dock = dockPoseFor(L, buildings, a.dock) || (a.phase === 'exit' ? p0?.dock || null : null);
+      if (a.phase === 'toDock' || a.phase === 'toYard') from = p0?.phase === a.phase ? p0.from : last;
+      let dock;
+      if (a.kind === 'container') { const y = (a.phase === 'exit' && p0?.dock) || (yardFor(a) && yardBayPose(L, yardFor(a))); dock = y || null; }
+      else dock = dockPoseFor(L, buildings, a.dock) || (a.phase === 'exit' ? p0?.dock || null : null);
       const plan = arrivalPlan(L, a, { rank, dock, from, slide }); if (!plan) continue;
       Object.assign(plan, { rank, from, slide, dock, shown: true }); arrivalPose(plan, now, plan);
       plan.hit = { id: a.id, box: { x0: 0, x1: 0, y0: 0, y1: 2, z0: 0, z1: 0 }, fleet: plan }; this.boxes.push(plan.hit);
       yardMap.set(a.id, plan); yplans.push(plan);
     }
-    this.yardMap = yardMap; this.yardFleet = yplans; this.ensure('ftrailer', yplans.length); this.ensure('fcab', yplans.length);
+    this.yardMap = yardMap; this.yardFleet = yplans; this.ensure('ftrailer', yplans.length);
+    // W3b: Container im Hof (statisch je Zustand), am Dock (Hofumfuhr/Entladen, Pose pro Frame), Chassis-Ladung pro Frame in placeYard.
+    const home = new Map(), prevHome = this.contHome;
+    for (const [id, slot] of cy.map) home.set(id, slot.b.id);
+    const dconts = this.dockConts = dockContainerPlans(st, s.id, buildings, L, c => { const b = buildings.find(o => o.id === prevHome?.get(c.id)) || yardsHere[0]; return b ? yardBayPose(L, b) : null; });
+    for (const p of dconts) { if (prevHome?.has(p.id)) home.set(p.id, prevHome.get(p.id)); arrivalPose(p, now, p); p.shown = true; p.hit = { id: p.id, box: { x0: 0, x1: 0, y0: 0, y1: 1.4, z0: 0, z1: 0 }, fleet: p }; this.boxes.push(p.hit); }
+    this.contHome = home;
+    this.ensure('fcab', yplans.length + dconts.length); this.ensure('cchassis', yplans.length + dconts.length);
+    const cont = this.ensure('cont', cy.map.size + yplans.length + dconts.length), door = this.ensure('cdoor', cy.map.size), mark = this.ensure('cmark', cy.map.size + dconts.length);
+    let nc = 0, nd = 0, nm = 0; const cpose = {}; this.contLabels = [];
+    for (const c of cy.containers) {
+      const slot = cy.map.get(c.id); if (!slot) continue; yardSlotPose(slot, cpose); const rot = cpose.rot;
+      this.setInst(cont, nc++, cpose.x, cpose.y, cpose.z, rot, 1, 1, 1, containerTint(c));
+      const ox = Math.cos(rot), oz = -Math.sin(rot); // lokale +x-Achse in Welt (Drehung wie toWorld)
+      if (containerEmpty(c)) this.setInst(door, nd++, cpose.x, cpose.y, cpose.z, rot, 1, 1, 1, containerTint(c));
+      if (c.demurrageMinutes > 0) this.setInst(mark, nm++, cpose.x, cpose.y + CONTAINER_H, cpose.z, rot, 1, 1, 1, DEMURRAGE_HEX);
+      const hx = Math.abs(ox) * CONTAINER_LEN / 2 + Math.abs(oz) * CONTAINER_W / 2, hz = Math.abs(oz) * CONTAINER_LEN / 2 + Math.abs(ox) * CONTAINER_W / 2;
+      this.boxes.push({ id: c.id, box: { x0: cpose.x - hx, x1: cpose.x + hx, y0: cpose.y, y1: cpose.y + CONTAINER_H, z0: cpose.z - hz, z1: cpose.z + hz } });
+      this.contLabels.push({ id: c.id, x: cpose.x, y: cpose.y + CONTAINER_H + .5, z: cpose.z, text: containerLabel(c), tone: c.demurrageMinutes > 0 ? 'bad' : c.waitReason ? 'wait' : 'infra' });
+    }
+    for (const p of dconts) { p.chip = { id: p.id, x: p.x, y: 2.1, z: p.z, text: p.label, tone: p.demurrage ? 'bad' : p.status === 'toDock' ? 'move' : 'dock' }; this.contLabels.push(p.chip); }
+    this.contBase = nc; this.markBase = nm; this.finish(door, nd);
     // Pakete (W1): Rollcontainer (inbound) auf den Docks, Kartonstapel (stock) am Sortierplatz-Ausgang bzw. an Regalen.
     const loads = parcelLoads(st, s.id, buildings), cage = this.ensure('cage', loads.cages.length), stack = this.ensure('stack', loads.stacks.length);
     loads.cages.forEach((c, i) => this.setInst(cage, i, c.x, .56, c.z, c.rot, 1, 1, 1)); this.finish(cage, loads.cages.length);
@@ -1226,18 +1440,32 @@ export class Scene3D {
     this.finish(box, n); this.finish(cab, n); this.finish(base, n); return animated;
   }
   placeYard(clock) {
-    const tr = this.inst.ftrailer, cab = this.inst.fcab, flat = this.inst.fflat, load = this.inst.tload; let n = 0, nf = 0, nl = 0, animated = false;
+    const tr = this.inst.ftrailer, cab = this.inst.fcab, flat = this.inst.fflat, load = this.inst.tload, chs = this.inst.cchassis, cont = this.inst.cont, mark = this.inst.cmark;
+    let n = 0, nt = 0, nf = 0, nl = 0, nch = 0, nc = this.contBase || 0, nm = this.markBase || 0, animated = false;
+    const onChassis = (p, rot, hex, demurrage) => {
+      this.setInst(chs, nch++, p.x, 0, p.z, rot, 1, 1, 1, '#ffffff'); if (!hex) return;
+      const x = p.x + CHASSIS_LX * Math.cos(p.heading), z = p.z + CHASSIS_LX * Math.sin(p.heading);
+      this.setInst(cont, nc++, x, CHASSIS_Y, z, rot, 1, 1, 1, hex); if (demurrage) this.setInst(mark, nm++, x, CHASSIS_Y + CONTAINER_H, z, rot, 1, 1, 1, DEMURRAGE_HEX);
+    };
     for (const p of this.yardFleet) {
       arrivalPose(p, clock, p); if (arrivalMoving(p, clock)) animated = true;
       const rot = -p.heading; this.setInst(cab, n, p.x, 0, p.z, rot, 1, 1, 1, p.color); n++;
-      if (p.pallet) {
+      if (p.container) onChassis(p, rot, p.loaded ? p.ccolor : null, false);
+      else if (p.pallet) {
         // Palettenauflieger: Ladung von vorn (Stirnwand) nach hinten, hintere Plätze leeren sich beim Entladen zuerst.
         this.setInst(flat, nf++, p.x, 0, p.z, rot, 1, 1, 1, '#e3e6ea'); const c = Math.cos(p.heading), sn = Math.sin(p.heading);
         for (let i = 0; i < p.pallets; i++) { const lx = .4 - Math.floor(i / 2) * .85, lz = i % 2 ? .3 : -.3; this.setInst(load, nl++, p.x + lx * c - lz * sn, .62, p.z + lx * sn + lz * c, rot, .75, .9, .75); }
-      } else this.setInst(tr, n - 1 - nf, p.x, 0, p.z, rot, 1, 1, 1, '#e3e6ea');
+      } else this.setInst(tr, nt++, p.x, 0, p.z, rot, 1, 1, 1, '#e3e6ea');
       const r = FOREIGN_LEN / 2, hb = p.hit.box; hb.x0 = p.x - r; hb.x1 = p.x + r; hb.z0 = p.z - r; hb.z1 = p.z + r;
     }
-    this.finish(tr, n - nf); this.finish(cab, n); this.finish(flat, nf); this.finish(load, nl); return animated;
+    // W3b: Container am Dock auf Hofchassis mit Hofzugmaschine (neutral grau); Umfuhr interpoliert wie Fremd-Lkw.
+    for (const p of this.dockConts || []) {
+      arrivalPose(p, clock, p); if (arrivalMoving(p, clock)) animated = true;
+      const rot = -p.heading; this.setInst(cab, n++, p.x, 0, p.z, rot, 1, 1, 1, '#8d979b'); onChassis(p, rot, p.color, p.demurrage);
+      if (p.chip) { p.chip.x = p.x + CHASSIS_LX * Math.cos(p.heading); p.chip.z = p.z + CHASSIS_LX * Math.sin(p.heading); }
+      const r = FOREIGN_LEN / 2, hb = p.hit.box; hb.x0 = p.x - r; hb.x1 = p.x + r; hb.z0 = p.z - r; hb.z1 = p.z + r;
+    }
+    this.finish(tr, nt); this.finish(cab, n); this.finish(flat, nf); this.finish(load, nl); this.finish(chs, nch); this.finish(cont, nc); this.finish(mark, nm); return animated;
   }
   /** Stapler: Pose aus der Anzeigeuhr (rein optisch), mitgeführte Palette, Label folgt dem Fahrzeug. */
   placeForklifts(clock) {
@@ -1295,6 +1523,8 @@ export class Scene3D {
       if (fleet) for (const p of this.fleet) if (p.shown) this.candidate(p.v.id, p.x, 2.3, p.z, p.label, p.tone, 2);
       if (fleet) for (const p of this.yardFleet) this.candidate(p.id, p.x, 2.6, p.z, p.label, p.tone, 2);
       if (mode !== 'none') for (const b of this.infra) { const sel = b.id === this.selected; if (infra || sel) this.candidate(b.id, b.x, b.y, b.z, b.text, b.tone, sel ? 0 : b.prio); }
+      // W3b: Container-Label nur bei Auswahl.
+      if (mode !== 'none' && this.selected != null) for (const c of this.contLabels || []) if (c.id === this.selected) this.candidate(c.id, c.x, c.y, c.z, c.text, c.tone, 0);
     }
     const out = selectLabels(t.cands, this.width, this.height, MAX_LABELS, t.labelOut);
     for (let i = 0; i < out.length; i++) {
