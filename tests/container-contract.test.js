@@ -29,12 +29,16 @@ function activeContract(seed){
  const orders=sim.state.orders.filter(o=>o.contractId===k.id);assert.ok(orders.length>0,'Aufträge zur Ankunft');
  return {sim,k,orders};
 }
-/** Container-Datensatz wie containers.js (W3b-S2), direkt angelegt. */
+/** Container-Datensatz wie containers.js (W3b-S2), direkt angelegt (A07/A05: vollständige Felder, damit Laden validiert). */
 function addContainer(sim,k,fields={}){
  const s=sim.state,c={id:sim.api.id('container'),site:k.site,contractId:k.id,orderIds:[],content:itemOf(k),qty:k.unitsPerContainer,unloaded:0,
-  status:'yard',arrivedAt:s.t,freeUntil:s.t+k.freeMinutes,dock:null,demurrageMinutes:0,...fields};
+  status:'yard',arrivedAt:s.t,freeUntil:s.t+k.freeMinutes,dock:null,teu:2,freeMinutes:k.freeMinutes,demurrageMinutes:0,priority:false,
+  waitReason:null,waitSince:null,statusAt:s.t,moveEnd:null,arrivalId:null,emptyAt:null,pickupAt:null,pickupArrival:null,goneAt:null,...fields};
+ c.split=[{owner:c.orderIds[0]??`contract:${k.id}`,target:c.qty,done:c.unloaded}];
  s.containers.push(c);return c;
 }
+/** Status wie containers.js nach vollständigem Entladen bzw. Abholung (Felder für validate). */
+function finish(sim,c,status){c.unloaded=c.qty;c.split[0].done=c.qty;c.status=status;c.emptyAt??=sim.state.t;c.pickupAt??=sim.state.t;if(status==='gone')c.goneAt=sim.state.t;}
 
 test('Containerangebote erst ab Tag 5 ohne Containerhof; Werte aus TERMS.container',()=>{
  const sim=new Simulation();let first=null;
@@ -107,13 +111,13 @@ test('Lagergeld ist Pflichtbuchung (auch ohne Guthaben) und läuft je Container 
 
 test('Handling: Gutschrift genau einmal bei Status empty, nicht vorher, nicht erneut bei pickup/gone oder nach Laden',()=>{
  const {sim,k}=withOffer();cmd(sim,{type:'acceptContract',id:k.id});
- const c=addContainer(sim,k,{status:'unstuffing',unloaded:Math.floor(k.unitsPerContainer/2)}),rev=sim.state.stats.revenue;
+ const c=addContainer(sim,k,{unloaded:Math.floor(k.unitsPerContainer/2)}),rev=sim.state.stats.revenue;
  sim.step(2);assert.equal(ledger(sim,'container-handling:').length,0);
- c.unloaded=c.qty;c.status='empty';sim.step(1);
+ finish(sim,c,'empty');sim.step(1);
  const rows=ledger(sim,'container-handling:');assert.equal(rows.length,1);assert.equal(rows[0].key,`container-handling:${c.id}`);
  assert.equal(rows[0].amount,k.pricePerContainer);assert.equal(rows[0].category,'Umsatz');
  assert.equal(sim.state.stats.revenue,Math.round((rev+k.pricePerContainer)*100)/100);
- c.status='pickup';sim.step(3);c.status='gone';sim.step(3);assert.equal(ledger(sim,'container-handling:').length,1);
+ c.status='pickup';sim.step(3);finish(sim,c,'gone');sim.step(3);assert.equal(ledger(sim,'container-handling:').length,1);
  const re=reload(sim);re.step(5);assert.equal(ledger(re,'container-handling:').length,1);
  // Unvollständig entladen (Status empty, aber unloaded < qty): keine Gutschrift.
  const d=addContainer(sim,k,{status:'empty',unloaded:1});sim.step(2);assert.equal(ledger(sim,`container-handling:${d.id}`).length,0);
@@ -125,9 +129,10 @@ test('Vertragsende wartet, solange ein Container des Auftrags im Hof steht',()=>
  cmd(sim,{type:'cancelContract',id:k.id});
  // Hofankunft zählt ebenfalls; nur den Containerblock prüfen: Hofankünfte entfernen.
  sim.state.yard=sim.state.yard.filter(a=>a.contractId!==k.id);
+ sim.state.containers=sim.state.containers.filter(x=>x===c); // A07/A05: echte Container der Hofankunft ebenfalls entfernt
  sim.step(TERMS.penalty.openGrace+2);
  assert.equal(o.status,'active');assert.equal(o.settleWait,'Container im Hof');
- c.status='empty';c.unloaded=c.qty;sim.step(1);assert.notEqual(o.settleWait,'Container im Hof');
+ finish(sim,c,'empty');sim.step(1);assert.notEqual(o.settleWait,'Container im Hof');
 });
 
 test('validate lehnt beschädigte Containerverträge ab',()=>{

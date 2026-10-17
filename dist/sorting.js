@@ -12,6 +12,7 @@ import {BUILDINGS} from './catalog.js';
 import {siteItemBatches} from './inventory.js';
 import {onShift, workRate} from './workforce.js';
 import {forkliftAvailable, forkliftKey, PALLET} from './yard.js';
+import {staffNeed as containerNeed} from './containers.js';
 
 export const ITEM = 'parcel';
 // 3 Pakete/min Grundleistung vor workRate (A01 W1c, vorher 2): eine Lagerkraft sortiert eine Startanlieferung
@@ -124,7 +125,8 @@ export function step(s, api) {
       return moved;
     };
     // Personalvergabe mit Vorrang fürs Entladen und Beladen (s. unloadNeed, loadNeed).
-    const need = unloadNeed(s, id) + loadNeed(s, id), yielded = new Set();
+    // Containerumschlag (W3b-S2) hat denselben Vorrang wie das Entladen von Hof-Lkw.
+    const need = unloadNeed(s, id) + loadNeed(s, id) + containerNeed(s, id), yielded = new Set();
     let spare = Infinity;
     if (need) {
       spare = freeWarehouse(s, id) - need;

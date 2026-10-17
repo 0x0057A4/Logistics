@@ -4,14 +4,23 @@
 // Belegung b.task=arrival.id von toDock bis Ende unloading. Eigene Abläufe prüfen ebenfalls !b.task → keine Doppelbelegung.
 import {workRate,UNLOAD_BASE,GATE_ROLE} from './workforce.js';
 import {BUILDINGS} from './catalog.js';
+// W3b-S2: Containerchassis (a.kind==='container') nutzen approach→gate→queue→toYard→drop→exit→gone (Logik containers.js).
 export const PHASES=['approach','gate','queue','toDock','docking','unloading','exit','gone'];
-export const DURATION={approach:15,gate:2,toDock:2,docking:1,exit:3};
+export const CONTAINER_PHASES=['approach','gate','queue','toYard','drop','exit','gone'];
+export const DURATION={approach:15,gate:2,toDock:2,docking:1,exit:3,toYard:2,drop:2};
 export const UNLOAD_RATE=UNLOAD_BASE; // Pakete je Minute einer Standardkraft; tatsächlich workRate(Kraft) (A06 W1b)
 export const SORT_RATE=4;           // Pakete je Minute für die atRisk-Schätzung (Sortierplatz 240/h)
 export const KEEP_GONE=1440;        // abgefertigte Einträge bleiben einen Spieltag im Torbuch
 export const WAIT={gate:'Keine Torkontrolle',dock:'Kein freies Dock',staff:'Keine Lagerkraft am Standort',full:'Lager voll',dockOff:'Dock außer Betrieb'};
 // W2-S2 Paletten (A05/A07): Ankunft mit a.item==='pallet' (nur gesetzt bei Paletten; Paketankünfte unverändert).
 WAIT.forklift='Kein Stapler';WAIT.forkliftCharge='Stapler lädt';WAIT.forkliftPower='Kein Strom für Stapler';
+// W3b-S2 Containerhof (A07/A05).
+WAIT.yardFull='Containerhof voll';WAIT.noYard='Kein Containerhof';
+/** Haken für containers.js (registriert beim Laden des Moduls; kein Importzyklus). schedule: Container-Ankunft anlegen;
+ * step: Container-Chassis (queue/toYard/drop) und Containerumschlag – läuft in yard.step vor tickForklifts, damit
+ * Staplernutzung in denselben Akkutakt fällt; holder(id): Staplerbindung eines Containers aktiv. */
+export const containerHooks={schedule:null,step:null,holder:null};
+export const isContainerArrival=a=>a.kind==='container';
 export const PALLET='pallet';
 export const PALLET_BASE=1; // Paletten je Minute einer Standardkraft mit Stapler; tatsächlich workRate(Kraft,1)
 const AT_DOCK=new Set(['toDock','docking','unloading']);
@@ -82,7 +91,7 @@ export function releaseForklift(s,key){for(const b of s.buildings)if(b.type==='f
 // Bindung gilt nur, solange der Vorgang in der Staplerphase ist; sonst (z. B. Abbruch durch Fremdmodul) gelöst.
 function forkliftHolderActive(s,key){
  const id=key.slice(0,-':forklift'.length);
- return s.yard?.some(a=>a.id===id&&a.phase==='unloading')||s.shipments?.some(x=>x.id===id&&x.status==='loading')||(s.tours||[]).some(x=>x.id===id&&x.status==='loading')||(s.linehauls||[]).some(x=>x.id===id&&(x.status==='loading'||x.status==='unloading'));
+ return s.yard?.some(a=>a.id===id&&a.phase==='unloading')||!!containerHooks.holder?.(s,id)||s.shipments?.some(x=>x.id===id&&x.status==='loading')||(s.tours||[]).some(x=>x.id===id&&x.status==='loading')||(s.linehauls||[]).some(x=>x.id===id&&(x.status==='loading'||x.status==='unloading'));
 }
 export function tickForklifts(s){
  let power=null;
@@ -97,7 +106,7 @@ export function tickForklifts(s){
  }
 }
 
-const pick=(api,list)=>list[Math.floor(api.random()*list.length)%list.length];
+export const pick=(api,list)=>list[Math.floor(api.random()*list.length)%list.length];
 // Größte-Reste-Verteilung: ganzzahlig, Summe exakt total, Verhältnis nach weights.
 export function apportion(total,weights){
  const sum=weights.reduce((n,w)=>n+w,0);if(!(sum>0))return weights.map((_,i)=>i===0?total:0);
@@ -107,8 +116,12 @@ export function apportion(total,weights){
  return out;
 }
 
+/** Kennzeichen im Hofformat (gleiche Zufallszüge wie schedule). */
+export function makePlate(api){return `${pick(api,PLATE)}-${pick(api,LETTERS.split(''))}${pick(api,LETTERS.split(''))} ${100+Math.floor(api.random()*9900)%9900}`;}
 /** Legt eine Ankunft an. Aufruf durch contracts.js zur Fälligkeit. */
-export function schedule(s,api,{contractId,site,parcels,eta,orderIds=[],laneShare}={}){
+export function schedule(s,api,payload={}){
+ const {contractId,site,parcels,eta,orderIds=[],laneShare}=payload;
+ if(containerHooks.schedule&&(payload.kind==='container'||payload.unit==='container'||(s.contracts||[]).find(c=>c.id===contractId)?.unit==='container'))return containerHooks.schedule(s,api,payload);
  if(!s.sites.some(x=>x.id===site)||!Number.isInteger(parcels)||parcels<1||!Number.isInteger(eta))return null;
  const ids=Array.isArray(orderIds)?orderIds.filter(id=>typeof id==='string'):[];
  const orders=ids.map(id=>s.orders.find(o=>o.id===id));
@@ -130,8 +143,8 @@ export function schedule(s,api,{contractId,site,parcels,eta,orderIds=[],laneShar
  return a;
 }
 
-function setPhase(a,phase,t){a.phase=phase;a.phaseStart=t;a.phaseEnd=DURATION[phase]&&phase!=='approach'?t+DURATION[phase]:null;a.waitReason=null;a.waitSince=null;}
-function wait(a,reason,t){if(a.waitReason!==reason){a.waitReason=reason;a.waitSince=t;}}
+export function setPhase(a,phase,t){a.phase=phase;a.phaseStart=t;a.phaseEnd=DURATION[phase]&&phase!=='approach'?t+DURATION[phase]:null;a.waitReason=null;a.waitSince=null;}
+export function wait(a,reason,t){if(a.waitReason!==reason){a.waitReason=reason;a.waitSince=t;}}
 function dockOf(s,a){return a.dock?s.buildings.find(b=>b.id===a.dock&&b.task===a.id)||null:null;}
 function releaseDock(s,a){for(const b of s.buildings)if(b.task===a.id)b.task=null;a.dock=null;}
 const usable=b=>b&&b.enabled&&b.condition>0;
@@ -143,10 +156,10 @@ function switchDock(s,api,a,t){
  api.log('yard',`${a.plate}: Dock außer Betrieb, wechselt zu freiem Dock.`,[a.id,from,n.id].filter(Boolean));return true;
 }
 // FIFO: vorgezogene zuerst, dann nach Ankunft am Tor, dann Anlagereihenfolge.
-function queueOrder(s,site){return s.yard.map((a,i)=>[a,i]).filter(([a])=>a.site===site&&a.phase==='queue').sort((x,y)=>(y[0].priority-x[0].priority)||(x[0].gateAt-y[0].gateAt)||(x[1]-y[1])).map(([a])=>a);}
+function queueOrder(s,site){return s.yard.map((a,i)=>[a,i]).filter(([a])=>a.site===site&&a.phase==='queue'&&!a.kind).sort((x,y)=>(y[0].priority-x[0].priority)||(x[0].gateAt-y[0].gateAt)||(x[1]-y[1])).map(([a])=>a);}
 
 // Teilt n Pakete auf die Aufträge: jeweils an den Auftrag mit dem größten offenen Anteil. Monoton, Summe exakt.
-function unloadMinute(s,api,a,n,item='parcel',location='inbound'){
+export function unloadMinute(s,api,a,n,item='parcel',location='inbound'){
  const plan=new Map();
  for(let k=0;k<n;k++){let best=null,score=-1;for(const p of a.split){const open=p.target-p.done-(plan.get(p)||0);if(open<=0)continue;const f=open/p.target;if(f>score+1e-12){score=f;best=p;}}if(!best)break;plan.set(best,(plan.get(best)||0)+1);}
  let added=0;
@@ -165,6 +178,7 @@ function due(s,a){
 }
 // Einfache Prognose: Restzeit im Hof + Warteschlange + Entladen + Sortieren.
 function updateRisk(s,a){
+ if(a.kind){a.atRisk=false;a.forecast=null;return;}
  const base=isPallet(a)?PALLET_BASE:UNLOAD_BASE;
  const unloadRest=Math.ceil((a.parcels-a.unloaded)/heldRate(s,unloadKey(a),base)),t=s.t;let ready;
  const ahead=a.phase==='queue'?queueOrder(s,a.site).indexOf(a):0;
@@ -207,6 +221,7 @@ function unloadPallets(s,api,a,t){
 
 export function step(s,api){
  stepYard(s,api);
+ containerHooks.step?.(s,api);
  // Akku nach allen Staplernutzungen der Minute (transport/tours laufen vorher, Entladen oben).
  for(const b of s.buildings)if(b.type==='forklift'){tickForklifts(s);break;}
 }
@@ -252,7 +267,7 @@ function stepYard(s,api){
   else if(a.phase==='exit'&&t>=a.phaseEnd){setPhase(a,'gone',t);}
  }
  // Dock-Zuteilung je Standort in FIFO-Reihenfolge.
- const sites=new Set(s.yard.filter(a=>a.phase==='queue').map(a=>a.site));
+ const sites=new Set(s.yard.filter(a=>a.phase==='queue'&&!a.kind).map(a=>a.site));
  for(const site of sites){
   let blocked=false;
   for(const a of queueOrder(s,site)){
@@ -271,8 +286,9 @@ export function validate(s){
  const int=(n,min=0)=>Number.isSafeInteger(n)&&n>=min;
  const ids=new Set(s.yard.map(a=>a.id)),docks=new Map();
  for(const a of s.yard){
-  if(!PHASES.includes(a.phase))fail('Phase');
+  if(!(a.kind?CONTAINER_PHASES:PHASES).includes(a.phase))fail('Phase');
   if(a.item!==undefined&&a.item!==PALLET)fail('Ladeeinheit');
+  if(a.kind!==undefined&&a.kind!=='container')fail('Art');
   if(!s.sites.some(x=>x.id===a.site))fail('Standort');
   if(typeof a.carrier!=='string'||typeof a.plate!=='string')fail('Spediteur');
   if(!int(a.parcels,1)||!int(a.unloaded)||a.unloaded>a.parcels)fail('Paketmenge');
@@ -284,9 +300,12 @@ export function validate(s){
   if(a.phase!=='approach'&&!int(a.gateAt))fail('Torzeit');
   if(a.gateDone!==undefined&&(a.phase!=='gate'||!int(a.gateDone)||a.gateDone>=DURATION.gate))fail('Torkontrolle');
   if(!Array.isArray(a.orderIds)||a.orderIds.some(id=>!s.orders.some(o=>o.id===id)))fail('Auftragsreferenz');
+  if(a.kind){}// Rest (Container, Bindungen) prüft containers.validate
+  else{
   if(!Array.isArray(a.split)||!a.split.length)fail('Verteilung');
   let done=0,target=0;for(const p of a.split){if(typeof p.owner!=='string'||!int(p.target)||!int(p.done)||p.done>p.target)fail('Verteilung');done+=p.done;target+=p.target;}
   if(target!==a.parcels||done!==a.unloaded)fail('Verteilungssumme');
+  }
   if(['exit','gone'].includes(a.phase)&&a.unloaded!==a.parcels)fail('Entladung unvollständig');
   if(['approach','gate'].includes(a.phase)&&a.unloaded)fail('Entladung vor Dock');
   if(AT_DOCK.has(a.phase)){
