@@ -4,7 +4,7 @@
 const round = n => Math.round((n + Number.EPSILON) * 100) / 100;
 const sum = (rows, value) => round(rows.reduce((n, row) => n + value(row), 0));
 const groups = {
- operating: new Set(['Umsatz','Einkauf','personal','Energie','Miete','Zinsen','Transport','Wartung','maintenance','Retouren','Erstattungen','Entsorgung','Lagergebühren','research','Vertragsstrafe']),
+ operating: new Set(['Umsatz','Einkauf','personal','Energie','Miete','Zinsen','Transport','Wartung','maintenance','Retouren','Erstattungen','Entsorgung','Lagergebühren','research','Vertragsstrafe','Lagergeld']),
  investing: new Set(['construction','Fuhrpark','Standort']),
  financing: new Set(['Kredit','Tilgung'])
 };
