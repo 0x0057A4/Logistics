@@ -1,6 +1,6 @@
 // Browserprüfung der WebGL-Szene (nicht Teil von npm test).
 // Voraussetzung: Root-index.html aus `python3 scripts/package.py`, Playwright global, Chromium unter /opt/pw-browsers.
-// Aufruf: node tests/browser/scene3d.mjs   Ergebnis: JSON-Bericht, Screenshots docs/assets/scene3d-0.9.png, szene-0.11-nacht.png, netz-0.12.png u. a.
+// Aufruf: node tests/browser/scene3d.mjs   Ergebnis: JSON-Bericht, Screenshots docs/assets/scene3d-0.9.png, szene-0.11-nacht.png, netz-0.12.png, luft-netz-0.14.png u. a.
 // Hinweis: Headless-Chromium rendert per SwiftShader (Software). Frame-Zeiten sind nicht repräsentativ für echte GPUs.
 import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
@@ -308,6 +308,63 @@ try {
   check('W3a Standort: Hauptlauf fährt Zufahrt ab, Entladen am Dock des Ziels, Labels deutsch', netzSite.out?.mode === 'out' && netzSite.out.shown && netzSite.out.label === 'LKW-1 · Hauptlauf → Hub Süd' && netzSite.dock?.mode === 'site' && netzSite.dock.dock === 'd2' && netzSite.dock.label === 'LKW-1 · Entladen Hauptlauf', JSON.stringify(netzSite));
   check('W3a: unter 150 Draw Calls', netz.info.drawCalls < 150 && netz.infoHome.drawCalls < 150 && netzSite.info.drawCalls < 150, `${netz.info.drawCalls}/${netz.infoHome.drawCalls}/${netzSite.info.drawCalls}`);
   check('W3a: Spielzustand unverändert', netz.unchanged);
+  // Welle 3c: Luftexport (W3c-S1) – Netzansicht mit Hub, Frachtterminal Heidmoor (eigener Pin), gestrichelte Verbindung, Zubringer in transit,
+  // Startflugzeug zur Flugzeit; Verfolgen; Standortansicht: Zubringer fährt Zufahrt ab, Beladen am Dock mit Wartegrund.
+  const luft = await page.evaluate(async () => {
+    const { Scene3D } = await import('./scene3d.js');
+    const host = document.createElement('div'); host.style.cssText = 'position:fixed;inset:0;z-index:999;background:#fff'; document.body.appendChild(host);
+    const canvas = document.createElement('canvas'); canvas.style.cssText = 'width:100%;height:100%;display:block'; host.appendChild(canvas);
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const B = (id, type, site, x, y, extra = {}) => ({ id, type, site, x, y, rotation: 0, status: 'idle', enabled: true, condition: 100, ...extra });
+    const state = { t: 1294, selectedSite: 's1', sites: [{ id: 's1', name: 'Hub Nord', x: 0, y: 0, width: 20, height: 16, energy: 60 }, { id: 's2', name: 'Hub Süd', x: 60, y: 30, width: 20, height: 16, energy: 60 }],
+      buildings: [B('d1', 'dock', 's1', 5, 13), B('d3', 'dock', 's1', 10, 13), B('r1', 'rack', 's1', 2, 6), B('d2', 'dock', 's2', 5, 13)], batches: [], workers: [], jobs: [], research: [],
+      vehicles: [{ id: 'vehicle-1', type: 'truck', site: 's1', status: 'airshuttle', airShuttle: 'airshuttle-1', condition: 90 }, { id: 'vehicle-2', type: 'van', site: 's1', status: 'idle', condition: 90 }],
+      contracts: [{ id: 'contract-1', unit: 'air', status: 'active', site: 's1', flights: [1290], cutoff: 90, shipper: 'Testversand Nord' }],
+      airShuttles: [{ id: 'airshuttle-1', vehicleId: 'vehicle-1', site: 's1', flight: 1290, status: 'transit', orders: [{ orderId: 'order-1', qty: 40, flightT: 1290 }], qty: 40, cargo: [], remaining: 15, duration: 40, distance: 48, cost: 20, dock: null, driver: 'w9', worker: null, blocked: null, paid: false }],
+      lines: [], linehauls: [], shipments: [], transfers: [], tours: [], freights: [], returns: [], yard: [] };
+    const before = JSON.stringify(state), r = {};
+    const s = new Scene3D(canvas, {}); s.setState(state); s.setView('network'); s.setLabels('all'); s.setTheme('day');
+    let clock = 1294; s.setClock(clock); await sleep(1500);
+    r.airNode = !!s.airNode; r.airPin = s.inst.airpin.count; r.links = s.airLinkList.length; r.airLineVisible = s.netAirLines.visible; r.dashed = s.netAirLines.material.isLineDashedMaterial === true;
+    r.airTrips = s.airTrips.length; r.amarkers = s.inst.amarker.count; r.plane = s.inst.plane.count; r.planeU = s.plane?.u;
+    const m0 = { x: s.airTrips[0].x, z: s.airTrips[0].z }, p0 = s.plane && { ...s.plane };
+    clock += .6; s.setClock(clock);
+    let m1 = { x: s.airTrips[0].x, z: s.airTrips[0].z }; for (let i = 0; i < 40 && m1.x === m0.x; i++) { await sleep(100); m1 = { x: s.airTrips[0].x, z: s.airTrips[0].z }; }
+    r.moved = Math.hypot(m1.x - m0.x, m1.z - m0.z); r.planeMoved = s.plane && p0 ? s.plane.x - p0.x : 0;
+    await sleep(300);
+    r.chips = [...host.querySelectorAll('.scene3d-chip')].filter(c => c.style.display !== 'none').map(c => c.textContent);
+    r.info = s.renderInfo();
+    r.followOk = s.follow('vehicle-1'); r.mode = s.cameraMode();
+    clock += 1; s.setClock(clock); await sleep(1200);
+    r.followGap = Math.hypot(s.goal.tx - s.airTrips[0].x, s.goal.tz - s.airTrips[0].z);
+    s.follow(null); s.home(); await sleep(1000); r.infoHome = s.renderInfo();
+    window.__luft = { s, host, state };
+    r.unchanged = JSON.stringify(state) === before;
+    return r;
+  });
+  await page.screenshot({ path: path.join(root, 'docs/assets/luft-netz-0.14.png') });
+  const luftSite = await page.evaluate(async () => {
+    const { s, state } = window.__luft, sleep = ms => new Promise(r => setTimeout(r, ms)), r = {};
+    const st = JSON.parse(JSON.stringify(state)); st.airShuttles[0].remaining = 39; s.setState(st); s.setView('site'); s.setClock(1294.2); await sleep(1200);
+    const p = s.fleet.find(f => f.v.id === 'vehicle-1'); r.out = p && { mode: p.plan.mode, shown: p.shown, label: p.label };
+    const st2 = JSON.parse(JSON.stringify(st)); Object.assign(st2.airShuttles[0], { status: 'loading', remaining: 3, duration: 4, dock: 'd3', blocked: null }); st2.buildings[1].task = 'airshuttle-1';
+    s.setState(st2); await sleep(1000);
+    const q = s.fleet.find(f => f.v.id === 'vehicle-1'); r.dock = q && { mode: q.plan.mode, dock: q.dock, shown: q.shown, label: q.label, tone: q.tone };
+    const st3 = JSON.parse(JSON.stringify(st2)); Object.assign(st3.airShuttles[0], { dock: null, blocked: 'Kein Fahrpersonal' }); st3.buildings[1].task = null;
+    s.setState(st3); await sleep(1000);
+    const w = s.fleet.find(f => f.v.id === 'vehicle-1'); r.wait = w && { label: w.label, tone: w.tone };
+    r.chips = [...window.__luft.host.querySelectorAll('.scene3d-chip')].filter(c => c.style.display !== 'none').map(c => `${c.className}|${c.textContent}`);
+    r.info = s.renderInfo(); s.destroy(); window.__luft.host.remove(); return r;
+  });
+  report.luft = { ...luft, site: luftSite };
+  check('W3c Netz: Frachtterminal als eigener Pin, gestrichelte Verbindung Hub→Terminal, Zubringer-Marker', luft.airNode && luft.airPin === 1 && luft.links === 1 && luft.airLineVisible && luft.dashed && luft.airTrips === 1 && luft.amarkers === 1, JSON.stringify({ n: luft.airNode, p: luft.airPin, l: luft.links, t: luft.airTrips, m: luft.amarkers }));
+  check('W3c Netz: Zubringer bewegt sich mit gebrochener Uhr', luft.moved > 1e-3, String(luft.moved));
+  check('W3c Netz: Startflugzeug zur Flugzeit sichtbar und rollt an', luft.plane === 1 && luft.planeU > 0 && luft.planeMoved > 0, JSON.stringify({ c: luft.plane, u: luft.planeU, d: luft.planeMoved }));
+  check('W3c Netz: Labels „Frachtterminal Flughafen Heidmoor“ und „Luftzubringer Hub Nord→Heidmoor · NN %“', luft.chips.some(c => /^Frachtterminal Flughafen Heidmoor · /.test(c)) && luft.chips.some(c => /^Luftzubringer Hub Nord→Heidmoor · \d+ %$/.test(c)), luft.chips.join(' | '));
+  check('W3c Netz: follow(Zubringer) in der Netzansicht', luft.followOk && luft.mode?.id === 'vehicle-1' && luft.followGap < .6, JSON.stringify({ ok: luft.followOk, gap: luft.followGap }));
+  check('W3c Standort: Zubringer fährt Zufahrt ab, Beladen am Dock, Wartegrund gelb', luftSite.out?.mode === 'out' && luftSite.out.shown && luftSite.out.label === 'LKW-1 · Luftzubringer → Terminal' && luftSite.dock?.dock === 'd3' && luftSite.dock.label === 'LKW-1 · Beladen Luftfracht' && luftSite.wait?.tone === 'wait' && luftSite.wait.label === 'LKW-1 · Beladen Luftfracht · Kein Fahrpersonal' && luftSite.chips.some(c => /tone-wait\|LKW-1 · Beladen Luftfracht · Kein Fahrpersonal/.test(c)), JSON.stringify(luftSite));
+  check('W3c: unter 150 Draw Calls', luft.info.drawCalls < 150 && luft.infoHome.drawCalls < 150 && luftSite.info.drawCalls < 150, `${luft.info.drawCalls}/${luft.infoHome.drawCalls}/${luftSite.info.drawCalls}`);
+  check('W3c: Spielzustand unverändert', luft.unchanged);
   // Welle 3b: Containerhof (W3b-S2) – zwei Containerhöfe, 3 Container im Hof (einer gestapelt, einer leer mit Lagergeld), Chassis in drop (beladen),
   // Container am Dock d1 beim Entladen (Stapler f1 pendelt), Tag und Nacht, Auswahl zeigt Container-Label.
   const cyard = await page.evaluate(async () => {

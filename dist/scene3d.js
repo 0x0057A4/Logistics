@@ -2,6 +2,7 @@ import * as THREE from './vendor/three.module.min.js';
 import { BUILDINGS, VEHICLES } from './catalog.js';
 import { footprint, reachable } from './world.js';
 import { Scene, vehicleActivity, vehicleAtSite, coldWarnings } from './scene.js';
+import { AIRPORT } from './airexport.js';
 
 // WebGL-Leitstand (S1). Liest nur den Spielzustand; Interpolation ändert ausschließlich Darstellung.
 // Weltmaß: 1 Rasterzelle = 1 Einheit. Zelle (x,y) liegt bei X=x..x+1, Z=y..y+1, Ursprung Hallenecke oben links.
@@ -123,6 +124,7 @@ export function vehicleTag(v) { const n = String(v?.id || '').match(/(\d+)$/)?.[
 /** Darstellungsplan je Fahrzeug, aus Zustand abgeleitet (nur lesend). */
 export function vehiclePlan(state, v, siteId) {
   if (v?.status === 'linehaul') return linehaulPlan(state, v, siteId);
+  if (v?.status === 'airshuttle') return airShuttlePlan(state, v, siteId);
   const a = vehicleActivity(state, v);
   if (vehicleAtSite(state, v, siteId)) {
     const tone = a.task?.blocked ? 'wait' : v.status === 'idle' ? 'idle' : 'dock';
@@ -165,7 +167,7 @@ export function linehaulPlan(state, v, siteId) {
 }
 /** Fahrzeug-Label „Kennung · Status“; Linien-Lkw mit Hauptlauf-Status. statusLabel: Übersetzung der übrigen Status. */
 export function vehicleLabel(state, plan, v, statusLabel = x => x) {
-  return `${vehicleTag(v)} · ${plan.kind === 'linehaul' && plan.task ? linehaulStatus(state, plan.task) : statusLabel(plan.status)}`;
+  return `${vehicleTag(v)} · ${plan.kind === 'linehaul' && plan.task ? linehaulStatus(state, plan.task) : plan.kind === 'airshuttle' ? airShuttleStatus(plan.task) : statusLabel(plan.status)}`;
 }
 /** Sichtbarer Wegabschnitt: t (0 = Stellplatz, 1 = Straßenende) oder null, wenn außer Sicht. */
 export function vehicleT(plan, v, clock, stateT, visibleMinutes = 8) {
@@ -239,12 +241,13 @@ export function rayBox(o, d, b) {
 /** Strahl gegen Bodenebene y = h. */
 export function rayGround(o, d, h = 0, out = {}) { if (Math.abs(d.y) < 1e-9) return null; const t = (h - o.y) / d.y; if (t < 0) return null; out.x = o.x + d.x * t; out.z = o.z + d.z * t; return out; }
 /** Kartenkoordinaten der Standorte für die Netzansicht. */
-export function networkLayout(sites, k = .26) {
-  const xs = sites.map(s => s.x || 0), ys = sites.map(s => s.y || 0);
+export function networkLayout(sites, k = .26, extra = []) {
+  const all = [...sites, ...extra], xs = all.map(s => s.x || 0), ys = all.map(s => s.y || 0);
   const cx = (Math.min(0, ...xs) + Math.max(0, ...xs)) / 2, cy = (Math.min(0, ...ys) + Math.max(0, ...ys)) / 2;
-  const pins = sites.map(s => ({ id: s.id, x: ((s.x || 0) - cx) * k, z: ((s.y || 0) - cy) * k }));
-  let ext = 12; for (const p of pins) ext = Math.max(ext, Math.abs(p.x) + 6, Math.abs(p.z) + 6);
-  return { pins, ext };
+  const at = s => ({ id: s.id, x: ((s.x || 0) - cx) * k, z: ((s.y || 0) - cy) * k });
+  const pins = sites.map(at), nodes = extra.map(at);
+  let ext = 12; for (const p of [...pins, ...nodes]) ext = Math.max(ext, Math.abs(p.x) + 6, Math.abs(p.z) + 6);
+  return { pins, nodes, ext };
 }
 
 export const NET_PIN_R = 2.2, NET_OFFSET = .55, NET_WIDTH = .32;
@@ -291,11 +294,91 @@ export function linehaulNetLabel(state, lh, pct) {
   return `${name} · ${phase}${lh.blocked ? ` · ${lh.blocked}` : ''}`;
 }
 /** Verfolgungsziel in der Netzansicht: Linien-Lkw (Fahrzeug- oder Fahrt-ID). */
-export function netFollowTarget(trips, id) {
+export function netFollowTarget(trips, id, air = null) {
   if (id == null) return null;
   for (const t of trips || []) if (t.vehicleId === id || t.id === id) return { x: t.x, z: t.z, kind: 'linehaul' };
+  for (const t of air || []) if (t.vehicleId === id || t.id === id) return { x: t.x, z: t.z, kind: 'airshuttle' };
   return null;
 }
+
+// ---------- Luftexport (W3c-S1): Flughafen-Zubringer am Standort und im Netz, Frachtterminal AIRPORT, nur lesend ----------
+const AIR_ACTIVE = ['loading', 'transit', 'handover', 'returning'];
+/** Laufender Zubringer eines Fahrzeugs (v.status 'airshuttle', v.airShuttle = Zubringer-ID), sonst null. */
+export function airShuttleOf(state, v) {
+  if (v?.status !== 'airshuttle') return null;
+  const list = state?.airShuttles || [];
+  return list.find(x => x.id === v.airShuttle && AIR_ACTIVE.includes(x.status)) || list.find(x => x.vehicleId === v.id && AIR_ACTIVE.includes(x.status)) || null;
+}
+/** Deutscher Fahrzeugstatus eines Zubringers (· Wartegrund, falls blockiert). */
+export function airShuttleStatus(sh) {
+  const base = sh?.status === 'loading' ? 'Beladen Luftfracht' : sh?.status === 'transit' ? 'Luftzubringer → Terminal' : sh?.status === 'handover' ? 'Übergabe Terminal' : sh?.status === 'returning' ? 'Rückfahrt' : 'Luftzubringer';
+  return sh?.blocked ? `${base} · ${sh.blocked}` : base;
+}
+/** Darstellungsplan eines Zubringers: Beladen am Dock (b.task = Zubringer-ID), Fahrt zum Terminal fährt die Zufahrt ab, Rückfahrt an, Übergabe außer Sicht. */
+export function airShuttlePlan(state, v, siteId) {
+  const sh = airShuttleOf(state, v), away = { mode: 'away', tone: 'move', status: sh?.status || 'airshuttle', task: sh, kind: 'airshuttle' };
+  if (!sh || sh.site !== siteId) return away;
+  if (sh.status === 'loading') return { ...away, mode: 'site', tone: sh.blocked ? 'wait' : 'dock' };
+  const dir = sh.status === 'transit' ? 'out' : sh.status === 'returning' ? 'in' : null;
+  return dir && phaseDuration(sh, v) ? { ...away, mode: dir } : away;
+}
+/** Luftverträge, die das Netz zeigen soll: angenommen und nicht beendet. */
+export function activeAirContracts(state) { return (state?.contracts || []).filter(k => k.unit === 'air' && k.status !== 'offer' && k.status !== 'ended'); }
+/** Netz zeigt den Flughafen, sobald ein Luftvertrag läuft oder ein Zubringer unterwegs ist. */
+export function airRelevant(state) { return activeAirContracts(state).length > 0 || (state?.airShuttles || []).some(x => AIR_ACTIVE.includes(x.status)); }
+/** Gestrichelte Verbindungen Hub → Terminal (je Standort mit laufendem Luftvertrag oder Zubringer), um die Pinradien gekürzt. */
+export function airLinks(state, pins, air) {
+  if (!air) return [];
+  const ids = new Set(activeAirContracts(state).map(k => k.site));
+  for (const x of state?.airShuttles || []) if (AIR_ACTIVE.includes(x.status)) ids.add(x.site);
+  const out = [];
+  for (const p of pins) {
+    if (!ids.has(p.id)) continue;
+    const dx = air.x - p.x, dz = air.z - p.z, len = Math.hypot(dx, dz); if (len < 1e-6) continue;
+    const ux = dx / len, uz = dz / len, cut = Math.min(NET_PIN_R, len * .3);
+    out.push({ id: `air:${p.id}`, site: p.id, x0: p.x + ux * cut, z0: p.z + uz * cut, x1: air.x - ux * cut, z1: air.z - uz * cut, heading: Math.atan2(dz, dx) });
+  }
+  return out;
+}
+/** Fortschritt eines Zubringers Hub → Terminal: Beladen 0, Fahrt p, Übergabe 1, Rückfahrt 1 − p. */
+export function airShuttleNetProgress(sh, v, clock, stateT) {
+  if (sh.status === 'loading') return 0; if (sh.status === 'handover') return 1;
+  const p = phaseProgress(sh, v, clock, stateT) ?? 0; return sh.status === 'returning' ? 1 - p : p;
+}
+/** Netz-Label „Luftzubringer Hub→Heidmoor · 63 %“, Rückfahrt mit Anteil, sonst Phase · Wartegrund. */
+export function airShuttleNetLabel(state, sh, pct) {
+  const name = `Luftzubringer ${siteName(state, sh.site)}→${AIRPORT.short}`;
+  const phase = sh.status === 'transit' ? `${pct} %` : sh.status === 'returning' ? `Rückfahrt ${pct} %` : airShuttleStatus({ ...sh, blocked: null });
+  return `${name} · ${phase}${sh.blocked ? ` · ${sh.blocked}` : ''}`;
+}
+/** Abflugminuten (Minute des Tages, sortiert, eindeutig) aller laufenden Luftverträge. */
+export function airFlightMinutes(state) { return [...new Set(activeAirContracts(state).flatMap(k => (k.flights || []).filter(Number.isFinite).map(m => ((m % 1440) + 1440) % 1440)))].sort((a, b) => a - b); }
+export const PLANE_STAND = 45, PLANE_CLIMB = 18;
+/**
+ * Rein optisches Frachtflugzeug am Terminal, deterministisch aus dem Flugplan: PLANE_STAND Minuten vor dem Abflug steht es an der Position,
+ * ab Abflug rollt es PLANE_CLIMB Minuten an und steigt. u: 0 = stehend, 0…1 = Start. Sonst null (kein Flugzeug).
+ */
+export function planePhase(minutes, clock) {
+  if (!minutes?.length || !Number.isFinite(clock)) return null;
+  const day = clock - dayMinute(clock); let best = null;
+  for (const m of minutes) for (const d of [-1440, 0, 1440]) {
+    const f = day + d + m, e = clock - f;
+    if (e >= -PLANE_STAND && e < PLANE_CLIMB) { const ph = { flight: f, u: e < 0 ? 0 : e / PLANE_CLIMB, moving: e >= 0 }; if (!best || f < best.flight) best = ph; }
+  }
+  return best;
+}
+/** Pose des Flugzeugs relativ zum Terminalpin (Startbahn nach Osten): x/z/y und Neigung. */
+export function planePose(node, ph, out = {}) {
+  const u = ph.u, run = u * u * 26; out.x = node.x - 3.2 + run; out.z = node.z + 3.1; out.y = u > .45 ? (u - .45) * (u - .45) * 30 : 0; out.pitch = u > .45 ? Math.min(.3, (u - .45) * .8) : 0; return out;
+}
+/** Nächster Abflug (absolute Minute) ab t über alle laufenden Luftverträge, sonst null. */
+export function nextAirFlight(state, t = state?.t ?? 0) {
+  const ms = airFlightMinutes(state); if (!ms.length) return null; const day = t - dayMinute(t);
+  for (const d of [0, 1440]) for (const m of ms) if (day + d + m >= t) return day + d + m;
+  return null;
+}
+/** Label des Terminals: fiktiver Name · nächster Flug. */
+export function airportLabel(state) { const f = nextAirFlight(state); if (f == null) return `${AIRPORT.name} · Luftfracht`; const m = dayMinute(f); return `${AIRPORT.name} · Flug ${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`; }
 
 // ---------- Tageszeit (W2c): Licht, Himmel, Bodentönung aus der Spielzeit (nur Darstellung) ----------
 
@@ -750,6 +833,7 @@ export function dockContainerPlans(state, siteId, buildings, L, fromPose = () =>
 
 const _v = new THREE.Vector3(), _n = new THREE.Vector3(), _m = new THREE.Matrix4(), _m2 = new THREE.Matrix4(), _nm = new THREE.Matrix3();
 const _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _p = new THREE.Vector3(), _c = new THREE.Color(), _up = new THREE.Vector3(0, 1, 0);
+const _e = new THREE.Euler();
 const colorCache = new Map();
 function col(hex) { let c = colorCache.get(hex); if (!c) { c = new THREE.Color(hex); colorCache.set(hex, c); } return c; }
 let PRIMS = null;
@@ -905,7 +989,7 @@ export class Scene3D {
     this.build = null; this.buildRotation = 0; this.movingId = null; this.hover = null; this.selected = null; this.ghostCache = null;
     this.dead = false; this.listeners = []; this.width = 1; this.height = 1; this.signature = ''; this.sigDirty = true; this.dynDirty = true; this.needs = true;
     this.quarter = 0; this.scale = 1; this.cam = { tx: 10, tz: 8, dist: 30, yaw: Math.PI / 4 }; this.goal = { tx: 10, tz: 8, dist: 30, yaw: Math.PI / 4 }; this.animating = false;
-    this.clock = { base: null, at: 0, rate: 0, shown: null }; this.fleet = []; this.yardFleet = []; this.yardMap = null; this.boxes = []; this.infra = []; this.pins = []; this.transfers = []; this.trips = []; this.netLineKey = null;
+    this.clock = { base: null, at: 0, rate: 0, shown: null }; this.fleet = []; this.yardFleet = []; this.yardMap = null; this.boxes = []; this.infra = []; this.pins = []; this.transfers = []; this.trips = []; this.airTrips = []; this.airNode = null; this.plane = null; this.netLineKey = null;
     this.res = { ratio: Math.min(window.devicePixelRatio || 1, 1.5), max: Math.min(window.devicePixelRatio || 1, 1.5), min: .75, avg: 0, cond: null, since: null, lastDrop: null };
     this.lastFrame = 0; this.renderedLast = false; this.layout = yardLayout(defaultSite(null));
     // Wiederverwendete Objekte für die Hot-Loop.
@@ -922,7 +1006,7 @@ export class Scene3D {
     const sun = this.sun = new THREE.DirectionalLight(0xfff4e2, 2.0); sun.position.set(-18, 34, 22); scene.add(sun);
     this.themeMode = 'auto'; this.themeKey = null; this.themeNow = null; this.camMode = null;
     this.persp = new THREE.PerspectiveCamera(40, 1, .5, 400); this.ortho = new THREE.OrthographicCamera(-10, 10, 10, -10, .5, 400);
-    this.mat = { solid: new THREE.MeshLambertMaterial({ vertexColors: true }), inst: new THREE.MeshLambertMaterial({ vertexColors: true }), lamp: new THREE.MeshBasicMaterial({ color: 0xffffff }), plate: new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: .55, depthWrite: false }), ghost: new THREE.MeshLambertMaterial({ color: 0x55caad, transparent: true, opacity: .55, depthWrite: false }), grid: new THREE.LineBasicMaterial({ color: 0x6f858b, transparent: true, opacity: .22 }), select: new THREE.LineBasicMaterial({ color: 0x199b83 }), route: new THREE.LineDashedMaterial({ color: 0x4f9a85, dashSize: .8, gapSize: .6 }), net: new THREE.LineBasicMaterial({ color: 0xa9b8ae }), netline: new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide }),
+    this.mat = { solid: new THREE.MeshLambertMaterial({ vertexColors: true }), inst: new THREE.MeshLambertMaterial({ vertexColors: true }), lamp: new THREE.MeshBasicMaterial({ color: 0xffffff }), plate: new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: .55, depthWrite: false }), ghost: new THREE.MeshLambertMaterial({ color: 0x55caad, transparent: true, opacity: .55, depthWrite: false }), grid: new THREE.LineBasicMaterial({ color: 0x6f858b, transparent: true, opacity: .22 }), select: new THREE.LineBasicMaterial({ color: 0x199b83 }), route: new THREE.LineDashedMaterial({ color: 0x4f9a85, dashSize: .8, gapSize: .6 }), air: new THREE.LineDashedMaterial({ color: 0x3f6fa8, dashSize: 1.1, gapSize: .7 }), net: new THREE.LineBasicMaterial({ color: 0xa9b8ae }), netline: new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide }),
       // Nachtbeleuchtung ohne Echtzeitlichter: Leuchtkörper (unbeleuchtet) und additive Lichtkegel/-flächen mit Verlauf in der Vertexfarbe.
       head: new THREE.MeshBasicMaterial({ vertexColors: true, color: 0x9aa39f }), glow: new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }) };
     this.siteGroup = new THREE.Group(); this.netGroup = new THREE.Group(); scene.add(this.siteGroup, this.netGroup);
@@ -980,7 +1064,7 @@ export class Scene3D {
   follow(id) {
     if (id == null) { if (this.camMode?.mode === 'follow') this.stopCamera('user'); return false; }
     const net = this.view === 'network'; if (net) this.sync();
-    if (!(net ? netFollowTarget(this.trips, id) : followTarget(this.fleet, this.yardFleet, id))) return false;
+    if (!(net ? netFollowTarget(this.trips, id, this.airTrips) : followTarget(this.fleet, this.yardFleet, id))) return false;
     this.stopCamera('replace'); this.camMode = { mode: 'follow', id };
     if (this.scale < 1.5) { this.scale = 1.5; this.goal.dist = this.homeDist / this.scale; }
     this.callbacks.onCameraMode?.('follow', { id }); this.needs = true; return true;
@@ -1000,7 +1084,7 @@ export class Scene3D {
   rotate(dir = 1) { if (this.camMode?.mode === 'tour') this.stopCamera('user'); const d = dir < 0 ? -1 : 1; this.quarter = (this.quarter + d + 4) % 4; this.goal.yaw += d * Math.PI / 2; this.needs = true; this.dynDirty = true; }
   home() {
     this.stopCamera('user'); const s = defaultSite(this.state), W = s.width || 20, H = s.height || 16; this.scale = 1;
-    if (this.view === 'network') { const { ext } = networkLayout(this.state?.sites || [s]); this.homeDist = ext * 2.3; this.goal.tx = 0; this.goal.tz = 2; }
+    if (this.view === 'network') { const { ext } = networkLayout(this.state?.sites || [s], undefined, airRelevant(this.state) ? [AIRPORT] : []); this.homeDist = ext * 2.3; this.goal.tx = 0; this.goal.tz = 2; }
     else if (this.view === 'site') { this.homeDist = Math.hypot(W + 28, H + 16) * 1.12; this.goal.tx = W / 2 - 4; this.goal.tz = H / 2 + 4; }
     else if (this.view === 'flat') { this.homeDist = Math.hypot(W, H) * 1.35; this.goal.tx = W / 2; this.goal.tz = H / 2 + 1; }
     else { this.homeDist = Math.hypot(W, H) * 1.5; this.goal.tx = W / 2; this.goal.tz = H / 2 + .8; }
@@ -1174,7 +1258,13 @@ export class Scene3D {
     this.netStatic = new THREE.Mesh(new THREE.BufferGeometry(), this.mat.solid); this.netLines = new THREE.LineSegments(new THREE.BufferGeometry(), this.mat.net); this.netRoutes = new THREE.LineSegments(new THREE.BufferGeometry(), this.mat.route); this.netLineMesh = new THREE.Mesh(new THREE.BufferGeometry(), this.mat.netline);
     this.inst.pin = inst(mergedGeo(P => { P.cyl(0, 0, 0, 1.6, .08, '#ffffff', true); P.box(-.9, .08, -.7, 1.8, 1.0, 1.4, '#ffffff'); P.box(-1.05, 1.08, -.85, 2.1, .14, 1.7, '#e9efe9'); P.cyl(0, 1.22, 0, .05, 1.1, '#5d6d70'); P.box(.05, 1.95, -.02, .6, .36, .04, '#f2c363'); }), this.mat.inst, 8);
     this.inst.marker = inst(mergedGeo(P => { P.box(-.7, .15, -.32, 1.4, .6, .64, '#ffffff'); P.box(.4, .15, -.32, .4, .5, .64, '#ebac53'); }), this.mat.inst, 8);
-    n.add(this.netStatic, this.netLines, this.netRoutes, this.netLineMesh, this.inst.pin, this.inst.marker);
+    // W3c: Frachtterminal (Halle, Tower, abgestelltes Flugzeug aus Grundkörpern), Startflugzeug, Zubringer-Marker (blaue Front), Hub→Terminal gestrichelt.
+    const plane = (P, x, z, s = 1) => { const c = '#f4f6f8'; P.box(x - 1.3 * s, .55 * s, z - .2 * s, 2.6 * s, .4 * s, .4 * s, c); P.box(x - .25 * s, .62 * s, z - 1.4 * s, .55 * s, .08 * s, 2.8 * s, '#dfe5ea'); P.box(x - 1.3 * s, .7 * s, z - .55 * s, .35 * s, .06 * s, 1.1 * s, '#dfe5ea'); P.box(x - 1.3 * s, .9 * s, z - .04 * s, .35 * s, .55 * s, .08 * s, '#3f6fa8'); P.box(x + 1.15 * s, .6 * s, z - .17 * s, .3 * s, .3 * s, .34 * s, '#cfd8de'); };
+    this.inst.airpin = inst(mergedGeo(P => { P.cyl(0, 0, 0, 1.6, .08, '#ffffff', true); P.box(-1.3, .08, -1.1, 2.0, .8, 1.3, '#e6ecf2'); P.box(-1.4, .88, -1.2, 2.2, .12, 1.5, '#3f6fa8'); P.cyl(1.05, .08, -.6, .18, 1.9, '#d5dde3'); P.box(.8, 1.98, -.85, .5, .32, .5, '#7fb0d8'); P.box(-3.4, -.005, 2.75, 7.6, .02, .7, '#8f989c'); plane(P, -.2, .9, .62); }), this.mat.inst, 1);
+    this.inst.plane = inst(mergedGeo(P => plane(P, 0, 0, .9)), this.mat.inst, 1);
+    this.inst.amarker = inst(mergedGeo(P => { P.box(-.7, .15, -.32, 1.4, .6, .64, '#ffffff'); P.box(.4, .15, -.32, .4, .5, .64, '#3f6fa8'); }), this.mat.inst, 4);
+    this.netAirLines = new THREE.LineSegments(new THREE.BufferGeometry(), this.mat.air);
+    n.add(this.netStatic, this.netLines, this.netRoutes, this.netLineMesh, this.netAirLines, this.inst.pin, this.inst.marker, this.inst.airpin, this.inst.plane, this.inst.amarker);
   }
   /** Instanzpuffer bei Bedarf vergrößern (selten, nie pro Frame). */
   ensure(key, n) {
@@ -1241,7 +1331,8 @@ export class Scene3D {
     this.buildNetwork();
   }
   buildNetwork() {
-    const sites = this.state?.sites || [this.site()], { pins } = networkLayout(sites), P = new Parts(); this.pins = pins; this.netLineKey = null;
+    const sites = this.state?.sites || [this.site()], air = this.netAir = airRelevant(this.state), { pins, nodes } = networkLayout(sites, undefined, air ? [AIRPORT] : []), P = new Parts(); this.pins = pins; this.netLineKey = null;
+    this.airNode = air ? nodes[0] : null; if (this.airNode) P.cyl(this.airNode.x, -.01, this.airNode.z, 4.2, .02, '#c4d3df', true);
     P.quad(-90, -70, 180, 140, -.02, '#cfe0c8');
     for (let i = 0; i < 26; i++) { const x = ((i * 53) % 150) - 75, z = ((i * 31) % 110) - 55; P.quad(x, z, 6 + (i % 4) * 2, 4 + (i % 3) * 2, -.015, i % 2 ? '#c3d8bb' : '#d7e5cf'); }
     for (const p of pins) P.cyl(p.x, -.01, p.z, 3.4, .02, '#bdd3b6', true);
@@ -1359,6 +1450,7 @@ export class Scene3D {
     if (this.view === 'network') this.updateNetwork();
   }
   updateNetwork() {
+    if (airRelevant(this.state) !== !!this.netAir) this.buildNetwork();
     const st = this.state, pin = this.ensure('pin', this.pins.length);
     this.pins.forEach((p, i) => this.setInst(pin, i, p.x, 0, p.z, 0, 1, 1, 1, p.id === st?.selectedSite ? '#4f9a85' : '#9cc3b4'));
     this.finish(pin, this.pins.length);
@@ -1381,6 +1473,25 @@ export class Scene3D {
       this.trips.push({ id: lh.id, vehicleId: lh.vehicleId, lh, v, line, x: old?.x ?? line.x0, z: old?.z ?? line.z0, pct: -1, label: '', heading: line.heading, blocked: !!lh.blocked });
     }
     this.ensure('marker', this.transfers.length + this.trips.length);
+    // W3c: Terminal, gestrichelte Verbindungen Hub → Terminal, Zubringer (Fortschritt pro Frame), Flugplan für das Startflugzeug.
+    const air = this.airNode, ap = this.inst.airpin; this.airTrips = []; this.airLabel = '';
+    if (air) { this.setInst(ap, 0, air.x, 0, air.z, 0, 1, 1, 1, '#ffffff'); this.airLabel = airportLabel(st); }
+    this.finish(ap, air ? 1 : 0);
+    const links = airLinks(st, this.pins, air), ak = links.map(l => `${l.id}@${l.x0.toFixed(2)},${l.z0.toFixed(2)}`).join(',') + (air ? `|${air.x},${air.z}` : '');
+    if (ak !== this.airLinkKey) {
+      this.airLinkKey = ak; const pts = []; for (const l of links) pts.push(l.x0, .07, l.z0, l.x1, .07, l.z1);
+      const og = this.netAirLines.geometry; this.netAirLines.geometry = new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(pts.length ? pts : [0, 0, 0, 0, 0, 0], 3)); this.netAirLines.computeLineDistances(); og.dispose();
+    }
+    this.netAirLines.visible = links.length > 0; this.airLinkList = links;
+    const prevAir = new Map((this._airPrev || []).map(t => [t.id, t]));
+    if (air) for (const sh of st?.airShuttles || []) {
+      if (!['loading', 'transit', 'handover', 'returning'].includes(sh.status)) continue;
+      const line = links.find(l => l.site === sh.site); if (!line) continue;
+      const old = prevAir.get(sh.id), v = st.vehicles?.find(x => x.id === sh.vehicleId);
+      this.airTrips.push({ id: sh.id, vehicleId: sh.vehicleId, sh, v, line, x: old?.x ?? line.x0, z: old?.z ?? line.z0, pct: -1, label: '', heading: line.heading, blocked: !!sh.blocked });
+    }
+    this._airPrev = this.airTrips; this.ensure('amarker', this.airTrips.length);
+    this.airMinutes = air ? airFlightMinutes(st) : [];
   }
 
   // ----- Frame -----
@@ -1402,7 +1513,7 @@ export class Scene3D {
     const net = this.view === 'network'; this.siteGroup.visible = !net; this.netGroup.visible = net;
     const clock = this.displayClock(now), animated = net ? this.placeTransfers(clock) : !!(this.placeVehicles(clock) | this.placeYard(clock) | this.placeForklifts(clock));
     if (this.camMode?.mode === 'follow') {
-      const f = net ? netFollowTarget(this.trips, this.camMode.id) : followTarget(this.fleet, this.yardFleet, this.camMode.id);
+      const f = net ? netFollowTarget(this.trips, this.camMode.id, this.airTrips) : followTarget(this.fleet, this.yardFleet, this.camMode.id);
       if (!f) this.stopCamera('lost'); else if (Math.abs(f.x - g.tx) > 1e-3 || Math.abs(f.z - g.tz) > 1e-3) { g.tx = f.x; g.tz = f.z; this.needs = true; }
     }
     const render = moving || this.needs || animated || this.pointer?.moved;
@@ -1495,7 +1606,21 @@ export class Scene3D {
       const pct = Math.round((lh.status === 'returning' ? 1 - p : p) * 100); if (pct !== tr.pct) { tr.pct = pct; tr.label = linehaulNetLabel(st, lh, pct); }
       this.setInst(m, n++, tr.x, 0, tr.z, -(tr.heading + (lh.status === 'returning' ? Math.PI : 0)), 1, 1, 1, tr.blocked ? '#e4ab4b' : '#d6eee4');
     }
-    this.finish(m, n); return animated;
+    this.finish(m, n);
+    // W3c: Zubringer auf der gestrichelten Verbindung; Label nur bei neuem Prozentwert.
+    const am = this.inst.amarker; let na = 0;
+    for (const tr of this.airTrips) {
+      const sh = tr.sh, p = airShuttleNetProgress(sh, tr.v, clock, st?.t); if (sh.status === 'transit' || sh.status === 'returning') animated = true;
+      linePoint(tr.line, p, pt); tr.x = pt.x; tr.z = pt.z;
+      const pct = Math.round((sh.status === 'returning' ? 1 - p : p) * 100); if (pct !== tr.pct) { tr.pct = pct; tr.label = airShuttleNetLabel(st, sh, pct); }
+      this.setInst(am, na++, tr.x, 0, tr.z, -(tr.heading + (sh.status === 'returning' ? Math.PI : 0)), 1, 1, 1, tr.blocked ? '#e4ab4b' : '#ffffff');
+    }
+    this.finish(am, na);
+    // Startflugzeug: rein optisch aus Flugplan und Anzeigeuhr.
+    const ph = this.airNode ? planePhase(this.airMinutes, clock) : null, pl = this.inst.plane;
+    if (ph) { const q = planePose(this.airNode, ph, pt); _q.setFromEuler(_e.set(0, 0, q.pitch)); _p.set(q.x, q.y, q.z); _s.set(1, 1, 1); _m.compose(_p, _q, _s); pl.setMatrixAt(0, _m); if (ph.moving) animated = true; }
+    this.plane = ph ? { x: pt.x, y: pt.y, z: pt.z, u: ph.u, flight: ph.flight } : null;
+    this.finish(pl, ph ? 1 : 0); return animated;
   }
 
   // ----- Labels -----
@@ -1518,6 +1643,8 @@ export class Scene3D {
       if (mode !== 'none') { const st = this.state; for (const p of this.pins) { const s = st?.sites?.find(x => x.id === p.id); this.candidate(p.id, p.x, 3, p.z, `${s?.name || 'Standort'} · ${(st?.buildings || []).filter(b => b.site === p.id).length} Anlagen`, p.id === st?.selectedSite ? 'dock' : 'infra', 1); } }
       if (fleet) for (const tr of this.transfers) this.candidate(tr.id, tr.x, 1.4, tr.z, tr.label, tr.blocked ? 'wait' : 'move', 2);
       if (fleet) for (const tr of this.trips) this.candidate(tr.vehicleId, tr.x, 1.4, tr.z, tr.label, tr.blocked ? 'wait' : tr.lh.status === 'transit' || tr.lh.status === 'returning' ? 'move' : 'dock', 2);
+      if (mode !== 'none' && this.airNode) this.candidate(AIRPORT.id, this.airNode.x, 3, this.airNode.z, this.airLabel, 'infra', 1);
+      if (fleet) for (const tr of this.airTrips) this.candidate(tr.vehicleId, tr.x, 1.4, tr.z, tr.label, tr.blocked ? 'wait' : tr.sh.status === 'transit' || tr.sh.status === 'returning' ? 'move' : 'dock', 2);
     } else {
       if (this.ghostInfo) this.candidate('ghost', this.ghostInfo.x, this.ghostInfo.y, this.ghostInfo.z, this.ghostInfo.text, this.ghostInfo.tone, 0);
       if (fleet) for (const p of this.fleet) if (p.shown) this.candidate(p.v.id, p.x, 2.3, p.z, p.label, p.tone, 2);

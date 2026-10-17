@@ -559,3 +559,87 @@ test('W3b Echter Ablauf: Chassis → Containerhof → Umfuhr → Entladen → Ab
  }
  for(const k of ['A:toYard','A:drop','A:exit','toDock','unstuffing','empty','pickup','P:drop','gone'])assert.ok(seen.has(k),`${k} gesehen: ${[...seen]}`);
 });
+
+// ---------- Welle 3c: Luftexport (W3c-S1) – Flughafen-Zubringer am Standort, Frachtterminal im Netz, Startflugzeug, nur lesend ----------
+import * as AX from '../dist/airexport.js';
+function airFixture(status,extra={}){
+ const s=fixture();s.buildings.push({id:'da',type:'dock',site:'a',x:9,y:13,rotation:0,enabled:true,condition:100,task:status==='loading'&&extra.dock!==null?'airshuttle-1':null});
+ s.vehicles.push({id:'vehicle-1',type:'truck',site:'a',status:'airshuttle',airShuttle:'airshuttle-1'},{id:'vehicle-2',type:'van',site:'a',status:'idle'});
+ s.contracts=[{id:'contract-1',unit:'air',status:'active',site:'a',flights:[1290,420],cutoff:90,shipper:'Testversand'}];
+ s.airShuttles=[{id:'airshuttle-1',vehicleId:'vehicle-1',site:'a',flight:1290,status,orders:[{orderId:'order-1',qty:40,flightT:1290}],qty:40,cargo:[],remaining:10,duration:40,distance:48,cost:20,dock:status==='loading'?'da':null,driver:null,worker:null,blocked:null,...extra}];
+ return s;
+}
+test('W3c Zubringer: Beladen am Dock (b.task = Zubringer-ID), Fahrt fährt Zufahrt ab, Rückfahrt an, Übergabe außer Sicht; Labels deutsch',()=>{
+ const s=airFixture('loading'),before=JSON.stringify(s);frozen(s);const at=s.buildings.filter(b=>b.site==='a'),L=yardLayout(s.sites[0]),v=s.vehicles[0];
+ const plan=S3.vehiclePlan(s,v,'a');assert.equal(plan.mode,'site');assert.equal(plan.kind,'airshuttle');assert.equal(plan.tone,'dock');
+ assert.equal(S3.vehiclePlan(s,v,'b').mode,'away');
+ const p=fleetPlans(s,'a',at,L).find(x=>x.v.id==='vehicle-1');assert.equal(p.dock,'da');assert.equal(p.pose.x,dockSlots(L,at).get('da'));
+ assert.equal(S3.vehicleLabel(s,plan,v),'LKW-1 · Beladen Luftfracht');assert.equal(JSON.stringify(s),before);
+ const w=frozen(airFixture('loading',{blocked:AX.WAIT.driver,dock:null})),pw=S3.vehiclePlan(w,w.vehicles[0],'a');
+ assert.equal(pw.tone,'wait','Wartegrund gelb');assert.equal(S3.vehicleLabel(w,pw,w.vehicles[0]),'LKW-1 · Beladen Luftfracht · Kein Fahrpersonal');
+ assert.equal(fleetPlans(w,'a',w.buildings,L).find(x=>x.v.id==='vehicle-1').dock,null,'wartet ohne Dock auf dem Stellplatz');
+ const t=frozen(airFixture('transit',{remaining:39,duration:40})),out=S3.vehiclePlan(t,t.vehicles[0],'a');
+ assert.equal(out.mode,'out');assert.equal(S3.vehicleLabel(t,out,t.vehicles[0]),'LKW-1 · Luftzubringer → Terminal');
+ const t0=vehicleT(out,t.vehicles[0],600,600),t1=vehicleT(out,t.vehicles[0],600.5,600);assert.ok(t0!=null&&t1>t0,'Abfahrt bewegt sich mit gebrochener Uhr');
+ const r=frozen(airFixture('returning',{remaining:2,duration:40})),back=S3.vehiclePlan(r,r.vehicles[0],'a');
+ assert.equal(back.mode,'in');assert.ok(vehicleT(back,r.vehicles[0],600,600)!=null);assert.equal(S3.vehicleLabel(r,back,r.vehicles[0]),'LKW-1 · Rückfahrt');
+ const h=frozen(airFixture('handover'));assert.equal(S3.vehiclePlan(h,h.vehicles[0],'a').mode,'away','Übergabe am Terminal');
+ const done=airFixture('transit');done.airShuttles[0].status='complete';assert.equal(S3.airShuttleOf(done,done.vehicles[0]),null);assert.equal(S3.vehiclePlan(done,done.vehicles[0],'a').mode,'away');
+});
+test('W3c Netz: Terminal-Knoten aus AIRPORT, gestrichelte Verbindung nur bei laufendem Vertrag/Zubringer, Fortschritt und Label, Verfolgen',()=>{
+ const s=frozen(airFixture('transit',{remaining:15,duration:40}));
+ assert.equal(S3.airRelevant(s),true);
+ const {pins,nodes,ext}=networkLayout(s.sites,undefined,[AX.AIRPORT]);assert.equal(nodes.length,1);assert.equal(nodes[0].id,'airport');
+ assert.ok(Math.abs((nodes[0].x-pins[0].x)-AX.AIRPORT.x*.26)<1e-9&&Math.abs((nodes[0].z-pins[0].z)-AX.AIRPORT.y*.26)<1e-9,'gleicher Maßstab wie Standorte');
+ assert.ok(ext>=Math.abs(nodes[0].z)+6);
+ assert.deepEqual(networkLayout(s.sites).pins,networkLayout(fixture().sites).pins,'ohne Flughafen unverändert');assert.deepEqual(networkLayout(s.sites).nodes,[]);
+ const links=S3.airLinks(s,pins,nodes[0]);assert.equal(links.length,1);assert.equal(links[0].site,'a');
+ assert.ok(Math.hypot(links[0].x0-pins[0].x,links[0].z0-pins[0].z)<Math.hypot(links[0].x1-pins[0].x,links[0].z1-pins[0].z),'Hub → Terminal');
+ const sh=s.airShuttles[0],v=s.vehicles[0],p=S3.airShuttleNetProgress(sh,v,600,600);assert.ok(Math.abs(p-.625)<1e-9);assert.ok(S3.airShuttleNetProgress(sh,v,600.4,600)>p);
+ assert.equal(S3.airShuttleNetLabel(s,sh,63),'Luftzubringer Morgenfeld→Heidmoor · 63 %');
+ assert.equal(S3.airShuttleNetProgress({...sh,status:'loading'},v,600,600),0);assert.equal(S3.airShuttleNetProgress({...sh,status:'handover'},v,600,600),1);
+ assert.ok(Math.abs(S3.airShuttleNetProgress({...sh,status:'returning'},v,600,600)-.375)<1e-9);
+ assert.equal(S3.airShuttleNetLabel(s,{...sh,status:'returning'},63),'Luftzubringer Morgenfeld→Heidmoor · Rückfahrt 63 %');
+ assert.equal(S3.airShuttleNetLabel(s,{...sh,status:'loading',blocked:'Kein freies Dock'},0),'Luftzubringer Morgenfeld→Heidmoor · Beladen Luftfracht · Kein freies Dock');
+ assert.equal(S3.airShuttleNetLabel(s,{...sh,status:'handover'},100),'Luftzubringer Morgenfeld→Heidmoor · Übergabe Terminal');
+ const air=[{id:'airshuttle-1',vehicleId:'vehicle-1',x:2,z:5}];
+ assert.deepEqual(S3.netFollowTarget([],'vehicle-1',air),{x:2,z:5,kind:'airshuttle'});assert.deepEqual(S3.netFollowTarget([],'airshuttle-1',air),{x:2,z:5,kind:'airshuttle'});
+ assert.equal(S3.netFollowTarget([],'vehicle-9',air),null);
+ // Ohne laufenden Luftvertrag und ohne Zubringer: kein Flughafen, keine Verbindung.
+ const off=airFixture('transit');off.contracts[0].status='ended';off.airShuttles[0].status='complete';assert.equal(S3.airRelevant(off),false);assert.equal(S3.airLinks(off,pins,nodes[0]).length,0);
+ const offer=airFixture('transit');offer.contracts[0].status='offer';offer.airShuttles=[];assert.equal(S3.airRelevant(offer),false,'Angebot zählt nicht');
+});
+test('W3c Startflugzeug: deterministisch aus Flugplan (steht vor Abflug, startet ab Abflug, danach weg)',()=>{
+ const s=frozen(airFixture('transit'));assert.deepEqual(S3.airFlightMinutes(s),[420,1290]);
+ assert.equal(S3.nextAirFlight(s,600),1290);assert.equal(S3.nextAirFlight(s,1300),1440+420);
+ assert.equal(S3.airportLabel(s),'Frachtterminal Flughafen Heidmoor · Flug 21:30');
+ const ms=[1290];assert.equal(S3.planePhase(ms,1200),null);
+ const stand=S3.planePhase(ms,1260);assert.equal(stand.u,0);assert.equal(stand.moving,false);
+ const a=S3.planePhase(ms,1290+4),b=S3.planePhase(ms,1290+12);assert.ok(a.moving&&b.u>a.u);
+ const node={x:0,z:0},pa=S3.planePose(node,a,{}),pb=S3.planePose(node,b,{});assert.ok(pb.x>pa.x&&pb.y>=pa.y&&pb.y>0,'rollt an und steigt');
+ assert.equal(S3.planePhase(ms,1290+S3.PLANE_CLIMB),null,'nach dem Start weg');
+ assert.deepEqual(S3.planePhase(ms,1440*3+1290+4),{...a,flight:1440*3+1290},'jeden Tag gleich');
+ assert.equal(S3.planePhase([10],1440*2-5).flight,1440*2+10,'Flug kurz nach Mitternacht steht schon am Vortag');
+});
+test('W3c Echter Ablauf: Zubringer durch alle Phasen, Szene zeigt Lkw am Dock bzw. auf der Zufahrt, Zustand unverändert',()=>{
+ const sim=new Simulation({mode:'sandbox',seed:31}),s=sim.state,ok=c=>{const r=sim.command(c);assert.equal(r.ok,true,`${c.type}: ${r.message}`);return r;};
+ ok({type:'build',buildingType:'dock',x:2,y:10,rotation:0});ok({type:'build',buildingType:'rack',x:2,y:2,rotation:0});
+ ok({type:'hire',role:'warehouse'});ok({type:'hire',role:'driver'});const truck=ok({type:'buyVehicle',vehicleType:'truck'}).id;
+ for(let i=0;i<4000&&!s.contracts.some(k=>k.unit==='air');i++)sim.step(1);
+ const k=s.contracts.find(k=>k.unit==='air');assert.ok(k,'Luftangebot');ok({type:'acceptContract',id:k.id});for(const w of s.workers)ok({type:'setShift',id:w.id,shift:'all'});
+ const flightT=AX.nextFlight(k.flights,k.cutoff,s.t+120),oid=sim.api.id('order');
+ s.orders.push({id:oid,kind:'logistics',source:'hub',contractId:k.id,lane:k.lanes[0].id,customer:'Luftfracht (Testversand)',item:'parcel',qty:20,price:k.pricePerParcel,due:flightT-k.cutoff,quality:0,site:'site-1',status:'active',delivered:0,paid:0,airExport:true,flightT});
+ assert.ok(sim.api.inventory.add({item:'parcel',qty:20,site:'site-1',owner:oid,location:'stock',quality:100,unitCost:0}));
+ const id=ok({type:'dispatchAirShuttle',vehicleId:truck,departAt:flightT}).id;assert.equal(S3.airRelevant(s),true);
+ const seen=new Set(),dock=s.buildings.find(b=>b.type==='dock').id,L=yardLayout(s.sites[0]);
+ for(let i=0;i<3000&&s.airShuttles.find(x=>x.id===id).status!=='complete';i++){
+  sim.step(1);const v=s.vehicles.find(x=>x.id===truck),sh=S3.airShuttleOf(s,v);if(!sh)continue;
+  const before=JSON.stringify(s.airShuttles)+JSON.stringify(s.vehicles)+JSON.stringify(s.buildings);
+  const p=fleetPlans(s,'site-1',s.buildings.filter(b=>b.site==='site-1'),L).find(x=>x.v.id===truck);
+  const want=sh.status==='loading'?'site':sh.status==='transit'?'out':sh.status==='returning'?'in':null;
+  if(want===null)assert.equal(p,undefined,'Übergabe außer Sicht');else{assert.equal(p.plan.mode,want,sh.status);if(sh.dock)assert.equal(p.dock,dock,'am Dock');}
+  const {pins,nodes}=networkLayout(s.sites,undefined,[AX.AIRPORT]);assert.equal(S3.airLinks(s,pins,nodes[0]).length,1);
+  assert.equal(JSON.stringify(s.airShuttles)+JSON.stringify(s.vehicles)+JSON.stringify(s.buildings),before,'Szene liest nur');seen.add(sh.status);
+ }
+ assert.deepEqual([...seen].sort(),['handover','loading','returning','transit']);
+});
