@@ -1,5 +1,6 @@
 // Frachtverträge und Ankunftsplan (A08). Schnittstelle: docs/SCHNITTSTELLEN-0.9-W1.md, W1-S1; W2-S1 (Vertragsstrafe) und
-// Vertragsfeld unit (W2-S2) in docs/SCHNITTSTELLEN-0.10-W2.md.
+// Vertragsfeld unit (W2-S2) in docs/SCHNITTSTELLEN-0.10-W2.md; Gebiete an anderen eigenen Standorten (W3-S1, lane.site,
+// order.deliverySite) in docs/SCHNITTSTELLEN-0.12-W3.md.
 // Vertrag annehmen ist kostenlos. Geld fließt über die vorhandenen Pfade (Zustellung → Rechnung → Zahlung, Abschlag bei Verspätung)
 // und zusätzlich über Vertragsstrafen (penalty:<lieferungId>, penalty-open:<auftragId>), jeweils genau einmal.
 import * as yardApi from './yard.js';
@@ -30,7 +31,11 @@ export const TERMS={
  // Vertragsstrafe (W2-S1) je Einheit: late = zugestellt nach order.due (zusätzlich zum Abschlag 10 %),
  // open = bei Vertragsende + openGrace Minuten nicht zugestellt (Ware geht an den Versender zurück). W2b A02: Paket
  // 2,50/8 € (≈ 30 %/100 % des Preises), Palette 25/60 € (≈ 20 %/50 %); Überlast wird damit teurer als guter Betrieb.
- penalty:{parcel:{late:2.5,open:8},pallet:{late:25,open:60},openGrace:1440}
+ penalty:{parcel:{late:2.5,open:8},pallet:{late:25,open:60},openGrace:1440},
+ // Fremdgebiete (W3-S1): nur Folgeangebote und nur bei ≥ 2 Standorten. Je Gebiet mit Wahrscheinlichkeit chance an einem anderen
+ // eigenen Standort (Zielstandort gleichverteilt). Zuschlag je Einheit = Basis + €/km × Standortdistanz (Hauptlauf), Fristzuschlag
+ // = Basis + min/km × Distanz, aufgerundet auf volle 30 Minuten. Distanz wie Standorttransfer: max(15, gerundete Luftlinie).
+ remote:{chance:0.35,price:{parcel:[0.6,0.012],pallet:[8,0.15]},sla:[180,2],slaStep:30}
 };
 const STATUSES=['offer','active','ended'];
 export const UNITS=['parcel','pallet'];
@@ -39,6 +44,21 @@ export const unitOf=k=>k?.unit==='pallet'?'pallet':'parcel';
 const unitWord=(k,n)=>unitOf(k)==='pallet'?(n===1?'Palette':'Paletten'):(n===1?'Paket':'Pakete');
 /** Palettenangebote möglich: Staplerplatz vorhanden oder ab Spieltag TERMS.pallet.fromDay. */
 export const palletsUnlocked=s=>s.buildings.some(b=>b.type==='forklift')||Math.floor(s.t/1440)+1>=TERMS.pallet.fromDay;
+
+/** Standort eines Zustellgebiets (W3-S1). Gebiete ohne Feld (bis 0.11) liegen am Vertragsstandort. */
+export const laneSite=(k,lane)=>lane?.site??k?.site;
+/** Zustellstandort eines Auftrags (W3-S1). Aufträge ohne Feld werden am Annahme-Hub order.site zugestellt. */
+export const deliverySiteOf=o=>o?.deliverySite??o?.site;
+/** Distanz zwischen zwei Standorten in km, wie Standorttransfer (transport.js): mindestens 15 km. */
+export function siteDistance(s,fromId,toId){
+ const a=s.sites.find(x=>x.id===fromId),b=s.sites.find(x=>x.id===toId);if(!a||!b)return null;
+ return Math.max(15,Math.round(Math.hypot(b.x-a.x,b.y-a.y)));
+}
+/** Preis- und Fristzuschlag für ein Fremdgebiet (W3-S1, TERMS.remote). */
+export function remoteTerms(s,unit,fromId,toId){
+ const km=siteDistance(s,fromId,toId),R=TERMS.remote,[p0,pk]=R.price[unit==='pallet'?'pallet':'parcel'];
+ return {distance:km,surcharge:cents(p0+pk*km),extraSla:Math.ceil((R.sla[0]+R.sla[1]*km)/R.slaStep)*R.slaStep};
+}
 
 const pick=(api,list)=>list[Math.floor(api.random()*list.length)];
 const int=(api,min,max)=>min+Math.floor(api.random()*(max-min+1));
@@ -58,10 +78,26 @@ function makeOffer(s,api,small=false,pallet=false){
  arrivals.sort((a,b)=>a.minute-b.minute);
  const id=api.id('contract');
  // pricePerParcel = Preis je Einheit (Paket bzw. Palette); arrivals[].parcels = Einheiten je Ankunft (Feldnamen bleiben für Altstände).
- return {id,shipper,site:s.selectedSite,status:'offer',unit,lanes,arrivals,laneShare,
+ const k={id,shipper,site:s.selectedSite,status:'offer',unit,lanes,arrivals,laneShare,
   pricePerParcel:small?TERMS.start.price:cents(T.price[0]+int(api,0,T.price[2])*T.price[1]),slaMinutes:small?TERMS.start.sla:int(api,...T.sla)*60,
   durationDays:small?TERMS.start.days:int(api,...T.days),penaltyLate:pen.late,penaltyOpen:pen.open,offeredAt:s.t,expiresAt:s.t+OFFER_VALIDITY,
   startT:null,endT:null,acceptedAt:null,issued:0,lastEta:null};
+ assignLaneSites(s,api,k,small);
+ return k;
+}
+
+/** W3-S1: Gebiete Standorten zuordnen. Nur bei ≥ 2 Standorten und nur für Folgeangebote; zusätzliche Zufallszüge erst NACH allen
+ *  bisherigen Zügen, damit Ein-Standort-Spiele denselben Zufallsstrom und denselben Zustand (ohne neue Felder) behalten.
+ *  Mischverträge sind erlaubt: Teil der Gebiete am Annahme-Hub (Gebietsstandort = Vertragsstandort), Teil an anderen Standorten. */
+function assignLaneSites(s,api,k,small){
+ if(small||s.sites.length<2)return;
+ const others=s.sites.filter(x=>x.id!==k.site);if(!others.length)return;
+ for(const lane of k.lanes){
+  if(api.random()<TERMS.remote.chance){
+   const to=others[Math.floor(api.random()*others.length)].id,r=remoteTerms(s,k.unit,k.site,to);
+   Object.assign(lane,{site:to,surcharge:r.surcharge,extraSla:r.extraSla});
+  }else Object.assign(lane,{site:k.site});
+ }
 }
 
 /** Verteilt parcels nach Anteil (größter Rest, bei Gleichstand niedrigerer Index). Ganzzahlig, Summe exakt = parcels. */
@@ -75,13 +111,22 @@ export function splitParcels(parcels,shares){
 function issue(s,api,c,arrival,eta){
  const qty=splitParcels(arrival.parcels,c.laneShare),orderIds=[],lanes=[];
  c.lanes.forEach((lane,i)=>{if(qty[i]<1)return;const id=api.id('order');
-  s.orders.push({id,kind:'logistics',source:'hub',contractId:c.id,lane:lane.id,customer:`${lane.name} (${c.shipper})`,item:unitOf(c),qty:qty[i],price:c.pricePerParcel,due:eta+c.slaMinutes,quality:0,site:c.site,status:'active',delivered:0,paid:0});
+  // W3-S1: Fremdgebiet → Zuschlag auf Preis und Frist, deliverySite = lane.site. Gebiete ohne site (Altstände, Ein-Standort-Spiele)
+  // erzeugen Aufträge ohne deliverySite (Zustellung am Annahme-Hub order.site, Zustand bitgleich zu 0.11).
+  const o={id,kind:'logistics',source:'hub',contractId:c.id,lane:lane.id,customer:`${lane.name} (${c.shipper})`,item:unitOf(c),qty:qty[i],price:cents(c.pricePerParcel+(lane.surcharge||0)),due:eta+c.slaMinutes+(lane.extraSla||0),quality:0,site:c.site,status:'active',delivered:0,paid:0};
+  if(lane.site!==undefined)o.deliverySite=lane.site;
+  s.orders.push(o);
   orderIds.push(id);lanes.push({lane:lane.id,orderId:id,qty:qty[i]});});
  c.issued++;c.lastEta=eta;
  const payload={contractId:c.id,site:c.site,parcels:arrival.parcels,unit:unitOf(c),item:unitOf(c),eta,orderIds,lanes};
  if(typeof yardApi.schedule==='function')yardApi.schedule(s,api,payload);
  else api.log('warning',`Hof-Planung fehlt: Ankunft ${c.shipper} (${arrival.parcels} ${unitWord(c,arrival.parcels)}) nur als Aufträge angelegt.`,[c.id,...orderIds]);
  api.log('contract',`${c.shipper}: Lkw mit ${arrival.parcels} ${unitOf(c)==='pallet'?(arrival.parcels===1?'Palette':'Paletten'):(arrival.parcels===1?'Paket':'Paketen')} angekündigt, Ankunft ${clock(eta)}.`,[c.id,...orderIds]);
+}
+/** Logtext für Fremdgebiete: „Zustellung ab <Standort>“ je Gebiet an anderem Standort. */
+function remoteText(s,k){
+ const remote=k.lanes.filter(l=>laneSite(k,l)!==k.site);if(!remote.length)return '';
+ return ' Hauptlauf nötig: '+remote.map(l=>`${l.name} ab ${s.sites.find(x=>x.id===l.site)?.name||l.site}`).join(', ')+'.';
 }
 const clock=t=>{const m=((t%1440)+1440)%1440;return `${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;};
 
@@ -95,10 +140,11 @@ export function handle(s,c,api){
   const k=s.contracts.find(x=>x.id===c.id);if(!k||k.status!=='offer')return {ok:false,message:'Vertragsangebot nicht verfügbar.'};
   if(s.t>=k.expiresAt)return {ok:false,message:'Vertragsangebot abgelaufen.'};
   if(!s.sites.some(x=>x.id===k.site))return {ok:false,message:'Standort des Vertrags fehlt.'};
+  if(k.lanes.some(l=>!s.sites.some(x=>x.id===laneSite(k,l))))return {ok:false,message:'Standort eines Zustellgebiets fehlt.'};
   k.status='active';k.acceptedAt=s.t;k.startT=s.t+START_DELAY;k.endT=k.startT+k.durationDays*1440;
   // Angebote aus Ständen bis 0.9 erhalten bei Annahme Einheit und Strafsätze (bereits laufende Altverträge bleiben ohne Strafe).
   k.unit??='parcel';const pen=TERMS.penalty[unitOf(k)];k.penaltyLate??=pen.late;k.penaltyOpen??=pen.open;
-  api.log('contract',`Vertrag mit ${k.shipper} angenommen: ${k.arrivals.map(a=>`${a.parcels} ${unitWord(k,a.parcels)} um ${clock(a.minute)}`).join(', ')} täglich, ${k.durationDays} Tage. Vertragsstrafe ${k.penaltyLate.toFixed(2)} € je verspätete, ${k.penaltyOpen.toFixed(2)} € je nicht zugestellte Einheit.`,[k.id]);
+  api.log('contract',`Vertrag mit ${k.shipper} angenommen: ${k.arrivals.map(a=>`${a.parcels} ${unitWord(k,a.parcels)} um ${clock(a.minute)}`).join(', ')} täglich, ${k.durationDays} Tage.${remoteText(s,k)} Vertragsstrafe ${k.penaltyLate.toFixed(2)} € je verspätete, ${k.penaltyOpen.toFixed(2)} € je nicht zugestellte Einheit.`,[k.id]);
   return {ok:true,id:k.id};
  }
  if(c.type==='cancelContract'){
@@ -183,7 +229,8 @@ export function validate(s){
   if(!k||typeof k.id!=='string'||typeof k.shipper!=='string'||!k.shipper||!sites.has(k.site)||!STATUSES.includes(k.status))bad('Grunddaten beschädigt.');
   if(k.status==='offer')offers++;
   if(!Array.isArray(k.lanes)||k.lanes.length<1||k.lanes.length>3)bad('Zustellgebiete beschädigt.');
-  const laneIds=new Set();for(const l of k.lanes){if(!l||typeof l.id!=='string'||laneIds.has(l.id)||typeof l.name!=='string'||!l.name||!num(l.distance,Number.EPSILON))bad('Zustellgebiet beschädigt.');laneIds.add(l.id);}
+  const laneIds=new Set();for(const l of k.lanes){if(!l||typeof l.id!=='string'||laneIds.has(l.id)||typeof l.name!=='string'||!l.name||!num(l.distance,Number.EPSILON))bad('Zustellgebiet beschädigt.');laneIds.add(l.id);
+   if((l.site!==undefined&&!sites.has(l.site))||(l.surcharge!==undefined&&!num(l.surcharge,0))||(l.extraSla!==undefined&&(!Number.isInteger(l.extraSla)||l.extraSla<0)))bad('Standort/Zuschlag eines Zustellgebiets beschädigt.');}
   if(!Array.isArray(k.laneShare)||k.laneShare.length!==k.lanes.length||k.laneShare.some(x=>!num(x,0)||x>1)||Math.abs(k.laneShare.reduce((a,b)=>a+b,0)-1)>1e-9)bad('Gebietsanteile beschädigt.');
   if(!Array.isArray(k.arrivals)||k.arrivals.length<1||k.arrivals.length>3||k.arrivals.some(a=>!a||!Number.isInteger(a.minute)||a.minute<0||a.minute>1439||!Number.isInteger(a.parcels)||a.parcels<1)||new Set(k.arrivals.map(a=>a.minute)).size!==k.arrivals.length)bad('Ankunftsplan beschädigt.');
   if(!num(k.pricePerParcel,0)||!Number.isInteger(k.slaMinutes)||k.slaMinutes<1||!Number.isInteger(k.durationDays)||k.durationDays<1)bad('Konditionen beschädigt.');
@@ -197,10 +244,12 @@ export function validate(s){
  if(offers>MAX_OFFERS)bad('zu viele offene Angebote.');
  const contracts=new Map(s.contracts.map(k=>[k.id,k]));
  for(const o of s.orders){
+  if(o.deliverySite!==undefined&&!sites.has(o.deliverySite))bad('Zustellstandort Auftrag '+o.id+' fehlt.');
   if(o.contractId===undefined)continue;
   const k=contracts.get(o.contractId);
   if(!k||k.status==='offer')bad('fehlt für Auftrag '+o.id+'.');
   if(o.kind!=='logistics'||o.item!==unitOf(k)||!Number.isInteger(o.qty)||o.qty<1||!k.lanes.some(l=>l.id===o.lane)||o.site!==k.site)bad('Vertragsauftrag '+o.id+' beschädigt.');
+  if(o.deliverySite!==undefined){const lane=k.lanes.find(l=>l.id===o.lane);if(!sites.has(o.deliverySite)||o.deliverySite!==laneSite(k,lane))bad('Zustellstandort Auftrag '+o.id+' beschädigt.');}
   if(o.returnedQty!==undefined&&(o.status!=='cancelled'||!num(o.returnedQty,0)))bad('Rückgabe Auftrag '+o.id+' beschädigt.');
  }
 }

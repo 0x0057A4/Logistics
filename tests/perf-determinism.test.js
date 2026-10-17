@@ -40,6 +40,9 @@ const SCENARIOS={
 // Welle 2b (A02): erneut erzeugt, weil TERMS.pallet.price (110–140 €) und Strafsätze (Paket 2,50/8 €, Palette 25/60 €) in
 // Angeboten stehen. Gleiche Zahl Zufallszüge. Gegenprobe: contracts.js aus 91c08cf (mit neuem yard.js, Akku-Hysterese)
 // reproduziert die vorherigen Hashes exakt (4/4 grün). Node v22.22.0.
+// Welle 3a (A08, W3-S1): gross[3] neu erzeugt, weil das Szenario 6 Standorte besitzt und Folgeangebote nun Gebiete an anderen
+// Standorten (lane.site, Zuschläge, zusätzliche Zufallszüge NACH den bisherigen) tragen. Ein-Standort-Szenarien (klein, dienste,
+// prognose) unverändert. Gegenprobe: assignLaneSites abgeschaltet reproduziert alle vorherigen Hashes exakt (4/4 grün). Node v22.22.0.
 const EXPECTED={
  klein:[
   'f1dafd6deff70c2a198e658ed56ea5fe9c5b7da48aa8eea9943408da8382bd53',
@@ -57,7 +60,7 @@ const EXPECTED={
   'da11301f9367270bfbdbb1cc72ae46a086737b54d807714790a7c7be694165de',
   '21f7a357a18ecb4f59cc74cb279774b29596d5ac1fec8a213b7f79b1e8ec4cfd',
   '1a066501859b9be445607a6adb4901aa9e6cb259956391b111d061e6c0940d41',
-  '20a5fc40f56e7fa0d26c5711ba41428c5b9f8fb04dd0ab85170654838af6ffa7',
+  '860aabb8a7743a980a90309a6c7f813b808598e385f85d4590a38cc65f0d1804',
  ],
  prognose:[
   '22e58acdd84e107e8f501a215715b10e4af00ed773fc7537d269a2540f6cb4ab',
