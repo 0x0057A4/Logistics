@@ -735,7 +735,7 @@ function replayTake(){replayIdle=0;if(!replayBuf||rp||!started)return false;if(r
  // 60-FPS-Schutz: teure Aufnahme (> 8 ms) → seltener aufnehmen (bis alle 30 Spielminuten).
  replayLastT=sim.state.t;replayGap=ms>8?Math.min(30,5*Math.ceil(ms/8)):5;syncReplayBtn();return ok;}
 let replayLastT=-Infinity,replayGap=5;
-function replayCapture(){if(!replayBuf||rp||!started||replayIdle)return;if(sim.state.t-replayLastT<replayGap&&replayOwner===sim)return;if(replayOwner!==sim){replayBuf.clear();replayOwner=sim;}if(!replayBuf.due(sim.state.t))return;
+function replayCapture(){if(!replayBuf||rp||!started||replayIdle)return;if(replayGap>5&&sim.state.t-replayLastT<replayGap&&replayOwner===sim)return;if(replayOwner!==sim){replayBuf.clear();replayOwner=sim;}if(!replayBuf.due(sim.state.t))return;
  replayIdle=typeof requestIdleCallback==='function'?requestIdleCallback(replayTake,{timeout:2000}):(setTimeout(replayTake,0)||1);}
 function syncReplayBtn(){const b=document.getElementById('replayBtn');if(!b)return;const n=replayOwner===sim?replayBuf?.size||0:0;b.dataset.snapshots=String(n);b.dataset.captureMs=String(Math.round((replayBuf?.stats.maxMs||0)*10)/10);
  putAttr('replayBtn','title',`Replay · Z · ${n} Momentaufnahme${n===1?'':'n'} (alle ${REPLAY.interval} Spielminuten, bis ${REPLAY.window} Min.)`);putAttr('replayBtn','aria-pressed',String(!!rp));}
