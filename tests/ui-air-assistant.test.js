@@ -144,7 +144,7 @@ test('Assistent: Kopfzeilen-Schalter, Rail/J/Palette, Schalter, Tagesbudget, abg
  await ui.submit('assistBudget',{dayBudget:''});assert.equal(st(ui,"assistant.sites['site-1'].budget"),null);assert.match(body(ui),/nur Kasse/);
  until(ui,"sim.state.airShuttles.length>0",80);
  const sh=st(ui,'airShuttles[0].id');html=body(ui);
- assert.match(html,/<span class="chip tone-move">Luftzubringer<\/span><\/td><td>Luftzubringer mit .* zum Flug 1290 gestartet\.<\/td><td><small>Annahmeschluss Minute \d+ in \d+ Min\.<\/small>/);
+ assert.match(html,/<span class="chip tone-move">Luftzubringer<\/span><\/td><td>Luftzubringer mit .* zum Flug 21:30 Uhr gestartet\.<\/td><td><small>Annahmeschluss Minute \d+ in \d+ Min\.<\/small>/);
  assert.ok(html.includes(`data-action="openRef" data-id="${sh}"`),'Bezug klickbar');
  press(ui,{action:'openRef',id:sh});assert.equal(ui.run('panel'),'air');assert.equal(ui.run('hubFocus'),sh);
  // Ausschalten über die Kopfzeile
