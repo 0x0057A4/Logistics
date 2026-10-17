@@ -87,7 +87,7 @@ let sim=new Simulation(), speed=0, panel='', selected=null, build=null, rotation
 let tourDraft={};
 let started=false, dirty=false, uiStamp=0, lastTick=performance.now(), accumulator=0;
 const STORE='industrie-logistik-v1', prefsKey=STORE+'-prefs';
-const VERSION='0.11 · ENTWICKLUNG';{const v=document.getElementById('appVersion');if(v)v.textContent=VERSION;}
+const VERSION='0.12 · ENTWICKLUNG';{const v=document.getElementById('appVersion');if(v)v.textContent=VERSION;}
 const guard=createSaveGuard({prefix:STORE,onLost(){writable=false;speed=0;$('#statusText').textContent=lockMessage();}});
 // QS-W0-03 (W1b): Spielstände in IndexedDB (storage.js), Rückfall localStorage ohne IndexedDB. Sperre/Einstellungen bleiben in localStorage.
 const store=createSaveStore({prefix:STORE,onWriteError:writeFailed,onCommit:writeCommitted});

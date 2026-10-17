@@ -1,5 +1,14 @@
 # Änderungen
 
+## 0.12 – 17.10.2026 · Linienverkehr zwischen eigenen Standorten (Entwicklungsfassung)
+
+- Zustellgebiete gehören Standorten; ab 2 Standorten Verträge mit Gebieten anderer Hubs (Zuschlag 0,60 €+0,012 €/km je Paket, Frist +180 Min+2 Min/km).
+- Linien mit Fahrplan, Lkw und Ladeschluss: Reservierung nach Frist, Beladen/Entladen mit Dock, Lagerkraft (+Stapler), Fahrt, Ankunft in den Wareneingang des Ziel-Hubs, dort Sortierung; Zustellung nur am zuständigen Standort.
+- Fenster „Linien“ (Taste N), Paketreise in der Auftragsakte, Station „Hauptlauf“, Meldungen (Hauptlauf fehlt, Abfahrt verpasst, Verzug).
+- 3D: Linien-Lkw am Dock und auf der Zufahrt; Netzansicht mit Linien, Richtungspfeilen, fahrenden Markern, Verfolgen.
+- Fix QS-W3-01: Linienfahrt bei vollem Ziellager hält keine Lagerkraft/Stapler mehr. Unabhängige Prüfung: docs/QS-0.12.md.
+- Bekannt (QS-W3-02): späte Abfahrten können nach Schichtende am Ziel ankommen; Entladen dann erst am Folgetag – Fahrplan entsprechend wählen.
+
 ## 0.11 – 17.10.2026 · Leitstand-Design (Entwicklungsfassung)
 
 - Neues Design auf eigenen Gestaltungswerten (hell/dunkel, Abstände, Schatten, Typografie) nach NuriTrack-Vorbild, ohne übernommenes CSS; eigenes Linien-Icon-Set; Kennzahlen-Raster in der Objektakte.

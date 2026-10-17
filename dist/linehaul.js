@@ -167,13 +167,13 @@ function stepTrip(s,api,lh){
   if(lh.remaining>0){if(!handling(s,api,lh,lh.to))return;lh.remaining--;}
   if(lh.remaining>0)return;
   const cargo=lh.cargo.map(id=>s.batches.find(b=>b.id===id));
-  if(cargo.some(b=>!b||b.location!=='vehicle')){lh.blocked=WAIT.cargo;return;}
+  if(cargo.some(b=>!b||b.location!=='vehicle')){lh.blocked=WAIT.cargo;endHandling(s,api,lh);return;}
   const need=cargo.reduce((n,b)=>n+b.qty*(ITEMS[b.item].volume||1),0);
-  if(api.inventory.free(lh.to)+1e-9<need){lh.blocked=WAIT.full;return;}
+  if(api.inventory.free(lh.to)+1e-9<need){lh.blocked=WAIT.full;endHandling(s,api,lh);return;/* QS-W3-01 */}
   const parcels=cargo.filter(b=>b.item!==PALLET).map(b=>b.id),pallets=cargo.filter(b=>b.item===PALLET).map(b=>b.id);
   // Pakete gehen durch die Sortierung am Ziel; Paletten direkt ins Lager (wie Hof-Entladung).
-  if(parcels.length&&!api.inventory.relocate(parcels,'inbound',lh.to)){lh.blocked=WAIT.full;return;}
-  if(pallets.length&&!api.inventory.relocate(pallets,'stock',lh.to)){lh.blocked=WAIT.full;return;}
+  if(parcels.length&&!api.inventory.relocate(parcels,'inbound',lh.to)){lh.blocked=WAIT.full;endHandling(s,api,lh);return;/* QS-W3-01 */}
+  if(pallets.length&&!api.inventory.relocate(pallets,'stock',lh.to)){lh.blocked=WAIT.full;endHandling(s,api,lh);return;/* QS-W3-01 */}
   endHandling(s,api,lh);for(const b of s.buildings)if(b.task===lh.id)b.task=null;lh.dock=null;lh.blocked=null;
   lh.arrivedAt=s.t;lh.status='returning';lh.remaining=lh.duration=Math.ceil(lh.distance/speed);
   api.log('linehaul',`Linien-Lkw am Ziel entladen: ${lh.qty} Einheiten im Wareneingang.`,[lh.id,lh.lineId,lh.to]);

@@ -225,11 +225,11 @@ test('Pflicht: Lager am Ziel voll → Fahrt wartet, Ware bleibt auf dem Lkw, nac
  const filler=s.batches.find(b=>b.item==='housing'&&b.site===B);env.sim.api.inventory.remove(filler.id,filler.qty);
  until(env,()=>lh.status==='returning',30);checkQty(s,B);validateState(s);
 });
-test('QS-W3-01: Lager am Ziel voll → Linienfahrt hält die einzige Lagerkraft am Ziel ohne Fortschritt',{todo:'QS-W3-01 offen (A07/A05)'},()=>{
+test('QS-W3-01: Lager am Ziel voll → Linienfahrt hält die einzige Lagerkraft am Ziel ohne Fortschritt',()=>{
  const {env,lh}=fullB('parcel'),{s}=env;
  assert.equal(bound(s,lh.id).worker,0,'Lagerkraft am Ziel gebunden, obwohl nichts entladen wird');
 });
-test('QS-W3-01b: Paletten, Lager am Ziel voll → Stapler am Ziel bleibt gebunden',{todo:'QS-W3-01 offen (A07/A05)'},()=>{
+test('QS-W3-01b: Paletten, Lager am Ziel voll → Stapler am Ziel bleibt gebunden',()=>{
  const {env,lh}=fullB('pallet'),{s}=env;
  assert.equal(bound(s,lh.id).fork,0,'Stapler am Ziel gebunden, obwohl nichts entladen wird');
 });
