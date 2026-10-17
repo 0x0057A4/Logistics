@@ -108,7 +108,7 @@ function stepAir(s,api,site,cfg,used,state){
  if(state.airUnknown)return;
  const orders=s.orders.filter(o=>o.status==='active'&&o.airExport&&o.kind==='logistics'&&deliverableAt(o,site)&&o.qty-o.delivered-committedQty(s,o.id)>0&&api.inventory.available(o.item,site,o.id)>=1);
  const flights=new Map();
- for(const o of orders){const f=nextFlight(s,(s.contracts||[]).find(k=>k.id===o.contractId));if(f&&f.cutoffAt-s.t<URGENT&&!flights.has(f.departAt))flights.set(f.departAt,{...f,orderIds:[]});if(f&&flights.has(f.departAt))flights.get(f.departAt).orderIds.push(o.id);}
+ for(const o of orders){const k=(s.contracts||[]).find(k=>k.id===o.contractId),cut=Number.isFinite(k?.cutoff)?k.cutoff:90;/* gebuchter Flug des Auftrags (airexport) hat Vorrang */const f=Number.isFinite(o.flightT)&&o.flightT-cut>s.t?{flight:o.flightT%1440,departAt:o.flightT,cutoffAt:o.flightT-cut}:nextFlight(s,k);if(f&&f.cutoffAt-s.t<URGENT&&!flights.has(f.departAt))flights.set(f.departAt,{...f,orderIds:[]});if(f&&flights.has(f.departAt))flights.get(f.departAt).orderIds.push(o.id);}
  for(const f of [...flights.values()].sort((a,b)=>a.departAt-b.departAt)){
   const key='air:'+f.departAt;if(held(s,cfg,key))continue;
   const v=freeVehicles(s,site,used).sort((a,b)=>(b.capacity-a.capacity))[0];if(!v)continue;
