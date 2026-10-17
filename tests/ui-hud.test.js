@@ -109,10 +109,10 @@ test('HUD: Standortwahl, Stationen, Fahrzeugzeile und Einklappen nutzen bestehen
  ui.run('guard.dispose()');
 });
 
-test('Version (QS-W0-10): Statuszeile, Einstellungen und Handbuch nennen „0.10 · ENTWICKLUNG“',async()=>{
+test('Version (QS-W0-10): Statuszeile, Einstellungen und Handbuch nennen „0.11 · ENTWICKLUNG“',async()=>{
  const ui=await boot();await ui.click('start');
- assert.equal(text(ui,'appVersion'),'0.10 · ENTWICKLUNG');
- for(const p of ['settings','help']){ui.run(`openPanel('${p}')`);const body=ui.nodes.get('#panelBody').innerHTML;assert.match(body,/0\.10 · ENTWICKLUNG/,p);assert.doesNotMatch(body,/Entwicklungsfassung 0\.8|0\.8 · ENTWICKLUNG/,p);}
+ assert.equal(text(ui,'appVersion'),'0.11 · ENTWICKLUNG');
+ for(const p of ['settings','help']){ui.run(`openPanel('${p}')`);const body=ui.nodes.get('#panelBody').innerHTML;assert.match(body,/0\.11 · ENTWICKLUNG/,p);assert.doesNotMatch(body,/Entwicklungsfassung 0\.8|0\.8 · ENTWICKLUNG/,p);}
  ui.run('guard.dispose()');
 });
 

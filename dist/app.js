@@ -85,7 +85,7 @@ let sim=new Simulation(), speed=0, panel='', selected=null, build=null, rotation
 let tourDraft={};
 let started=false, dirty=false, uiStamp=0, lastTick=performance.now(), accumulator=0;
 const STORE='industrie-logistik-v1', prefsKey=STORE+'-prefs';
-const VERSION='0.10 · ENTWICKLUNG';{const v=document.getElementById('appVersion');if(v)v.textContent=VERSION;}
+const VERSION='0.11 · ENTWICKLUNG';{const v=document.getElementById('appVersion');if(v)v.textContent=VERSION;}
 const guard=createSaveGuard({prefix:STORE,onLost(){writable=false;speed=0;$('#statusText').textContent=lockMessage();}});
 // QS-W0-03 (W1b): Spielstände in IndexedDB (storage.js), Rückfall localStorage ohne IndexedDB. Sperre/Einstellungen bleiben in localStorage.
 const store=createSaveStore({prefix:STORE,onWriteError:writeFailed,onCommit:writeCommitted});
@@ -671,12 +671,16 @@ function onKey(e){if(e.target.matches('input,select,textarea,[contenteditable="t
  const k=e.key,lk=typeof k==='string'&&k.length===1?k.toLowerCase():k;
  if(k==='/'){e.preventDefault();closeMenus();$('#cmd').focus?.();return;}
  if(e.code==='Space'||k===' '){e.preventDefault();setSpeed(speed?0:lastSpeed);return;}
+ if(k==='Escape'&&camAtKey)return;
+ if(lk==='t'&&(camAtKey==='tour'||camAtKey?.mode==='tour'))return;
  if(k==='Escape'){if(menuOpen('siteMenu')||menuOpen('bellMenu')||menuOpen('cmdResults')){closeMenus();return;}endBuild();closePanel();return;}
  if(k in SPEED_KEYS){setSpeed(SPEED_KEYS[k]);return;}
  const acts={b:()=>startBuild(),r:()=>{if($('#buildTray').hidden)return false;rotation=(rotation+90)%360;scene.setBuild(build,rotation,moving);},h:()=>togglePanel('yard'),v:()=>togglePanel('contracts'),
   l:()=>{const order=['all','fleet','infra','none'],m=order[(order.indexOf(labelMode)+1)%order.length];if(!setLabelMode(m))return false;toast('Beschriftung: '+LABEL_NAMES[m]+'.');},p:()=>hudToggle('scene'),
   f:()=>typeof scene.follow==='function'?followSelected():false,t:()=>startTour(),q:()=>scene.rotate(-1),e:()=>scene.rotate(1),'+':()=>scene.zoom(1),'=':()=>scene.zoom(1),'-':()=>scene.zoom(-1),'−':()=>scene.zoom(-1),Home:()=>scene.home(),'?':()=>showKeys()};
  const fn=acts[lk];if(!fn)return;if(fn()!==false)e.preventDefault?.();}
+// Kameramodus vor dem Szenen-Listener merken: Esc/T beenden dann nur Rundgang bzw. Verfolgen.
+let camAtKey=null;document.addEventListener('keydown',()=>{camAtKey=scene?.cameraMode?.()||null;},true);
 document.addEventListener('keydown',onKey);
 // Rechtsklick ohne Ziehen bricht schrittweise ab wie Esc: Menü → Bau/Versetzen → Fenster → Auswahl. Browsermenü nur in Eingabefeldern und Dialogen.
 let rightDown=null;

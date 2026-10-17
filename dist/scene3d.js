@@ -752,7 +752,7 @@ export class Scene3D {
     c.base = t; c.at = now;
   }
   zoom(delta, immediate = false) { this.scale = Math.max(.45, Math.min(2.7, this.scale * Math.pow(1.13, delta))); this.goal.dist = this.homeDist / this.scale; if (immediate) { this.cam.dist = this.goal.dist; this.applyCamera(); } this.needs = true; }
-  rotate() { if (this.camMode?.mode === 'tour') this.stopCamera('user'); this.quarter = (this.quarter + 1) % 4; this.goal.yaw += Math.PI / 2; this.needs = true; this.dynDirty = true; }
+  rotate(dir = 1) { if (this.camMode?.mode === 'tour') this.stopCamera('user'); const d = dir < 0 ? -1 : 1; this.quarter = (this.quarter + d + 4) % 4; this.goal.yaw += d * Math.PI / 2; this.needs = true; this.dynDirty = true; }
   home() {
     this.stopCamera('user'); const s = defaultSite(this.state), W = s.width || 20, H = s.height || 16; this.scale = 1;
     if (this.view === 'network') { const { ext } = networkLayout(this.state?.sites || [s]); this.homeDist = ext * 2.3; this.goal.tx = 0; this.goal.tz = 2; }

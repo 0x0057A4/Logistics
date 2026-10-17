@@ -1,5 +1,12 @@
 # Änderungen
 
+## 0.11 – 17.10.2026 · Leitstand-Design (Entwicklungsfassung)
+
+- Neues Design auf eigenen Gestaltungswerten (hell/dunkel, Abstände, Schatten, Typografie) nach NuriTrack-Vorbild, ohne übernommenes CSS; eigenes Linien-Icon-Set; Kennzahlen-Raster in der Objektakte.
+- Befehlspalette im Suchfeld „/“ (z. B. „Vertrag annehmen“, „Tempo 12×“, „Bauen: Laderampe“, „Zum Dock 2“); „>“ zeigt nur Befehle.
+- Tastenkürzel: Leertaste, 1–4, B, R, Esc/Rechtsklick, H, V, L, P, F (verfolgen), T (Rundgang), Q/E (drehen), +/−, Pos1, ? (Übersicht).
+- 3D: Tagesverlauf nach Spielzeit, Nachtbeleuchtung (Hofmasten, Dockleuchten, Hallenlicht), Kamerarundgang, Verfolgen-Kamera, Label-Chips; Farbschema Tag/Nacht/Automatisch in den Einstellungen.
+
 ## 0.10 – 17.10.2026 · Vertragsstrafen, Paletten, Stapler (Entwicklungsfassung)
 
 - Vertragsstrafen: verspätete Einheiten (2,50 €/Paket, 25 €/Palette) und bei Vertragsende liegengebliebene (8 €/60 €, Ware zurück an Versender) – je genau einmal gebucht.
