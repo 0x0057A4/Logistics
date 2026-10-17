@@ -1,6 +1,6 @@
 // Browserprüfung der WebGL-Szene (nicht Teil von npm test).
 // Voraussetzung: Root-index.html aus `python3 scripts/package.py`, Playwright global, Chromium unter /opt/pw-browsers.
-// Aufruf: node tests/browser/scene3d.mjs   Ergebnis: JSON-Bericht, Screenshot docs/assets/scene3d-0.9.png
+// Aufruf: node tests/browser/scene3d.mjs   Ergebnis: JSON-Bericht, Screenshots docs/assets/scene3d-0.9.png, szene-0.11-nacht.png u. a.
 // Hinweis: Headless-Chromium rendert per SwiftShader (Software). Frame-Zeiten sind nicht repräsentativ für echte GPUs.
 import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
@@ -186,6 +186,75 @@ try {
   check('Stapler: unter 150 Draw Calls', fork.info.drawCalls < 150, String(fork.info.drawCalls));
   check('Stapler: Spielzustand unverändert', fork.unchanged);
   await page.evaluate(() => { window.__fork.s.destroy(); window.__fork.host.remove(); });
+  // Welle 2c: Leitstand-Design – Tageszeit (auto/fest), Nachtbeleuchtung, Rundgang mit Abbruch, Verfolgen (Fremd-Lkw, eigenes Fahrzeug), Label-Chips.
+  const w2c = await page.evaluate(async () => {
+    const { Scene3D } = await import('./scene3d.js');
+    const host = document.createElement('div'); host.style.cssText = 'position:fixed;inset:0;z-index:999;background:#fff'; document.body.appendChild(host);
+    const canvas = document.createElement('canvas'); canvas.style.cssText = 'width:100%;height:100%;display:block'; host.appendChild(canvas);
+    const sleep = ms => new Promise(r => setTimeout(r, ms)), frame = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const B = (id, type, x, y, status = 'idle', extra = {}) => ({ id, type, site: 's1', x, y, rotation: 0, status, enabled: true, condition: 100, ...extra });
+    const A = (id, phase, extra) => ({ id, site: 's1', contractId: 'contract-1', orderIds: [], carrier: 'Talgrund Spedition', plate: 'TGD-KN 1300', parcels: 120, phase, phaseStart: 1320, phaseEnd: null, eta: 1320, dock: null, waitReason: null, waitSince: null, unloaded: 0, atRisk: false, forecast: null, gateAt: 1310, priority: false, split: [{ owner: 'order-1', target: 120, done: 0 }], ...extra });
+    const state = { t: 1320, selectedSite: 's1', sites: [{ id: 's1', name: 'Hub Nacht', x: 0, y: 0, width: 20, height: 16, energy: 60 }],
+      buildings: [B('d1', 'dock', 1, 13, 'idle', { task: 'arrival-2' }), B('d2', 'dock', 5, 13, 'idle', { task: 'sh1' }), B('d3', 'dock', 9, 13), B('so', 'sorter', 8, 8, 'working'), B('r1', 'rack', 2, 6), B('r2', 'rack', 2, 9), B('f1', 'forklift', 14, 9, 'idle', { charge: 70, task: 'arrival-2:forklift' }), B('pw', 'power', 17, 1)],
+      batches: [{ id: 'k1', item: 'parcel', site: 's1', qty: 80, location: 'inbound', owner: 'order-1' }, { id: 'k2', item: 'parcel', site: 's1', qty: 60, location: 'stock', owner: 'order-1' }],
+      workers: [{ id: 'w1', site: 's1', role: 'warehouse', task: 'so:sort' }], jobs: [], research: [],
+      vehicles: [{ id: 'vehicle-1', type: 'truck', site: 's1', status: 'loading', shipment: 'sh1' }], shipments: [{ id: 'sh1', vehicleId: 'vehicle-1', status: 'loading', remaining: 3 }], transfers: [], tours: [], freights: [], returns: [],
+      yard: [A('arrival-1', 'approach', { phaseStart: 1315, phaseEnd: 1330, gateAt: null }), A('arrival-2', 'unloading', { dock: 'd1', plate: 'OHL-PA 2210', unloaded: 30, waitReason: 'Keine Lagerkraft am Standort' }), A('arrival-3', 'queue', { plate: 'LTT-KC 3302', waitReason: 'Kein freies Dock' })] };
+    const before = JSON.stringify(state), modes = [];
+    const s = new Scene3D(canvas, { onCameraMode: (m, info) => modes.push(m ? `${m}:${info.stop || info.id}` : `ende:${info.reason}`) });
+    s.setState(state); s.setView('site'); s.setLabels('all');
+    let clock = 1320; s.setClock(clock); await sleep(1200);
+    const r = {};
+    // Tageszeit automatisch aus der Uhr: 22:00 Nacht, 12:00 Tag, 07:00 Morgenübergang.
+    r.auto22 = s.theme(); s.setClock(720); await frame(); r.auto12 = s.theme(); s.setClock(420); await frame(); r.auto07 = s.theme();
+    s.setTheme('day'); s.setClock(1320); await frame(); r.fixedDay = s.theme();
+    s.setTheme('night'); await sleep(600); r.night = { ...s.theme(), glow: s.glow.visible, glowOpacity: s.mat.glow.opacity, nightClass: s.labelRoot.classList.contains('night'), bg: '#' + s.scene.background.getHexString() };
+    s.goal.tx = 2; s.goal.tz = 17; s.goal.dist = 34; s.goal.yaw = Math.PI / 5; s.cam = { ...s.goal }; s.applyCamera(); s.needs = true; await sleep(900);
+    r.nightInfo = s.renderInfo();
+    const chipEls = [...host.querySelectorAll('.scene3d-chip')].filter(c => c.style.display !== 'none');
+    r.chips = chipEls.map(c => ({ text: c.textContent, head: c.querySelector('b')?.textContent, rest: c.querySelector('small')?.textContent, cls: c.className, dot: !!c.querySelector('.scene3d-dot'), bg: getComputedStyle(c).backgroundColor }));
+    window.__w2c = { s, host };
+    // Rundgang: Stationen, Fortschritt, Abbruch durch Zeigereingabe.
+    const stops = s.tour(); r.stops = stops.map(p => p.key); r.tour0 = s.cameraMode();
+    const c0 = { ...s.cam }; await sleep(1200); r.tourMid = { ...s.cam }; r.tourMoved = Math.hypot(s.cam.tx - c0.tx, s.cam.tz - c0.tz) > .5;
+    let t0 = performance.now(); while (s.cameraMode()?.index < 1 && performance.now() - t0 < 9000) await sleep(100); r.tour1 = s.cameraMode();
+    canvas.dispatchEvent(new PointerEvent('pointerdown', { button: 0, clientX: 300, clientY: 300, pointerId: 1, bubbles: true })); canvas.dispatchEvent(new PointerEvent('pointerup', { button: 0, clientX: 300, clientY: 300, pointerId: 1, bubbles: true }));
+    r.tourAfterInput = s.cameraMode();
+    // Rundgang vollständig (mit reduzierter Bewegung: Schnitte statt Fahrt) bis „Ausgang“ und Ende.
+    document.body.classList.add('reduced'); s.tour(); t0 = performance.now(); const seen = new Set();
+    while (s.cameraMode() && performance.now() - t0 < 20000) { seen.add(s.cameraMode().stop); await sleep(100); }
+    document.body.classList.remove('reduced'); r.tourSeen = [...seen]; r.tourDone = s.cameraMode();
+    // Verfolgen: Fremd-Lkw auf Anfahrt; Ziel wandert mit der Uhr.
+    r.followOk = s.follow('arrival-1'); r.follow0 = s.cameraMode();
+    clock = 1322; s.setClock(clock); await sleep(400); clock = 1324; s.setClock(clock); await sleep(900);
+    const a1 = s.yardFleet.find(p => p.id === 'arrival-1'); r.followGap = Math.hypot(s.goal.tx - a1.x, s.goal.tz - a1.z); r.followCamGap = Math.hypot(s.cam.tx - a1.x, s.cam.tz - a1.z);
+    r.unchanged = JSON.stringify(state) === before;
+    return r;
+  });
+  await page.keyboard.press('Escape'); await wait(200);
+  const w2cEsc = await page.evaluate(async () => {
+    const s = window.__w2c.s, out = { afterEsc: s.cameraMode() };
+    out.followVehicle = s.follow('vehicle-1'); await new Promise(r => setTimeout(r, 600)); const v = s.fleet[0]; out.vehGap = Math.hypot(s.goal.tx - v.x, s.goal.tz - v.z);
+    out.followNull = s.follow(null); out.afterNull = s.cameraMode(); out.unknown = s.follow('arrival-99');
+    // Ziehen bricht Verfolgen ab.
+    s.follow('arrival-2'); const c = s.canvas; c.dispatchEvent(new PointerEvent('pointerdown', { button: 0, clientX: 400, clientY: 400, pointerId: 2, bubbles: true }));
+    c.dispatchEvent(new PointerEvent('pointermove', { button: 0, clientX: 460, clientY: 430, pointerId: 2, bubbles: true })); c.dispatchEvent(new PointerEvent('pointerup', { button: 0, clientX: 460, clientY: 430, pointerId: 2, bubbles: true }));
+    out.afterDrag = s.cameraMode();
+    s.setTheme('night'); s.goal.tx = 2; s.goal.tz = 17; s.goal.dist = 34; s.goal.yaw = Math.PI / 5; s.cam = { ...s.goal }; s.applyCamera(); s.needs = true; await new Promise(r => setTimeout(r, 900));
+    out.info = s.renderInfo(); return out;
+  });
+  await page.screenshot({ path: path.join(root, 'docs/assets/szene-0.11-nacht.png') });
+  report.w2c = { ...w2c, ...w2cEsc };
+  check('W2c: Tageszeit automatisch aus der Uhr (22 Uhr Nacht, 12 Uhr Tag, 7 Uhr Übergang)', w2c.auto22.night === 1 && w2c.auto22.key === 'night' && w2c.auto12.night === 0 && w2c.auto07.night > 0 && w2c.auto07.night < 1, JSON.stringify([w2c.auto22, w2c.auto12, w2c.auto07]));
+  check('W2c: setTheme fest (Tag ignoriert Uhr), Nacht mit Lichtflächen und Nacht-Chips', w2c.fixedDay.night === 0 && w2c.fixedDay.mode === 'day' && w2c.night.night === 1 && w2c.night.glow && w2c.night.glowOpacity > .9 && w2c.night.nightClass && w2c.night.bg === '#17232c', JSON.stringify([w2c.fixedDay, w2c.night]));
+  check('W2c: Chips mit Farbpunkt, Kennung fett, Status klein, Text unverändert', w2c.chips.length > 0 && w2c.chips.every(c => c.dot && c.head + (c.rest ? ' · ' + c.rest : '') === c.text) && w2c.chips.some(c => c.text === 'OHL-PA 2210 · Entladen · Keine Lagerkraft am Standort' && /tone-wait/.test(c.cls)), JSON.stringify(w2c.chips.slice(0, 6)));
+  check('W2c: Rundgang Tor → Docks → Sortierung → Lager → Ausgang, sanfte Fahrt, Abbruch durch Eingabe', w2c.stops.join() === 'gate,docks,sorting,storage,exit' && w2c.tour0?.stop === 'gate' && w2c.tourMoved && w2c.tour1?.index === 1 && w2c.tourAfterInput === null, JSON.stringify({ s: w2c.stops, t0: w2c.tour0, t1: w2c.tour1, a: w2c.tourAfterInput, m: w2c.tourMoved }));
+  check('W2c: Rundgang läuft bis Ausgang und endet', w2c.tourSeen.join() === 'gate,docks,sorting,storage,exit' && w2c.tourDone === null, JSON.stringify(w2c.tourSeen));
+  check('W2c: follow(Fremd-Lkw) folgt der Anfahrt, Esc beendet', w2c.followOk && w2c.follow0?.id === 'arrival-1' && w2c.followGap < .6 && w2c.followCamGap < 2 && w2cEsc.afterEsc === null, JSON.stringify({ ok: w2c.followOk, gap: w2c.followGap, cam: w2c.followCamGap, esc: w2cEsc.afterEsc }));
+  check('W2c: follow(eigenes Fahrzeug), follow(null) beendet, unbekanntes Ziel abgelehnt, Ziehen bricht ab', w2cEsc.followVehicle && w2cEsc.vehGap < 1e-3 && w2cEsc.afterNull === null && w2cEsc.unknown === false && w2cEsc.afterDrag === null, JSON.stringify(w2cEsc));
+  check('W2c: Nacht unter 150 Draw Calls', w2c.nightInfo.drawCalls < 150 && w2cEsc.info.drawCalls < 150, `${w2c.nightInfo.drawCalls}/${w2cEsc.info.drawCalls}`);
+  check('W2c: Spielzustand unverändert', w2c.unchanged);
+  await page.evaluate(() => { window.__w2c.s.destroy(); window.__w2c.host.remove(); });
   // W1b: Probe-Zustand aus tests/ui-hub-probe.js über den echten Importweg (Befund A01: Fremd-Lkw an Dock 1 unsichtbar).
   {
     const { Simulation } = await import(pathToFileURL(path.join(root, 'dist/core.js')).href);
