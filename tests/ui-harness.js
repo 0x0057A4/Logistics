@@ -11,8 +11,9 @@ import fs from 'node:fs';
 import {Simulation} from '../dist/core.js';
 import * as catalog from '../dist/catalog.js';
 import {onShift,describeAssignment,workRate,UNLOAD_BASE} from '../dist/workforce.js';
-import {gateKey,unloadKey,forkliftKey,sitePowered,FORKLIFT,PALLET_BASE} from '../dist/yard.js';
-import {unitOf,TERMS,deliverySiteOf,laneSite,siteDistance} from '../dist/contracts.js';
+import {gateKey,unloadKey,forkliftKey,sitePowered,FORKLIFT,PALLET_BASE,WAIT as YARD_WAIT} from '../dist/yard.js';
+import {unitOf,itemOf,containersUnlocked,TERMS,deliverySiteOf,laneSite,siteDistance} from '../dist/contracts.js';
+import {teuCapacity,teuUsed,TEU} from '../dist/containers.js';
 import {nextDeparture,MAX_DEPARTURES,WAIT as LINE_WAIT,CUTOFF as LINE_CUTOFF} from '../dist/linehaul.js';
 import {maxLoad,maintenanceCost,EXTERNAL_SERVICE,WEAR_WARN,deliverableAt} from '../dist/transport.js';
 const html=fs.readFileSync(new URL('../dist/index.html',import.meta.url),'utf8');
@@ -32,7 +33,7 @@ export async function boot(options={}){
  // Spielstandspeicher: ohne options.indexedDB Rückfall localStorage (bisheriges Verhalten); mit Stub IndexedDB-Pfad.
  let context;
  const createSaveStore=opts=>realStore({...opts,storage:()=>context.localStorage,indexedDB:options.indexedDB??null,...(options.storeOptions||{})});
- context=vm.createContext({...catalog,injectPortableSave,portableTemplate,fetch:options.fetch,RENTAL_RATES,planTour:tours.planTour,committedQty:tours.committedQty,maxLoad,maintenanceCost,EXTERNAL_SERVICE,WEAR_WARN,createSaveGuard,createSaveStore,report,Simulation,onShift,describeAssignment,workRate,UNLOAD_BASE,gateKey,unloadKey,forkliftKey,sitePowered,FORKLIFT,PALLET_BASE,unitOf,TERMS,deliverySiteOf,laneSite,siteDistance,nextDeparture,MAX_DEPARTURES,LINE_WAIT,LINE_CUTOFF,deliverableAt,Scene,document,window:{addEventListener(){}},localStorage:storage,matchMedia:()=>({matches:false}),performance:{now:()=>1000},setTimeout(){},clearTimeout(){},setInterval(){},Blob,URL,FormData:class{constructor(f){return Object.entries(f.values);}}});
+ context=vm.createContext({...catalog,injectPortableSave,portableTemplate,fetch:options.fetch,RENTAL_RATES,planTour:tours.planTour,committedQty:tours.committedQty,maxLoad,maintenanceCost,EXTERNAL_SERVICE,WEAR_WARN,createSaveGuard,createSaveStore,report,Simulation,onShift,describeAssignment,workRate,UNLOAD_BASE,gateKey,unloadKey,forkliftKey,sitePowered,FORKLIFT,PALLET_BASE,YARD_WAIT,unitOf,itemOf,containersUnlocked,teuCapacity,teuUsed,TEU,TERMS,deliverySiteOf,laneSite,siteDistance,nextDeparture,MAX_DEPARTURES,LINE_WAIT,LINE_CUTOFF,deliverableAt,Scene,document,window:{addEventListener(){}},localStorage:storage,matchMedia:()=>({matches:false}),performance:{now:()=>1000},setTimeout(){},clearTimeout(){},setInterval(){},Blob,URL,FormData:class{constructor(f){return Object.entries(f.values);}}});
  if(options.storageGetterError)Object.defineProperty(context,'localStorage',{get(){throw new DOMException('Access denied','SecurityError');}});
  vm.runInContext(code,context);await vm.runInContext('ready',context);
  const run=source=>vm.runInContext(source,context);
