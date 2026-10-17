@@ -1,5 +1,15 @@
 # Änderungen
 
+## 0.10 – 17.10.2026 · Vertragsstrafen, Paletten, Stapler (Entwicklungsfassung)
+
+- Vertragsstrafen: verspätete Einheiten (2,50 €/Paket, 25 €/Palette) und bei Vertragsende liegengebliebene (8 €/60 €, Ware zurück an Versender) – je genau einmal gebucht.
+- Palettenverträge (110–140 €/Palette): Staplerplatz mit Akku (lädt unter 10 % bis 30 %), Entladen/Beladen nur mit Stapler + Lagerkraft, direkt ins Regal, Zustellung per Lkw (20 Paletten je Fahrt).
+- 3D: Stapler pendelt zwischen Dock und Regal, Paletten-Lkw mit Pritsche, Palettenstapel.
+- UI: Strafsätze und angefallene Strafen, Stapler-Akku, neue Wartegründe und Meldungen; Einstieg zeigt Fertigung erst bei Bedarf, Baumenü Hub zuerst.
+- Rechtsklick bricht ab wie Esc (Bau, Fenster, Auswahl); Browsermenü nur in Eingabefeldern.
+- Fixes aus unabhängiger Abnahme 0.9 (docs/QS-0.9-W1.md): verwaiste Dockbelegung, Weiterlaufen nach Migration, Dockwechsel bei abgeschaltetem Dock, Startangebot nach Übernahme.
+- Balancing: docs/BALANCING-0.10-W2.md.
+
 ## 0.9 – 15.10.2026 · Hub-Umbau (Entwicklungsfassung)
 
 Spiel wird eigenes Logistikunternehmen. Grundlage: abgenommenes `docs/KONZEPT-LOGISTIKHUB.md`, Schnittstellen `docs/SCHNITTSTELLEN-0.9*.md`.

@@ -90,7 +90,7 @@ try{
  await waitIdle(page);const t0=await storedT(page);check('Gründung gespeichert (IndexedDB)',t0===480,'t='+t0);
  check('Kein Spielstand in localStorage (nur Sperre/Einstellungen)',(await lsSaveKeys(page)).length===0,JSON.stringify(await lsSaveKeys(page)));
  await page.click('[data-speed="1"]');
- for(const panel of ['overview','production','inventory','purchasing','staff','orders','fleet','finance','service','settings']){
+ for(const panel of ['overview','contracts','yard','inventory','staff','orders','fleet','finance','service','settings'] /* 0.10: Fertigung/Einkauf im Einstieg ausgeblendet */){
   await page.locator(`button[data-panel="${panel}"]:visible`).first().click();
   const visible=await page.evaluate(()=>!document.querySelector('#panel').hidden&&document.querySelector('#panelBody').innerHTML.length>0);
   check('Panel '+panel+' geöffnet',visible,await page.locator('#panelTitle').textContent());
