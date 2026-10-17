@@ -17,6 +17,8 @@ import {teuCapacity,teuUsed,TEU} from '../dist/containers.js';
 import {nextDeparture,MAX_DEPARTURES,WAIT as LINE_WAIT,CUTOFF as LINE_CUTOFF} from '../dist/linehaul.js';
 import {createReplayBuffer,REPLAY,maxOffset,parseSnapshot} from '../dist/replay.js';
 import {maxLoad,maintenanceCost,EXTERNAL_SERVICE,WEAR_WARN,deliverableAt} from '../dist/transport.js';
+import {AIRPORT,AIR,handlingMinutes,tripCost,airportDistance,room as airRoom,nextFlight as airNextFlight} from '../dist/airexport.js';
+import {TICK as ASSIST_TICK,LOG_MAX as ASSIST_LOG_MAX} from '../dist/assistant.js';
 const html=fs.readFileSync(new URL('../dist/index.html',import.meta.url),'utf8');
 const code=fs.readFileSync(new URL('../dist/app.js',import.meta.url),'utf8').replace(/^import .*;$/gm,'');
 export async function boot(options={}){
@@ -34,7 +36,7 @@ export async function boot(options={}){
  // Spielstandspeicher: ohne options.indexedDB Rückfall localStorage (bisheriges Verhalten); mit Stub IndexedDB-Pfad.
  let context;
  const createSaveStore=opts=>realStore({...opts,storage:()=>context.localStorage,indexedDB:options.indexedDB??null,...(options.storeOptions||{})});
- context=vm.createContext({...catalog,injectPortableSave,portableTemplate,fetch:options.fetch,RENTAL_RATES,planTour:tours.planTour,committedQty:tours.committedQty,maxLoad,maintenanceCost,EXTERNAL_SERVICE,WEAR_WARN,createSaveGuard,createSaveStore,report,Simulation,onShift,describeAssignment,workRate,UNLOAD_BASE,gateKey,unloadKey,forkliftKey,sitePowered,FORKLIFT,PALLET_BASE,YARD_WAIT,unitOf,itemOf,containersUnlocked,teuCapacity,teuUsed,TEU,TERMS,deliverySiteOf,laneSite,siteDistance,nextDeparture,MAX_DEPARTURES,LINE_WAIT,LINE_CUTOFF,deliverableAt,createReplayBuffer,REPLAY,maxOffset,parseSnapshot,Scene,document,window:{addEventListener(){}},localStorage:storage,matchMedia:()=>({matches:false}),performance:{now:()=>1000},setTimeout(){},clearTimeout(){},setInterval(){},Blob,URL,FormData:class{constructor(f){return Object.entries(f.values);}}});
+ context=vm.createContext({...catalog,injectPortableSave,portableTemplate,fetch:options.fetch,RENTAL_RATES,planTour:tours.planTour,committedQty:tours.committedQty,maxLoad,maintenanceCost,EXTERNAL_SERVICE,WEAR_WARN,createSaveGuard,createSaveStore,report,Simulation,onShift,describeAssignment,workRate,UNLOAD_BASE,gateKey,unloadKey,forkliftKey,sitePowered,FORKLIFT,PALLET_BASE,YARD_WAIT,unitOf,itemOf,containersUnlocked,teuCapacity,teuUsed,TEU,TERMS,deliverySiteOf,laneSite,siteDistance,nextDeparture,MAX_DEPARTURES,LINE_WAIT,LINE_CUTOFF,deliverableAt,createReplayBuffer,REPLAY,maxOffset,parseSnapshot,AIRPORT,AIR,handlingMinutes,tripCost,airportDistance,airRoom,airNextFlight,ASSIST_TICK,ASSIST_LOG_MAX,Scene,document,window:{addEventListener(){}},localStorage:storage,matchMedia:()=>({matches:false}),performance:{now:()=>1000},setTimeout(){},clearTimeout(){},setInterval(){},Blob,URL,FormData:class{constructor(f){return Object.entries(f.values);}}});
  if(options.storageGetterError)Object.defineProperty(context,'localStorage',{get(){throw new DOMException('Access denied','SecurityError');}});
  vm.runInContext(code,context);await vm.runInContext('ready',context);
  const run=source=>vm.runInContext(source,context);
