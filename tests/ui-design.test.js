@@ -38,6 +38,10 @@ test('Kürzel: Kamera Q/E/+/−/Pos1, L nur mit setLabels, F/T nur mit follow()/
  key(ui,'f');assert.deepEqual(j(ui,'followed'),[],'ohne ausgewähltes Fahrzeug kein Verfolgen');
  const v=ui.run('sim.state.vehicles[0].id');ui.listeners.click({target:{closest:()=>({dataset:{vehicle:v},matches:()=>false})}});
  key(ui,'f');assert.deepEqual(j(ui,'followed'),[v]);key(ui,'t');assert.equal(ui.run('tours'),1);
+ ui.run("scene.cameraMode=()=>({mode:'follow',id:followed[0]})");key(ui,'f');assert.deepEqual(j(ui,'followed'),[v,null],'F bei laufendem Verfolgen beendet es (follow(null))');
+ ui.run("showCamMode('tour',{label:'Tor & Hof'})");assert.equal(ui.nodes.get('#camHint').hidden,false);assert.equal(ui.nodes.get('#camHintText').textContent,'Rundgang aktiv · Tor & Hof');
+ ui.run(`showCamMode('follow',{id:'${v}'})`);assert.match(ui.nodes.get('#camHintText').textContent,/^Verfolgen aktiv · /);
+ ui.run("showCamMode(null,{reason:'input'})");assert.equal(ui.nodes.get('#camHint').hidden,true);
  ui.run('guard.dispose()');
 });
 
@@ -80,7 +84,7 @@ test('Farbschema: Einstellung auto|day|night, gespeichert in prefs, Szene erhäl
  assert.equal(ui.run('prefs.theme'),'night');assert.equal(prefsOf(ui).theme,'night');assert.deepEqual(j(ui,'themes'),['night']);
  assert.match(ui.nodes.get('#panelBody').innerHTML,/<option value="night" selected>Nacht/);
  palette(ui,'farbschema: tag');enter(ui);assert.equal(ui.run('prefs.theme'),'day');assert.deepEqual(j(ui,'themes'),['night','day']);
- ui.listeners.change({target:{dataset:{setting:'theme'},value:'kaputt'}});assert.equal(ui.run('prefs.theme'),'auto','unbekannter Wert fällt auf auto');
+ ui.listeners.change({target:{dataset:{setting:'theme'},value:'kaputt'}});assert.equal(ui.run('prefs.theme'),'auto','unbekannter Wert fällt auf auto');assert.equal(j(ui,'themes').at(-1),'auto','Szene: auto = Tageszeit folgt der Spielzeit');
  ui.listeners.change({target:{dataset:{setting:'theme'},value:'night'}});
  const memory=ui.memory;ui.run('guard.dispose()');
  const again=await boot({memory});assert.equal(again.run('prefs.theme'),'night');assert.equal(again.run('resolvedTheme()'),'night','Einstellung überdauert Neuladen');

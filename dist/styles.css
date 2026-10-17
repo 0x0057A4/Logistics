@@ -41,7 +41,11 @@
  /* Kompatibilität: ältere Bezeichner zeigen auf die Tokens */
  --ink:var(--c-ink);--muted:var(--c-muted);--line:var(--c-line);--paper:var(--c-surface-2);--glass:var(--c-glass);--glass-line:var(--c-line);--shadow:var(--sh-1);
  --wait:var(--c-wait);--wait-bg:var(--c-wait-bg);--wait-ink:var(--c-wait-ink);--move:var(--c-accent);--move-bg:var(--c-accent-soft);--move-ink:var(--c-accent-hover);
- --neutral:var(--c-neutral);--neutral-bg:var(--c-neutral-bg);--neutral-ink:var(--c-neutral-ink);--bad:var(--c-bad);--bad-bg:var(--c-bad-bg);--bad-ink:var(--c-bad-ink);--good:var(--c-ok);--good-bg:var(--c-ok-bg)
+ --neutral:var(--c-neutral);--neutral-bg:var(--c-neutral-bg);--neutral-ink:var(--c-neutral-ink);--bad:var(--c-bad);--bad-bg:var(--c-bad-bg);--bad-ink:var(--c-bad-ink);--good:var(--c-ok);--good-bg:var(--c-ok-bg);
+ --teal:#2a8a86;--accent:var(--c-accent);
+ /* Szenen-Labels (A09 W2c): eigene, vom UI-Schema unabhängige Werte, da die Szene ihre Tageszeit selbst bestimmt */
+ --chip-font:var(--f-sans);--chip-bg:rgba(255,255,255,.95);--chip-ink:#141a2c;--chip-muted:#5f6880;--chip-line:rgba(20,26,44,.12);
+ --chip-bg-night:rgba(16,21,33,.9);--chip-ink-night:#e8ecf6;--chip-muted-night:#a7b0c5;--chip-wait-night:rgba(92,62,12,.92);--chip-bad-night:rgba(96,30,30,.92)
 }
 :root[data-theme=night]{
  color-scheme:dark;
@@ -230,6 +234,11 @@ body.flow-collapsed .flow-toggle .ic{transform:rotate(-90deg)}
 .camera-controls .ic{width:17px;height:17px}
 .tool-group{display:flex;flex-direction:column;gap:2px}
 .tool-sep{height:1px;background:var(--c-line);margin:3px 5px}
+
+/* Kamerarundgang / Verfolgen (Callback onCameraMode) */
+.cam-hint{position:absolute;bottom:calc(var(--sb) + var(--vbar-h) + 18px);right:calc(var(--tools) + var(--pw-open) + 12px);z-index:13;display:flex;align-items:center;gap:8px;padding:7px 10px 7px 12px;border-radius:var(--r-pill);background:var(--c-ink);color:var(--c-surface);font-size:var(--t-sm);font-weight:var(--w-semi);box-shadow:var(--sh-2);white-space:nowrap;pointer-events:none}
+.cam-dot{width:7px;height:7px;border-radius:50%;background:var(--c-ok);box-shadow:0 0 0 3px rgba(63,205,133,.25)}
+.cam-esc{font-weight:var(--w-reg);opacity:.75}.cam-esc kbd{background:transparent;color:inherit;border-color:currentColor;margin:0 3px 0 0}
 
 /* Fachfenster */
 .panel{position:absolute;right:var(--tools);top:12px;bottom:calc(var(--sb) + 8px);width:var(--pw);z-index:15;background:var(--c-surface);border:1px solid var(--c-line);border-radius:var(--r-xl);box-shadow:var(--sh-2);display:flex;flex-direction:column;overflow:hidden}

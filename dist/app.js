@@ -19,7 +19,7 @@ const NUMBER_FORMATS=new Map();
 const fmt=(v=0,d=0)=>{let f=NUMBER_FORMATS.get(d);if(!f){f=new Intl.NumberFormat('de-DE',{maximumFractionDigits:d});NUMBER_FORMATS.set(d,f);}return f.format(Number(v));};
 const euro=v=>fmt(v,2)+' €';
 /* Eigenes Linien-Icon-Set (A10, 0.11): 24er Raster, Strich über CSS (.ic). Inline statt <use>, weil die Root-index.html
- * ein <base href="./dist/"> trägt und Fragmentverweise sonst ins Leere zeigen. */
+ * ein base-Element (href ./dist/) trägt und Fragmentverweise sonst ins Leere zeigen. */
 const ICONS={
  hub:'<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/>',
  build:'<path d="M3.5 20h17M6 20V9.5L12 5l6 4.5V20"/><path d="M12 11v6M9 14h6"/>',
@@ -182,14 +182,15 @@ const darkQuery=matchMedia('(prefers-color-scheme: dark)');
 function resolvedTheme(){const t=prefs.theme;return t==='day'||t==='night'?t:darkQuery.matches?'night':'day';}
 function applyTheme(){const t=resolvedTheme(),root=document.documentElement;root.setAttribute?.('data-theme',t);root.setAttribute?.('data-theme-pref',THEMES[prefs.theme]?prefs.theme:'auto');
  const meta=document.getElementsByName?.('theme-color')?.[0];if(meta)meta.setAttribute('content',t==='night'?'#0d121c':'#eef1f6');
- if(themeSceneReady)scene.setTheme?.(t);return t;}
+ if(themeSceneReady)scene.setTheme?.(sceneTheme());return t;}
+const sceneTheme=()=>THEMES[prefs.theme]?prefs.theme:'auto';
 function setTheme(t){prefs.theme=THEMES[t]?t:'auto';applyTheme();savePrefs();if(panel==='settings')renderPanel(true);toast('Farbschema: '+THEMES[prefs.theme]+(prefs.theme==='auto'?' (folgt dem System: '+THEMES[resolvedTheme()]+')':'')+'.');}
 darkQuery.addEventListener?.('change',()=>{if(!THEMES[prefs.theme]||prefs.theme==='auto')applyTheme();});
 applyPrefs();fillIcons();
 // Szenenwahl S1; der Node-UI-Harness stellt nur einen Scene-Stub bereit.
-const scene=(typeof createScene==='function'?createScene:(canvas,callbacks)=>new Scene(canvas,callbacks))($('#world'),{onSelect(id){if(!id)return;if(sim.state.sites.some(x=>x.id===id)){send({type:'selectSite',id});scene.home();return;}selected=id;openPanel('detail');scene.focus?.(id);},onPlace(x,y){if(moving){const r=send({type:'move',id:moving,x,y,rotation});if(r.ok){moving=null;endBuild();}}else if(build)send({type:'build',buildingType:build,x,y,rotation,site:sim.state.selectedSite});},onHover(x,y){if(build)$('#buildHint').textContent=`${name(BUILDINGS,build)} · Raster ${x+1}/${y+1} · ${rotation}° · ${euro(BUILDINGS[build].cost)}`;}});
+const scene=(typeof createScene==='function'?createScene:(canvas,callbacks)=>new Scene(canvas,callbacks))($('#world'),{onSelect(id){if(!id)return;if(sim.state.sites.some(x=>x.id===id)){send({type:'selectSite',id});scene.home();return;}selected=id;openPanel('detail');scene.focus?.(id);},onPlace(x,y){if(moving){const r=send({type:'move',id:moving,x,y,rotation});if(r.ok){moving=null;endBuild();}}else if(build)send({type:'build',buildingType:build,x,y,rotation,site:sim.state.selectedSite});},onHover(x,y){if(build)$('#buildHint').textContent=`${name(BUILDINGS,build)} · Raster ${x+1}/${y+1} · ${rotation}° · ${euro(BUILDINGS[build].cost)}`;},onCameraMode(mode,info){showCamMode(mode,info);},onView(v){$$('[data-view]').forEach(x=>x.classList.toggle('active',x.dataset.view===v));}});
 scene.setState(sim.state);
-themeSceneReady=true;scene.setTheme?.(resolvedTheme());
+themeSceneReady=true;scene.setTheme?.(sceneTheme());
 function toast(text,error=false){$('#toast').textContent=text;$('#toast').className='visible'+(error?' error':'');clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('#toast').className='',4500);}
 function send(c,quiet=false){if(!canWrite()){toast(lockMessage(),true);return {ok:false,message:lockMessage()};}try{const r=sim.command(c);if(!r.ok)toast(r.message||'Aktion nicht möglich.',true);else{dirty=true;if(!quiet)toast(r.message||'Änderung übernommen.');}render(true);return r;}catch(e){toast(e.message,true);return {ok:false,message:e.message};}}
 // Sicherung (S3): Backup ist der zuletzt erfolgreich geschriebene Stand. Der Altstand wird nur dann
@@ -540,8 +541,12 @@ function setView(v){scene.setView(v);$$('[data-view]').forEach(x=>x.classList.to
 const LABEL_NAMES={all:'alle',fleet:'Flotte',infra:'Infrastruktur',none:'aus'};
 function setLabelMode(m){if(typeof scene.setLabels!=='function'||!LABEL_NAMES[m])return false;labelMode=m;scene.setLabels(m);$$('[data-labels]').forEach(x=>x.classList.toggle('active',x.dataset.labels===m));return true;}
 function selectedVehicle(){return selected&&sim.state.vehicles.some(v=>v.id===selected&&v.status!=='rentalReturned')?selected:null;}
-function followSelected(){if(typeof scene.follow!=='function')return false;const id=selectedVehicle();if(!id){toast('Zuerst ein Fahrzeug auswählen (Fahrzeugleiste oder Szene).',true);return false;}scene.follow(id);toast('Kamera folgt '+(sim.state.vehicles.find(v=>v.id===id)?.name||id)+'. Pos1 beendet.');return true;}
-function startTour(){if(typeof scene.tour!=='function')return false;scene.tour();toast('Kamerarundgang läuft. Pos1 beendet.');return true;}
+function followSelected(){if(typeof scene.follow!=='function')return false;if(scene.cameraMode?.()?.mode==='follow'){scene.follow(null);return true;}const id=selectedVehicle();if(!id){toast('Zuerst ein Fahrzeug auswählen (Fahrzeugleiste oder Szene).',true);return false;}if(scene.follow(id)===false){toast('Fahrzeug ist in dieser Ansicht nicht sichtbar (unterwegs oder Netzwerkansicht).',true);return false;}return true;}
+function startTour(){if(typeof scene.tour!=='function')return false;scene.tour();return true;}
+/** Hinweis bei laufendem Kamerarundgang bzw. Verfolgen (Callback onCameraMode der 3D-Szene). Reine Anzeige. */
+function showCamMode(mode,info={}){const box=$('#camHint');if(!mode){box.hidden=true;$$('[data-camera="follow"],[data-camera="tour"]').forEach(b=>b.setAttribute('aria-pressed','false'));return;}
+ const v=mode==='follow'?sim.state.vehicles.find(x=>x.id===info.id):null;$('#camHintText').textContent=mode==='tour'?`Rundgang aktiv${info.label?' · '+info.label:''}`:`Verfolgen aktiv · ${v?.name||info.id||'Fahrzeug'}`;
+ box.hidden=false;$$('[data-camera]').forEach(b=>{if(b.dataset.camera==='follow'||b.dataset.camera==='tour')b.setAttribute('aria-pressed',String(b.dataset.camera===mode));});}
 const PANEL_ICONS={overview:'hub',production:'factory',inventory:'rack',purchasing:'cart',staff:'users',orders:'list',contracts:'contract',yard:'dock',fleet:'truck',finance:'euro',research:'flask',rules:'sliders',network:'network',special:'snow',service:'return',history:'clock',help:'help',settings:'gear'};
 const PANEL_ALIASES={yard:'hof|docks|tor',contracts:'verträge|vertrag',fleet:'transport|fuhrpark|fahrzeuge',inventory:'lager',staff:'personal|team',finance:'finanzen|geld',settings:'einstellungen|optionen',help:'hilfe|handbuch',history:'chronik',overview:'zentrale|übersicht',network:'standorte'};
 function commandList(){
@@ -658,7 +663,7 @@ document.addEventListener('submit',e=>{const f=e.target.closest('[data-form]');i
 $('#importFile').addEventListener('change',async e=>{const file=e.target.files[0];e.target.value='';if(!file)return;try{if(file.size>30000000)throw Error('Datei zu groß.');const candidate=Simulation.fromJSON(await file.text());confirm('Spielstand importieren?',`${time(candidate.state.t)} · ${euro(candidate.state.money)} · ${candidate.state.buildings.length} Anlagen. Aktuellen Stand ersetzen?`,()=>activate(candidate.state.mode,{candidate}));}catch(err){toast(err.message,true);}});
 /* Tastenkürzel (A10, 0.11, abgenommen). Nie in Eingabefeldern oder offenen Dialogen; Strg/Alt/Meta bleiben dem Browser.
  * Jedes Kürzel ruft denselben Pfad wie der zugehörige Schalter auf. F/T nur, wenn die Szene follow()/tour() anbietet. */
-const KEYS=[['/','Suche und Befehle'],['Leertaste','Pause / Fortsetzen'],['1 · 2 · 3 · 4','Tempo 1× · 4× · 12× · Pause'],['B','Baumodus'],['R','Anlage drehen (im Baumodus)'],['Esc · Rechtsklick','Abbrechen: Menü, Bau, Fenster'],['H','Hof & Docks'],['V','Frachtverträge'],['L','Beschriftungen durchschalten',()=>typeof scene.setLabels==='function'],['P','Nur Szene (Panels aus/ein)'],['F','Ausgewähltes Fahrzeug verfolgen',()=>typeof scene.follow==='function'],['T','Kamerarundgang',()=>typeof scene.tour==='function'],['Q · E','Kamera drehen'],['+ · −','Zoom'],['Pos1','Ansicht zurücksetzen'],['?','Diese Übersicht']];
+const KEYS=[['/','Suche und Befehle'],['Leertaste','Pause / Fortsetzen'],['1 · 2 · 3 · 4','Tempo 1×, 4×, 12×, Pause'],['B','Baumodus'],['R','Anlage drehen (im Baumodus)'],['Esc · Rechtsklick','Abbrechen'],['H','Hof & Docks'],['V','Frachtverträge'],['L','Beschriftungen durchschalten',()=>typeof scene.setLabels==='function'],['P','Nur Szene (Panels aus/ein)'],['F','Ausgewähltes Fahrzeug verfolgen',()=>typeof scene.follow==='function'],['T','Kamerarundgang',()=>typeof scene.tour==='function'],['Q · E','Kamera drehen'],['+ · −','Zoom'],['Pos1','Ansicht zurücksetzen'],['?','Diese Übersicht']];
 function showKeys(){closeMenus();$('#keysList').innerHTML=KEYS.filter(k=>!k[2]||k[2]()).map(([k,t])=>`<div class="keys-row"><dt>${k.split(' · ').map(x=>`<kbd>${esc(x)}</kbd>`).join('<span class="keys-or">/</span>')}</dt><dd>${esc(t)}</dd></div>`).join('');$('#keys').showModal();}
 const SPEED_KEYS={'1':1,'2':4,'3':12,'4':0};
 function togglePanel(p){if(panel===p)closePanel();else openPanel(p);}
