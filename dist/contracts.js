@@ -6,6 +6,7 @@
 // und zusätzlich über Vertragsstrafen (penalty:<lieferungId>, penalty-open:<auftragId>), jeweils genau einmal.
 import * as yardApi from './yard.js';
 import {committedQty} from './tours.js';
+import {AIRPORT,airportDistance,nextFlight} from './airexport.js';
 
 /** Minuten vor eta, zu denen der Lkw angekündigt (yard.schedule) und die Aufträge angelegt werden. Der Lkw erscheint dann als „approach“. */
 export const SCHEDULE_LEAD=15;
@@ -43,20 +44,30 @@ export const TERMS={
  // nach vollständigem Entladen), freeMinutes Freizeit im Hof, demurragePerHour Lagergeld €/Std. je Container danach.
  // arrivals: Ankünfte je Tag. Strafen nach Inhalt (TERMS.penalty[content]).
  container:{fromDay:5,containers:[1,3],arrivals:[1,1],sla:[8,12],days:[5,10],freeMinutes:1440,demurragePerHour:12,handling:[250,25,8],
-  content:{pallet:{units:[18,22],price:[95,5,6]},parcel:{units:[50,70],price:[6,0.25,6]}}}
+  content:{pallet:{units:[18,22],price:[95,5,6]},parcel:{units:[50,70],price:[6,0.25,6]}}},
+ // Luftexport (W3c-S1, A08-Vorschlag, Balancing A02 offen): erst mit Dock und Lkw/Lieferwagen am Angebotsstandort oder ab
+ // Spieltag fromDay. Eigener Angebotsplatz einmal täglich um Minute phase (höchstens ein offenes Luftangebot, zählt nicht zu
+ // MAX_OFFERS) mit eigenem, aus dem Zustand abgeleitetem Zufall (airRandom): api.random wird nicht berührt, Paket-/Paletten-/
+ // Containerangebote bleiben inhaltlich gleich. parcels/days wie offer, price [Basis €, Schritt €, Schritte] je Paket (11–14 €),
+ // der Fristzug wählt den Flugplan (flightPlans[0..2], Minuten des Tages). cutoff: Annahmeschluss in Minuten vor Abflug;
+ // minLead: Mindestvorlauf Ankunft im Hof → Annahmeschluss des gebuchten Flugs; penaltyMissed: Strafe je Paket und verpasstem
+ // Flug (air-missed:<auftrag>:<flug>). Ein Zustellgebiet „Luftfracht <Flughafen>“ am Annahme-Hub (ohne lane.site).
+ air:{fromDay:4,phase:1380,parcels:[6,11],price:[11,0.5,6],sla:[0,2],days:[5,10],flightPlans:[[1050],[990,1290],[1110]],cutoff:90,minLead:180,penaltyMissed:3}
 };
 const STATUSES=['offer','active','ended'];
-export const UNITS=['parcel','pallet','container'];
+export const UNITS=['parcel','pallet','container','air'];
 export const CONTENTS=['pallet','parcel'];
 /** Einheit eines Vertrags; Verträge ohne Feld (bis 0.9) sind Paketverträge. W3b: 'container' möglich (Inhalt in k.content). */
-export const unitOf=k=>k?.unit==='pallet'||k?.unit==='container'?k.unit:'parcel';
+export const unitOf=k=>k?.unit==='pallet'||k?.unit==='container'||k?.unit==='air'?k.unit:'parcel';
 /** Ware der Vertragsaufträge (order.item): Paket/Palette bzw. bei Containerverträgen der Inhalt. */
-export const itemOf=k=>unitOf(k)==='container'?(k.content==='pallet'?'pallet':'parcel'):unitOf(k);
+export const itemOf=k=>unitOf(k)==='container'?(k.content==='pallet'?'pallet':'parcel'):unitOf(k)==='air'?'parcel':unitOf(k);
 const unitWord=(k,n)=>itemOf(k)==='pallet'?(n===1?'Palette':'Paletten'):(n===1?'Paket':'Pakete');
 /** Palettenangebote möglich: Staplerplatz vorhanden oder ab Spieltag TERMS.pallet.fromDay. */
 export const palletsUnlocked=s=>s.buildings.some(b=>b.type==='forklift')||Math.floor(s.t/1440)+1>=TERMS.pallet.fromDay;
 /** Containerangebote möglich (W3b-S1): Containerhof am Standort site (Standard: gewählter Standort) oder ab Spieltag TERMS.container.fromDay. */
 export const containersUnlocked=(s,site=s.selectedSite)=>s.buildings.some(b=>b.type==='containeryard'&&b.site===site)||Math.floor(s.t/1440)+1>=TERMS.container.fromDay;
+/** Luftexportangebote möglich (W3c-S1): Dock und Lkw/Lieferwagen am Standort site oder ab Spieltag TERMS.air.fromDay. */
+export const airUnlocked=(s,site=s.selectedSite)=>(s.buildings.some(b=>b.type==='dock'&&b.site===site)&&s.vehicles.some(v=>v.site===site&&(v.type==='truck'||v.type==='van')))||Math.floor(s.t/1440)+1>=TERMS.air.fromDay;
 
 /** Standort eines Zustellgebiets (W3-S1). Gebiete ohne Feld (bis 0.11) liegen am Vertragsstandort. */
 export const laneSite=(k,lane)=>lane?.site??k?.site;
@@ -79,9 +90,9 @@ const cents=n=>Math.round(n*100)/100;
 
 /** Deterministisches Angebot aus api.random. small=true: Startangebot (1 Ankunft/Tag, 200–250 Pakete).
  *  pallet=true: Palettenvertrag; zieht genau so viele Zufallszahlen wie ein Paketangebot (Zufallsstrom bleibt gleich). */
-function makeOffer(s,api,small=false,pallet=false,container=false){
+function makeOffer(s,api,small=false,pallet=false,container=false,air=false){
  if(container)return makeContainerOffer(s,api);
- const T=pallet?TERMS.pallet:TERMS.offer,unit=pallet?'pallet':'parcel',pen=TERMS.penalty[unit];
+ const T=pallet?TERMS.pallet:air?TERMS.air:TERMS.offer,unit=pallet?'pallet':air?'air':'parcel',pen=TERMS.penalty[pallet?'pallet':'parcel'];
  const shipper=pick(api,SHIPPERS),laneCount=small?int(api,1,2):int(api,1,3),names=[...LANES],lanes=[];
  for(let i=0;i<laneCount;i++){const name=names.splice(Math.floor(api.random()*names.length),1)[0];lanes.push({id:`lane-${i+1}`,name,distance:int(api,15,45)});}
  // Anteile in Zwanzigsteln, jedes Gebiet mindestens 5/20; Summe exakt 1.
@@ -91,11 +102,20 @@ function makeOffer(s,api,small=false,pallet=false,container=false){
  for(let i=0;i<arrivalCount;i++){const minute=small?pick(api,TERMS.start.minutes):minutes.splice(Math.floor(api.random()*minutes.length),1)[0];arrivals.push({minute,parcels:small?int(api,...TERMS.start.parcels)*10:pallet?int(api,...T.units):int(api,...T.parcels)*10});}
  arrivals.sort((a,b)=>a.minute-b.minute);
  const id=api.id('contract');
+ // Zufallszüge in fester Reihenfolge: Preis, Frist (bei Luftexport: Flugplan), Laufzeit.
+ const price=small?TERMS.start.price:cents(T.price[0]+int(api,0,T.price[2])*T.price[1]),sla=small?null:int(api,...T.sla),days=small?TERMS.start.days:int(api,...T.days);
  // pricePerParcel = Preis je Einheit (Paket bzw. Palette); arrivals[].parcels = Einheiten je Ankunft (Feldnamen bleiben für Altstände).
  const k={id,shipper,site:s.selectedSite,status:'offer',unit,lanes,arrivals,laneShare,
-  pricePerParcel:small?TERMS.start.price:cents(T.price[0]+int(api,0,T.price[2])*T.price[1]),slaMinutes:small?TERMS.start.sla:int(api,...T.sla)*60,
-  durationDays:small?TERMS.start.days:int(api,...T.days),penaltyLate:pen.late,penaltyOpen:pen.open,offeredAt:s.t,expiresAt:s.t+OFFER_VALIDITY,
+  pricePerParcel:price,slaMinutes:small?TERMS.start.sla:air?TERMS.air.minLead:sla*60,
+  durationDays:days,penaltyLate:pen.late,penaltyOpen:pen.open,offeredAt:s.t,expiresAt:s.t+OFFER_VALIDITY,
   startT:null,endT:null,acceptedAt:null,issued:0,lastEta:null};
+ if(air){
+  // W3c-S1: ein Gebiet „Luftfracht“ am Annahme-Hub (deliverySite = Hub), Flugplan aus dem Fristzug. Keine Fremdgebietszüge.
+  const A=TERMS.air;
+  Object.assign(k,{lanes:[{id:'lane-1',name:`Luftfracht ${AIRPORT.short}`,distance:airportDistance(s,k.site)}],laneShare:[1],
+   flights:[...A.flightPlans[sla]],cutoff:A.cutoff,penaltyMissed:A.penaltyMissed});
+  return k;
+ }
  assignLaneSites(s,api,k,small);
  return k;
 }
@@ -135,6 +155,12 @@ function assignLaneSites(s,api,k,small){
  }
 }
 
+/** Eigener Zufall für Luftangebote (W3c-S1): mulberry32 aus Seed und Spielminute, liest s.seed nur. Deterministisch über
+ *  Speichern/Laden, ohne den gemeinsamen Zufallsstrom api.random zu verschieben. */
+export function airRandom(s){
+ let a=(s.seed^Math.imul(s.t,2654435761))>>>0;
+ return ()=>{a=(a+0x6D2B79F5)>>>0;let t=a;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return ((t^(t>>>14))>>>0)/4294967296;};
+}
 /** Verteilt parcels nach Anteil (größter Rest, bei Gleichstand niedrigerer Index). Ganzzahlig, Summe exakt = parcels. */
 export function splitParcels(parcels,shares){
  const raw=shares.map(x=>x*parcels),qty=raw.map(Math.floor);let rest=parcels-qty.reduce((a,b)=>a+b,0);
@@ -156,6 +182,8 @@ function issue(s,api,c,arrival,eta){
   // erzeugen Aufträge ohne deliverySite (Zustellung am Annahme-Hub order.site, Zustand bitgleich zu 0.11).
   const o={id,kind:'logistics',source:'hub',contractId:c.id,lane:lane.id,customer:`${lane.name} (${c.shipper})`,item:itemOf(c),qty:qty[i],price:cents(c.pricePerParcel+(lane.surcharge||0)),due:eta+c.slaMinutes+(lane.extraSla||0),quality:0,site:c.site,status:'active',delivered:0,paid:0};
   if(lane.site!==undefined)o.deliverySite=lane.site;
+  // W3c-S1: Luftexport bucht den frühesten Flug mit Annahmeschluss ≥ Ankunft + minLead; Frist = dessen Annahmeschluss.
+  if(unitOf(c)==='air'){o.airExport=true;o.flightT=nextFlight(c.flights,c.cutoff,eta+TERMS.air.minLead);o.due=o.flightT-c.cutoff;}
   s.orders.push(o);
   orderIds.push(id);lanes.push({lane:lane.id,orderId:id,qty:qty[i]});});
  c.issued++;c.lastEta=eta;
@@ -186,8 +214,9 @@ export function handle(s,c,api){
   k.status='active';k.acceptedAt=s.t;k.startT=s.t+START_DELAY;k.endT=k.startT+k.durationDays*1440;
   // Angebote aus Ständen bis 0.9 erhalten bei Annahme Einheit und Strafsätze (bereits laufende Altverträge bleiben ohne Strafe).
   k.unit??='parcel';const pen=TERMS.penalty[itemOf(k)];k.penaltyLate??=pen.late;k.penaltyOpen??=pen.open;
+  const air=unitOf(k)==='air'?` Luftexport zum ${AIRPORT.name}: Flüge ${k.flights.map(clock).join(', ')}, Annahmeschluss ${k.cutoff} Min. vor Abflug, ${k.penaltyMissed.toFixed(2)} € Strafe je Paket und verpasstem Flug.`:'';
   const cont=unitOf(k)==='container'?` Handling ${k.pricePerContainer.toFixed(2)} € je Container, Freizeit ${Math.round(k.freeMinutes/60)} Std., danach Lagergeld ${k.demurragePerHour.toFixed(2)} €/Std. je Container.`:'';
-  api.log('contract',`Vertrag mit ${k.shipper} angenommen: ${k.arrivals.map(a=>`${a.containers?`${a.containers} × Container (`:''}${a.parcels} ${unitWord(k,a.parcels)}${a.containers?')':''} um ${clock(a.minute)}`).join(', ')} täglich, ${k.durationDays} Tage.${cont}${remoteText(s,k)} Vertragsstrafe ${k.penaltyLate.toFixed(2)} € je verspätete, ${k.penaltyOpen.toFixed(2)} € je nicht zugestellte Einheit.`,[k.id]);
+  api.log('contract',`Vertrag mit ${k.shipper} angenommen: ${k.arrivals.map(a=>`${a.containers?`${a.containers} × Container (`:''}${a.parcels} ${unitWord(k,a.parcels)}${a.containers?')':''} um ${clock(a.minute)}`).join(', ')} täglich, ${k.durationDays} Tage.${cont}${air}${remoteText(s,k)} Vertragsstrafe ${k.penaltyLate.toFixed(2)} € je verspätete, ${k.penaltyOpen.toFixed(2)} € je nicht zugestellte Einheit.`,[k.id]);
   return {ok:true,id:k.id};
  }
  if(c.type==='cancelContract'){
@@ -215,11 +244,16 @@ export function step(s,api){
   if(eta<k.startT||(k.lastEta!=null&&eta<=k.lastEta))continue;
   for(const a of k.arrivals)if(a.minute===minute)issue(s,api,k,a,eta);
  }
- if(s.t%OFFER_INTERVAL===OFFER_PHASE&&list.filter(k=>k.status==='offer').length<MAX_OFFERS){
+ if(s.t%OFFER_INTERVAL===OFFER_PHASE&&list.filter(k=>k.status==='offer'&&unitOf(k)!=='air').length<MAX_OFFERS){
   // Höchstens ein offenes Paletten- und ein offenes Containerangebot; Auswahl ohne Zufallszug, Paletten zuerst (Verhalten bis 0.12 bleibt).
   const pallet=palletsUnlocked(s)&&!list.some(k=>k.status==='offer'&&unitOf(k)==='pallet');
   const container=!pallet&&containersUnlocked(s)&&!list.some(k=>k.status==='offer'&&unitOf(k)==='container');
   const offer=makeOffer(s,api,false,pallet,container);list.push(offer);api.log('contract',`Neues Vertragsangebot${pallet?' (Paletten)':container?` (Seeimport, Container mit ${offer.content==='pallet'?'Paletten':'Paketen'})`:''}: ${offer.shipper}.`,[offer.id]);
+ }
+ // W3c-S1: eigener Luftexport-Angebotsplatz. Vor Freischaltung kein Zugriff auf Zufall, IDs oder Zustand.
+ if(s.t%1440===TERMS.air.phase&&airUnlocked(s)&&!list.some(k=>k.status==='offer'&&unitOf(k)==='air')){
+  const offer=makeOffer(s,{random:airRandom(s),id:api.id},false,false,false,true);list.push(offer);
+  api.log('contract',`Neues Vertragsangebot (Luftexport ${AIRPORT.short}, Flüge ${offer.flights.map(clock).join(', ')}): ${offer.shipper}.`,[offer.id]);
  }
  containerMoney(s,api);
  latePenalties(s,api);
@@ -287,10 +321,10 @@ function settleOrder(s,api,k,o){
 export function validate(s){
  const bad=m=>{throw new Error('Spielstand ungültig: Vertrag '+m);};
  const num=(n,min=-Infinity)=>typeof n==='number'&&Number.isFinite(n)&&n>=min;
- const sites=new Set(s.sites.map(x=>x.id));let offers=0;
+ const sites=new Set(s.sites.map(x=>x.id));let offers=0,airOffers=0;
  for(const k of s.contracts){
   if(!k||typeof k.id!=='string'||typeof k.shipper!=='string'||!k.shipper||!sites.has(k.site)||!STATUSES.includes(k.status))bad('Grunddaten beschädigt.');
-  if(k.status==='offer')offers++;
+  if(k.status==='offer'){if(k.unit==='air')airOffers++;else offers++;}
   if(!Array.isArray(k.lanes)||k.lanes.length<1||k.lanes.length>3)bad('Zustellgebiete beschädigt.');
   const laneIds=new Set();for(const l of k.lanes){if(!l||typeof l.id!=='string'||laneIds.has(l.id)||typeof l.name!=='string'||!l.name||!num(l.distance,Number.EPSILON))bad('Zustellgebiet beschädigt.');laneIds.add(l.id);
    if((l.site!==undefined&&!sites.has(l.site))||(l.surcharge!==undefined&&!num(l.surcharge,0))||(l.extraSla!==undefined&&(!Number.isInteger(l.extraSla)||l.extraSla<0)))bad('Standort/Zuschlag eines Zustellgebiets beschädigt.');}
@@ -307,10 +341,14 @@ export function validate(s){
    if(k.arrivals.some(a=>!Number.isInteger(a.containers)||a.containers<C.containers[0]||a.containers>C.containers[1]||a.parcels!==a.containers*k.unitsPerContainer))bad('Containerankunft beschädigt.');
    if(!num(k.pricePerContainer,0)||!Number.isInteger(k.freeMinutes)||k.freeMinutes<0||!num(k.demurragePerHour,0))bad('Containerkonditionen beschädigt.');
   }else if(k.content!==undefined||k.unitsPerContainer!==undefined||k.pricePerContainer!==undefined||k.arrivals.some(a=>a.containers!==undefined))bad('Containerfelder ohne Containervertrag.');
+  if(k.unit==='air'){
+   if(!Array.isArray(k.flights)||k.flights.length<1||k.flights.length>4||k.flights.some(m=>!Number.isInteger(m)||m<0||m>1439)||new Set(k.flights).size!==k.flights.length)bad('Flugplan beschädigt.');
+   if(!Number.isInteger(k.cutoff)||k.cutoff<0||k.cutoff>720||!num(k.penaltyMissed,0)||k.lanes.some(l=>laneSite(k,l)!==k.site))bad('Luftexportkonditionen beschädigt.');
+  }else if(k.flights!==undefined||k.cutoff!==undefined||k.penaltyMissed!==undefined)bad('Flugfelder ohne Luftexportvertrag.');
   if((k.penaltyLate!==undefined&&!num(k.penaltyLate,0))||(k.penaltyOpen!==undefined&&!num(k.penaltyOpen,0)))bad('Vertragsstrafe beschädigt.');
   if(k.settled!==undefined&&(typeof k.settled!=='boolean'||(k.settled&&k.status!=='ended')))bad('Abrechnung beschädigt.');
  }
- if(offers>MAX_OFFERS)bad('zu viele offene Angebote.');
+ if(offers>MAX_OFFERS||airOffers>1)bad('zu viele offene Angebote.');
  const contracts=new Map(s.contracts.map(k=>[k.id,k]));
  for(const o of s.orders){
   if(o.deliverySite!==undefined&&!sites.has(o.deliverySite))bad('Zustellstandort Auftrag '+o.id+' fehlt.');
@@ -320,5 +358,6 @@ export function validate(s){
   if(o.kind!=='logistics'||o.item!==itemOf(k)||!Number.isInteger(o.qty)||o.qty<1||!k.lanes.some(l=>l.id===o.lane)||o.site!==k.site)bad('Vertragsauftrag '+o.id+' beschädigt.');
   if(o.deliverySite!==undefined){const lane=k.lanes.find(l=>l.id===o.lane);if(!sites.has(o.deliverySite)||o.deliverySite!==laneSite(k,lane))bad('Zustellstandort Auftrag '+o.id+' beschädigt.');}
   if(o.returnedQty!==undefined&&(o.status!=='cancelled'||!num(o.returnedQty,0)))bad('Rückgabe Auftrag '+o.id+' beschädigt.');
+  if((o.airExport===true)!==(unitOf(k)==='air'))bad('Luftexportkennung Auftrag '+o.id+' beschädigt.');
  }
 }

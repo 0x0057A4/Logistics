@@ -135,8 +135,9 @@ test('Abgelehnter Befehl: Grund aus dem Ergebnis, Sperrfrist je Ziel',()=>{
 });
 
 test('Luftzubringer: fehlender Befehl wird still übersprungen',()=>{
- const env=setup(),{sim,s,k}=env;k.flights=[s.t%1440+120];k.cutoff=90;
- const id=order(env,{qty:10,due:s.t+300,air:true});on(env);sim.step(30);
+ // W3c-S1 (A08/A07): gültiger Luftvertrag (unit 'air', penaltyMissed) und Auftrag mit gebuchtem Flug (flightT), sonst lehnt validate ab.
+ const env=setup(),{sim,s,k}=env;k.unit='air';k.flights=[s.t%1440+120];k.cutoff=90;k.penaltyMissed=3;
+ const id=order(env,{qty:10,due:s.t+30,air:true});s.orders.find(o=>o.id===id).flightT=s.t+120;on(env);sim.step(30);
  if(sim.command({type:'dispatchAirShuttle'}).message==='Befehl unbekannt.'){assert.equal(s.assistant.log.length,0);assert.equal(started(s,id),false);}
  assert.ok(!s.assistant.log.some(e=>/Befehl unbekannt/.test(e.reason)));
  validateState(s);

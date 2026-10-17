@@ -6,7 +6,9 @@ const active=t=>!['complete','cancelled'].includes(t.status);
 const owner=o=>o.kind==='logistics'?o.id:'company';
 const cents=n=>Math.round(n*100)/100;
 export function init(s){s.tours??=[];}
-export function committedQty(s,orderId){return s.shipments.filter(sh=>sh.orderId===orderId&&['loading','transit','unloading'].includes(sh.status)).reduce((n,sh)=>n+sh.qty,0)+(s.tours||[]).filter(active).flatMap(t=>t.stops).filter(stop=>stop.orderId===orderId&&stop.status==='pending').reduce((n,stop)=>n+stop.qty,0)+(s.freights||[]).filter(f=>f.orderId===orderId&&!['complete','cancelled'].includes(f.status)&&f.deliveredAt==null).reduce((n,f)=>n+f.qty,0);}
+// W3c-S1: Flughafen-Zubringer vor Übergabe binden die Menge ebenfalls (gleiche Regel wie airexport.shuttleQty, ohne Import).
+const airQty=(s,orderId)=>{let n=0;for(const sh of s.airShuttles||[])if(sh.status==='loading'||sh.status==='transit'||(sh.status==='handover'&&sh.deliveredAt==null))for(const x of sh.orders)if(x.orderId===orderId)n+=x.qty;return n;};
+export function committedQty(s,orderId){return airQty(s,orderId)+s.shipments.filter(sh=>sh.orderId===orderId&&['loading','transit','unloading'].includes(sh.status)).reduce((n,sh)=>n+sh.qty,0)+(s.tours||[]).filter(active).flatMap(t=>t.stops).filter(stop=>stop.orderId===orderId&&stop.status==='pending').reduce((n,stop)=>n+stop.qty,0)+(s.freights||[]).filter(f=>f.orderId===orderId&&!['complete','cancelled'].includes(f.status)&&f.deliveredAt==null).reduce((n,f)=>n+f.qty,0);}
 // Isolierte Personalprognose: identische Müdigkeits-/Schichtregeln wie workforce.step,
 // aber ohne Buchungen, Mutationen und unbekannte Konkurrenz um Rampe/Lagerpersonal.
 function driverForecast(s,site,workMinutes){
@@ -42,6 +44,7 @@ export function planTour(s,vehicleId,entries){
   if(!o||o.status!=='active'||!Number.isInteger(entry.qty)||entry.qty<1||entry.qty>o.qty-o.delivered-committedQty(s,o.id))return fail('Stopp benötigt aktiven Auftrag und freie Restmenge.');
   if(!Number.isInteger(returnQty)||returnQty<0)return fail('Rückladung benötigt ganze, nicht negative Menge.');
   if(returnQty&&(o.kind==='logistics'||!returnSources(s,o.id,returnQty)))return fail('Rückladung benötigt eigene, bereits gelieferte und noch nicht retournierte Ware.');
+  if(o.airExport)return fail('Luftexport: Pakete per Flughafen-Zubringer zum Frachtterminal bringen.');
   if(ITEMS[o.item].cold&&!type.cold)return fail('Kühlware benötigt gekühltes Fahrzeug.');
   // W3-S2: Fremdware nur am Zustellstandort (wie contracts.deliverySiteOf; Import dort wäre ein Modulzyklus).
   if(o.kind==='logistics'&&(o.deliverySite??o.site)!==undefined&&(o.deliverySite??o.site)!==v.site)return fail('Zustellgebiet gehört zu einem anderen Standort. Ware per Linie dorthin bringen.');
