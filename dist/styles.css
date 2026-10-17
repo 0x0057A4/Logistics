@@ -481,3 +481,19 @@ body.scene-only .hud,body.scene-only .rail,body.scene-only .panel{display:none!i
 .journey .is-active.tone-wait .j-dot{background:var(--c-wait);border-color:var(--c-wait);box-shadow:0 0 0 3px var(--c-wait-bg)}
 .journey .is-active.tone-bad .j-dot{background:var(--c-bad);border-color:var(--c-bad);box-shadow:0 0 0 3px var(--c-bad-bg)}
 .dispatch-off{opacity:.5;pointer-events:none}
+
+/* Replay 60 Min. (A10/A12, W3c-S3): Leiste anstelle des Missionshinweises, Rahmen markiert „nur Ansicht“. */
+.replay-btn[aria-pressed=true]{background:var(--c-wait-bg);color:var(--c-wait-ink)}
+.replay-bar{position:absolute;left:calc(var(--left) + var(--flow-w) + 10px);bottom:calc(var(--sb) + var(--vbar-h) + 18px);z-index:14;display:flex;align-items:center;gap:var(--s-3);padding:10px 12px 10px 14px;border-radius:var(--r-lg);background:var(--c-glass);border:1px solid var(--c-wait);box-shadow:var(--sh-2);max-width:calc(100% - var(--left) - var(--flow-w) - var(--tools) - var(--pw-open) - 24px)}
+.replay-bar[hidden]{display:none}
+.replay-dot{width:10px;height:10px;border-radius:50%;background:var(--c-wait);flex:none;box-shadow:0 0 0 4px var(--c-wait-bg)}
+.replay-text{display:flex;flex-direction:column;line-height:1.25;min-width:0}
+.replay-text b{font-size:var(--t-base);font-weight:var(--w-semi);color:var(--c-wait-ink);white-space:nowrap;font-variant-numeric:tabular-nums}
+.replay-text small{font-size:var(--t-xs);color:var(--c-muted);white-space:nowrap;font-variant-numeric:tabular-nums}
+.replay-range{display:flex;align-items:center;gap:var(--s-2);font-size:var(--t-xs);color:var(--c-muted);font-variant-numeric:tabular-nums}
+.replay-range input{width:clamp(120px,16vw,240px);accent-color:var(--c-wait)}
+.replay-bar button{white-space:nowrap}
+.replay-bar kbd{margin-left:4px}
+body.replay .mission{display:none}
+body.replay #game::after{content:'';position:absolute;inset:0;border:3px solid var(--c-wait);pointer-events:none;z-index:9}
+@media(max-width:900px){.replay-bar{left:var(--left);flex-wrap:wrap}.replay-range input{width:120px}}
