@@ -223,13 +223,13 @@ test('Pflicht: TEU-Grenze nie überschritten, zweites Chassis wartet „Containe
 
 // Befund QS-W3b-01 (todo bis Behebung): Docks abgeschaltet während Entladen → Wartegrund springt im selben Takt auf
 // „Kein freies Dock“; der Spieler sieht nicht, dass die Docks außer Betrieb sind.
-test('QS-W3b-01: Docks aus → Wartegrund „Dock außer Betrieb“ statt „Kein freies Dock“',{todo:true},()=>{
+test('QS-W3b-01: Docks aus → Wartegrund „Dock außer Betrieb“ statt „Kein freies Dock“',()=>{
  const {env,c}=midUnstuff();for(const id of env.docks)cmd(env.sim,{type:'toggleBuilding',id});
  for(let i=0;i<3;i++)step(env);
  assert.equal(c.waitReason,WAIT.dockOff);
 });
 // Befund QS-W3b-02 (todo bis Behebung): Versionsanzeige.
-test('QS-W3b-02: Versionsanzeige 0.13',{todo:true},async()=>{
+test('QS-W3b-02: Versionsanzeige 0.13',async()=>{
  const {readFileSync}=await import('node:fs');
  assert.match(readFileSync(new URL('../dist/app.js',import.meta.url),'utf8'),/VERSION='0\.13/);
 });

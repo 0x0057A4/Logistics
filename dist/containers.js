@@ -191,8 +191,8 @@ function startUnstuffing(s,api,t){
  const noDock=new Set();
  for(const [c] of cand){
   const site=c.site;
-  if(noDock.has(site)){wait(c,WAIT.dock,t);continue;}
-  const b=freeDock(s,site);if(!b){noDock.add(site);wait(c,WAIT.dock,t);continue;}
+  if(noDock.has(site)){const docks=s.buildings.filter(x=>x.type==='dock'&&x.site===site);wait(c,docks.length&&docks.every(x=>!x.enabled||!(x.condition>0))?WAIT.dockOff:WAIT.dock,t);continue;}
+  const b=freeDock(s,site);if(!b){noDock.add(site);/* QS-W3b-01: alle Docks aus → eigener Grund */const docks=s.buildings.filter(x=>x.type==='dock'&&x.site===site);wait(c,docks.length&&docks.every(x=>!x.enabled||!(x.condition>0))?WAIT.dockOff:WAIT.dock,t);continue;}
   if(api.inventory.free(site)+1e-9<vol(isPal(c)?PALLET:'parcel')){wait(c,WAIT.full,t);continue;}
   if(isPal(c)&&!forkliftAvailable(s,site,forkliftKey(c.id))){wait(c,forkReason(s,site),t);continue;}
   if(!freeWorker(s,site)){wait(c,WAIT.staff,t);continue;}

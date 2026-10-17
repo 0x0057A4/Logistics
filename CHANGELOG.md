@@ -1,5 +1,13 @@
 # Änderungen
 
+## 0.13 – 17.10.2026 · Containerhof und Seeimport (Entwicklungsfassung)
+
+- Seeimport-Verträge (ab Containerhof oder Tag 5): 1–3 Container je Ankunft mit 18–22 Paletten oder 500–700 Paketen; Handling 250–450 € je Container zusätzlich zum Inhalt; 24 Std. Freizeit, danach 12 €/Std. Lagergeld je Container.
+- Containerhof (4×3, 8 TEU, 40-Fuß = 2 TEU): Chassis stellt ab, Umfuhr zum Dock, Entladen mit Stapler (Paletten) bzw. Lagerkraft (Pakete), Leerabholung nach 2–4 Std.; Pakete laufen in Sortierung und Linienverkehr.
+- Fenster „Containerhof“ (Taste C), Vertragskarten Container, Torbuch-Phasen, Station und Meldungen (Hof voll, Lagergeld, Freizeit endet).
+- 3D: Containerhof mit gestapelten Containern, Chassis, Umfuhr; Lagergeld-Container rot markiert.
+- Unabhängige Prüfung: docs/QS-0.13.md; Fix QS-W3b-01 (Wartegrund „Dock außer Betrieb“).
+
 ## 0.12 – 17.10.2026 · Linienverkehr zwischen eigenen Standorten (Entwicklungsfassung)
 
 - Zustellgebiete gehören Standorten; ab 2 Standorten Verträge mit Gebieten anderer Hubs (Zuschlag 0,60 €+0,012 €/km je Paket, Frist +180 Min+2 Min/km).
