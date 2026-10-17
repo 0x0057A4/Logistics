@@ -14,9 +14,10 @@ import * as customerService from './customer-service.js';
 import * as contracts from './contracts.js';
 import * as yard from './yard.js';
 import * as sorting from './sorting.js';
+import * as linehaul from './linehaul.js';
 import { BUILDINGS, ITEMS, RECIPES, VEHICLES, ROLES } from './catalog.js';
 import { reachable, footprint } from './world.js';
-const MODULES=[inventory,workforce,economy,transport,production,management,service,network,tours,special,multimodal,rental,customerService,contracts,yard,sorting];
+const MODULES=[inventory,workforce,economy,transport,production,management,service,network,tours,special,multimodal,rental,customerService,contracts,yard,sorting,linehaul];
 /** Ladegrenzen (A12, W1b). Text: 30 Mio. Zeichen. Listen: 100.000, `batches` 1.000.000 – Chargen wachsen im großen
  * Szenario um ≈ 650–1.770 je Spieltag und erreichten 100.000 nach ≈ 55 Tagen (PERF-SIM-0.9). Bei ≈ 210 Zeichen je Charge
  * greift für batches praktisch zuerst die Textgrenze (≈ 140.000 Chargen); die App warnt ab 60 % und speichert nichts,
@@ -25,7 +26,7 @@ export const SAVE_LIMITS=Object.freeze({chars:30000000,list:100000,lists:Object.
 const listLimit=k=>SAVE_LIMITS.lists[k]??SAVE_LIMITS.list;
 /** Höchste Auslastung einer Ladegrenze (0…1+) für Größenwarnung und Speicherverweigerung. */
 export function saveHeadroom(state,chars=0){let ratio=chars/SAVE_LIMITS.chars,limit='chars';for(const k of ARRAYS){const r=(state?.[k]?.length||0)/listLimit(k);if(r>ratio){ratio=r;limit=k;}}return {ratio,limit};}
-const ARRAYS=['sites','buildings','workers','batches','reservations','jobs','purchases','orders','vehicles','shipments','ledger','events','research','rules','returns','milestones','transfers','tours','freights','tickets','contracts','yard'];
+const ARRAYS=['sites','buildings','workers','batches','reservations','jobs','purchases','orders','vehicles','shipments','ledger','events','research','rules','returns','milestones','transfers','tours','freights','tickets','contracts','yard','lines','linehauls'];
 const clone=x=>JSON.parse(JSON.stringify(x));
 const fail=m=>{throw new Error('Spielstand ungültig: '+m);};
 function finite(n,min=-Infinity,max=Infinity){return typeof n==='number'&&Number.isFinite(n)&&n>=min&&n<=max;}
@@ -34,7 +35,7 @@ export const SCHEMA=1;
 /** Migrationsschritte from→to. Jeder Schritt erhält den Zustand von Schema `from`, ändert ihn an Ort und Stelle und setzt `schema` auf `to`. Welle 1 ergänzt hier {from:1,to:2,...}. */
 export const MIGRATIONS=[];
 /** Auffüllungen innerhalb einer Schemastufe: ältere Stände derselben Stufe erhalten definierte Standardwerte. */
-const FILLS={1(s){for(const key of ['research','rules','transfers','tours','freights','tickets','contracts','yard'])if(s[key]===undefined)s[key]=[];}};
+const FILLS={1(s){for(const key of ['research','rules','transfers','tours','freights','tickets','contracts','yard','lines','linehauls'])if(s[key]===undefined)s[key]=[];}};
 /** Bringt einen geparsten Stand auf SCHEMA. Unbekannte oder neuere Stände bleiben unverändert und werden von validateState abgelehnt. */
 export function migrate(state,{steps=MIGRATIONS,target=SCHEMA,fills=FILLS}={}){
  if(!state||typeof state!=='object'||Array.isArray(state)||!Number.isSafeInteger(state.schema)||state.schema>target)return state;
@@ -59,7 +60,7 @@ export function validateState(s){
  if(!s.settings||typeof s.settings.incidents!=='boolean'||!s.stats||!['produced','delivered','revenue','costs'].every(k=>finite(s.stats[k],0)))fail('Einstellungen oder Statistik beschädigt.');
  // Reject non-finite values and prototype-shaped keys anywhere, including extensions.
  function walk(v,depth=0){if(depth>60)fail('Verschachtelung zu tief.');if(typeof v==='number'&&!Number.isFinite(v))fail('Ungültiger Zahlenwert.');if(v&&typeof v==='object')for(const [k,x]of Object.entries(v)){if(['__proto__','constructor','prototype'].includes(k))fail('Verbotener Schlüssel.');walk(x,depth+1);}}walk(s);
- const ids=new Set();let maxSeq=0;for(const k of ['sites','buildings','workers','batches','reservations','jobs','purchases','orders','vehicles','shipments','ledger','events','returns','research','rules','transfers','tours','freights','rentals','tickets','contracts','yard'])for(const row of s[k]||[]){if(!row||typeof row!=='object'||typeof row.id!=='string'||!row.id||ids.has(row.id))fail('Fehlende oder doppelte ID in '+k+'.');ids.add(row.id);const m=row.id.match(/-(\d+)$/);if(m)maxSeq=Math.max(maxSeq,+m[1]);}
+ const ids=new Set();let maxSeq=0;for(const k of ['sites','buildings','workers','batches','reservations','jobs','purchases','orders','vehicles','shipments','ledger','events','returns','research','rules','transfers','tours','freights','rentals','tickets','contracts','yard','lines','linehauls'])for(const row of s[k]||[]){if(!row||typeof row!=='object'||typeof row.id!=='string'||!row.id||ids.has(row.id))fail('Fehlende oder doppelte ID in '+k+'.');ids.add(row.id);const m=row.id.match(/-(\d+)$/);if(m)maxSeq=Math.max(maxSeq,+m[1]);}
  if(s.seq<=maxSeq)fail('ID-Zähler beschädigt.');
  const sites=new Set(s.sites.map(x=>x.id));if(!sites.has(s.selectedSite)||!sites.size)fail('Standortauswahl ungültig.');
  for(const a of s.sites)if(!Number.isInteger(a.width)||!Number.isInteger(a.height)||a.width<2||a.height<2||a.width>200||a.height>200||!finite(a.energy,0)||!finite(a.x)||!finite(a.y))fail('Standortwerte beschädigt.');
