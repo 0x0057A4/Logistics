@@ -294,7 +294,7 @@ function stepYard(s,api){
   else if(a.phase==='gate'){
    if(gateDown(s,a.site)){api.workforce.release(gateKey(a));wait(a,WAIT.gateDown,t);a.phaseEnd=t+Math.ceil(DURATION.gate-(a.gateDone||0));continue;} // 0.16 S1: Torstörung ohne Bindung
    const worker=api.workforce.acquireAny(GATE_ROLES,a.site,gateKey(a)); // S2: Torposten vor Lagerkraft
-   if(!worker){wait(a,WAIT.gate,t);a.phaseEnd=t+DURATION.gate-(a.gateDone||0);}
+   if(!worker){wait(a,WAIT.gate,t);a.phaseEnd=t+Math.ceil(DURATION.gate-(a.gateDone||0));}
    else{
     worker.activity=`Torkontrolle ${a.plate}`;a.waitReason=null;a.waitSince=null;
     a.gateDone=(a.gateDone||0)+(worker.role==='gate'?workRate(worker,1,'gate',t):1); // Lagerkraft 1/min, Torposten Mittel 1,25 (S2)

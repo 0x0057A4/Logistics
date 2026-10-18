@@ -17,9 +17,9 @@ export const RESPONSE_MINUTES={status:240,deadline:480,complaint:240,partial:360
 /** 0.16 S3 Auslöser automatischer Anliegen (nur Vertragsaufträge, außer der bestehenden Beschwerde für alle Aufträge):
  *  risk: Frist in ≤ riskLead Min., nichts zugestellt und offene Menge nicht unterwegs (Statusanfrage, drohende Verspätung);
  *  partial: Teil zugestellt, Rest nicht unterwegs und Frist in ≤ partialLead Min. oder überschritten (Teillieferung);
- *  disruption: aktive Störung am Zustellstandort (disruptions.active, Liste nicht leer) und Frist in ≤ disruptionLead Min.
+ *  disruption: aktive Störung am Zustellstandort (disruptions.active: Ereignis oder schweres Wetter ab Faktor weatherFactor) und Frist in ≤ disruptionLead Min.
  *  (Statusanfrage, Störungsverzug). late: überfälliger aktiver Auftrag (Beschwerde, Regel bis 0.15). Vorläufig, A02 balanciert. */
-export const AUTO={riskLead:90,partialLead:120,disruptionLead:240};
+export const AUTO={riskLead:90,partialLead:120,disruptionLead:240,weatherFactor:1.25};
 const TRIGGERS={complaint:['late'],status:['risk','disruption'],partial:['partial']};
 export const KIND_TEXT={status:'Statusanfrage',deadline:'Fristverlängerung',complaint:'Beschwerde',partial:'Teillieferung'};
 const cents=n=>Math.round(n*100)/100;
@@ -57,7 +57,7 @@ export function handle(s,c,api){
 function automatic(s,api){
  let pairs=null;const has=(o,kind)=>(pairs??=new Set(s.tickets.map(t=>t.orderId+':'+t.kind))).has(o.id+':'+kind);
  const add=(o,kind,trigger)=>{create(s,o,kind,null,'automatic',api,trigger);pairs?.add(o.id+':'+kind);};
- const disrupted=new Map(),disruption=site=>{if(!disrupted.has(site)){const list=disruptionsActive(s,site);disrupted.set(site,Array.isArray(list)&&list.length>0);}return disrupted.get(site);};
+ const disrupted=new Map(),disruption=site=>{if(!disrupted.has(site)){const list=disruptionsActive(s,site);disrupted.set(site,Array.isArray(list)&&list.some(e=>e.kind!=='weather'||e.factor>=AUTO.weatherFactor));}return disrupted.get(site);};
  for(const o of s.orders){
   if(o.status!=='active')continue;
   // Bestehende Regel (bis 0.15): überfälliger aktiver Auftrag → Beschwerde, für alle Auftragsarten.
