@@ -215,7 +215,7 @@ test('Kühlkette: Kühllager aus → Erwärmung, Sperre bei Qualität < 70 dauer
  if(free<1){const r=sim.command({type:'dispatch',orderId:o.id,vehicleId:s.vehicles[0].id,qty:1});assert.equal(r.ok,false,'gesperrte Ware nicht versendbar');}
  cmd(sim,{type:'toggleBuilding',id:cs.id});sim.step(120);
  assert.ok(dmg.every(b=>b.blocked&&b.coldDamaged),'Sperre bleibt nach Wiederkühlung');
- assert.equal(sim.command({type:'disposeBatch',batchId:dmg[0].id}).ok,false,'Fremdware nicht als Eigenware entsorgbar');
+ assert.equal(sim.command({type:'disposeBatch',batchId:dmg[0].id}).ok,true,'B-0.16-2: gesperrte Fremdware eines aktiven Auftrags entsorgbar (bis 0.16 abgelehnt)');
  validateState(s);
  console.log(`# QS-015 Kühlkette: ${dmg.length} Chargen gesperrt, Hof-Wartegrund bei ausgeschaltetem Kühllager: ${reason}`);
 });

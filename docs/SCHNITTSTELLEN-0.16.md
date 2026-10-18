@@ -36,6 +36,7 @@ Abnahme (A11): Jede Störung hat Ursache, Dauer, Wirkung und Ende, sichtbar in M
 - Neue API `api.workforce.acquireAny(roles, site, task)`: erste passende freie Person in Rollenreihenfolge; bestehende Bindung bleibt, solange gültig.
 - Staplerarbeiten (yard Paletten/Sperrgut, containers, linehaul/transport/tours Staplerumschlag) nutzen `['forklift','warehouse']`, Torkontrolle `['gate','warehouse']`. Spezialist arbeitet mit Faktor 1,25 (`workRate`), Lagerkraft wie bisher.
 - Lagerkräfte bleiben universell; ohne Spezialisten ändert sich nichts.
+- 0.16b: Be-/Entladen eigener Fahrzeuge mit Stapler (transport, tours, linehaul) baut die Restzeit je Minute um `workforce.forkStep(w,t)` ab (Staplerfahrer `workRate(w,1,'forklift',t)`, Mittel 1,25; sonst 1). `afterStep` hält die Restzeit ≥ 0.
 
 ## S3 Kundendienst-Ausbau (A08, customer-service.js, contracts.js)
 

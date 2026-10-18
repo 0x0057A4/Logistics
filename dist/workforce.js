@@ -23,6 +23,11 @@ export function workRate(w,base,role,t){
  if(t==null)return Math.max(1,r);
  return Math.max(1,Math.floor(r*(t+1))-Math.floor(r*t));
 }
+/** Restminuten-Abbau je Arbeitsminute beim Staplerumschlag eigener Fahrzeuge (transport/tours/linehaul, Fix 0.16b):
+ * gebundener Staplerfahrer workRate(w,1,'forklift',t) (Mittel 1,25), sonst genau 1 (Lagerkraft unverändert, bitgleich). */
+export function forkStep(w,t){return w?.role==='forklift'?workRate(w,1,'forklift',t):1;}
+/** Restzeit nach einer Arbeitsminute mit Abbau d; nie negativ. d=1 → exakt rest-1 wie bisher. */
+export function afterStep(rest,d){return d===1?rest-1:Math.max(0,rest-d);}
 /** Gleiche Gültigkeit wie acquire: Standort, Schicht, keine Fortbildung/Versetzung/Pause, Müdigkeit < 80 (ohne Bindung). */
 export function available(s,w,site){return w.site===site&&!w.training&&!w.relocation&&!(w.breakRemaining>0)&&onShift(w,s.t)&&w.fatigue<80;}
 /** Anzahl freier, einsatzbereiter Personen einer Rolle am Standort (lesend). */

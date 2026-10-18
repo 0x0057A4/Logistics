@@ -2,7 +2,7 @@ import {committedQty} from './tours.js';
 import {travelMinutes} from './disruptions.js'; // 0.16 S1: Fahrtdauer beim Start inkl. Wetter/Stau
 import {VEHICLES,ITEMS} from './catalog.js';
 import {acquireForklift,releaseForklift,useForklift,forkliftKey,forkItem} from './yard.js';
-import {FORK_ROLES} from './workforce.js';
+import {FORK_ROLES,forkStep,afterStep} from './workforce.js';
 import {deliverySiteOf} from './contracts.js';
 import {loadingTrip,abortLinehaul} from './linehaul.js';
 import {loadingAirShuttle,abortAirShuttle} from './airexport.js';
@@ -95,7 +95,7 @@ export function step(s,api){
    let fork=null;if(pallet){const f=acquireForklift(s,sh.site,forkliftKey(sh.id));if(!f.forklift){api.workforce.release(`${sh.id}:warehouse`);sh.worker=null;sh.blocked=f.reason;continue;}fork=f.forklift;}
    const worker=pallet?api.workforce.acquireAny(FORK_ROLES,sh.site,`${sh.id}:warehouse`):api.workforce.acquire('warehouse',sh.site,`${sh.id}:warehouse`);if(!worker){sh.blocked='Lagerpersonal für Beladung fehlt';if(fork)releaseForklift(s,forkliftKey(sh.id));continue;}sh.worker=worker.id;sh.blocked=null;
    if(fork)useForklift(s,fork);
-   if(--sh.remaining>0)continue;sh.loadDone=true;}
+   sh.remaining=afterStep(sh.remaining,pallet?forkStep(worker,s.t):1);if(sh.remaining>0)continue;sh.loadDone=true;}
    const cost=Math.round(sh.distance*2*VEHICLES[v.type].runningCost*100)/100;
    if(s.money<cost){sh.remaining=1;sh.blocked='Betriebskosten können nicht bezahlt werden';/* QS-W2-01: Stapler/Kraft beim Warten freigeben */if(pallet)releaseForklift(s,forkliftKey(sh.id));api.workforce.release(`${sh.id}:warehouse`);sh.worker=null;continue;}
    const cargo=api.inventory.transfer(sh.id,'vehicle',sh.site);if(!cargo){sh.remaining=1;sh.blocked='Ladung nicht verfügbar';/* QS-W2-01: Stapler/Kraft beim Warten freigeben */if(pallet)releaseForklift(s,forkliftKey(sh.id));api.workforce.release(`${sh.id}:warehouse`);sh.worker=null;continue;}
