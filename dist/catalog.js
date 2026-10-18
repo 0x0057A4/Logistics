@@ -58,7 +58,8 @@ Object.assign(BUILDINGS,{forklift:{name:'Staplerplatz',cost:6500,w:1,h:1,color:'
 VEHICLES.truck.weightCapacity=6000;
 // Welle 3b: Containerhof (A01-Gerüst, Werte vorläufig).
 Object.assign(BUILDINGS,{containeryard:{name:'Containerhof',cost:18000,w:4,h:3,color:'#9aa7b4',role:'warehouse',recipes:[],power:1,teu:8}});
-// 0.15 (A01-Gerüst, Werte vorläufig): Warenarten Kühlpaket/Sperrgut, Quergurtsorter, Forschung Mega-Hub.
+// 0.15 (A01-Gerüst): Warenarten Kühlpaket/Sperrgut, Quergurtsorter, Forschung Mega-Hub. A02 0.15 (docs/BALANCING-0.15.md):
+// Quergurt 60.000 € (vorher 120.000), Mega-Hub 12.000 € (vorher 20.000); lohnt ab ≈ 4.000–6.000 Paketen/Tag.
 Object.assign(ITEMS,{parcel_cold:{name:'Kühlpaket',price:0,volume:0.05,weight:0.5,cold:true},bulky:{name:'Sperrgut',price:0,volume:0.6,weight:25,noSorter:true}});
-Object.assign(BUILDINGS,{crossbelt:{name:'Quergurtsorter',cost:120000,w:6,h:3,color:'#5f9fd6',role:'warehouse',recipes:[],power:12,throughput:2400,staff:2,research:'megahub'}});
-Object.assign(RESEARCH,{megahub:{name:'Mega-Hub',cost:20000,duration:240}});
+Object.assign(BUILDINGS,{crossbelt:{name:'Quergurtsorter',cost:60000,w:6,h:3,color:'#5f9fd6',role:'warehouse',recipes:[],power:12,throughput:2400,staff:2,research:'megahub'}});
+Object.assign(RESEARCH,{megahub:{name:'Mega-Hub',cost:12000,duration:240}});

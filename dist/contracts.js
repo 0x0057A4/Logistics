@@ -54,18 +54,19 @@ export const TERMS={
  // minLead: Mindestvorlauf Ankunft im Hof → Annahmeschluss des gebuchten Flugs; penaltyMissed: Strafe je Paket und verpasstem
  // Flug (air-missed:<auftrag>:<flug>). Ein Zustellgebiet „Luftfracht <Flughafen>“ am Annahme-Hub (ohne lane.site).
  air:{fromDay:4,phase:1380,parcels:[6,11],price:[11,0.5,6],sla:[0,2],days:[5,10],flightPlans:[[1050],[990,1290],[1110]],cutoff:90,minLead:180,penaltyMissed:3},
- // Warenarten (0.15 S2, A08-Vorschlag, Balancing A02 offen): eigener Angebotsplatz einmal täglich um Minute phase (06:00, damit
+ // Warenarten (0.15 S2, A08-Vorschlag; Balancing A02 0.15, docs/BALANCING-0.15.md: Kühlpaket 30–60 je Ankunft, Zuschlag 7,50 €,
+ // Sperrgut 20–40 Stück zu 30–36 €, Zustellfrist 20–28 h = Folgetag): eigener Angebotsplatz einmal täglich um Minute phase (06:00, damit
  // frühestens am 2. Spieltag) mit eigenem Zufall (slotRandom, api.random unberührt), höchstens ein offenes Warenangebot,
  // zählt nicht zu MAX_OFFERS. Kühlpaket nur mit Kühllager am Angebotsstandort oder abgeschlossener Forschung coldchain;
  // parcels in Zehnern wie offer, price [Basis €, Schritt €, Schritte] + surcharge (Kühlzuschlag je Paket, im Preis enthalten
  // und als k.surcharge ausgewiesen). Sperrgut ab Spieltag fromDay oder mit Staplerplatz am Angebotsstandort; units Stück je
  // Ankunft (ohne Zehnerfaktor; 0,6 Volumen/25 kg → Lieferwagen 3 Stück, Lkw 133), Preis je Stück. Kein Container-/Luftweg.
  ware:{phase:360,
-  parcel_cold:{parcels:[4,8],price:[7,0.25,6],surcharge:3.5,sla:[5,8],days:[5,10]},
-  bulky:{units:[8,24],price:[22,1,6],sla:[8,12],days:[5,10],fromDay:3}}
+  parcel_cold:{parcels:[3,6],price:[7,0.25,6],surcharge:7.5,sla:[5,8],days:[5,10]},
+  bulky:{units:[20,40],price:[30,1,6],sla:[20,28],days:[5,10],fromDay:3}}
 };
-// Strafen der Warenarten (≈ 30 %/100 % des Preises wie Paket).
-Object.assign(TERMS.penalty,{parcel_cold:{late:3,open:11},bulky:{late:7,open:25}});
+// Strafen der Warenarten (≈ 30 %/100 % des Preises wie Paket; A02 0.15 an die neuen Preise angepasst).
+Object.assign(TERMS.penalty,{parcel_cold:{late:4.5,open:15},bulky:{late:9,open:33}});
 const STATUSES=['offer','active','ended'];
 export const UNITS=['parcel','pallet','container','air'];
 export const CONTENTS=['pallet','parcel'];

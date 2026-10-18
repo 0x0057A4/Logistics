@@ -49,8 +49,8 @@ function vasOffer(s,api){
  const day=Math.floor(s.t/1440),items=vasItems(s);if(!items.length)return;
  const item=items[day%items.length],qty=10+(day*7)%21,bom=vasBom(item),materials={};for(const [k,n] of Object.entries(bom))materials[k]=Math.ceil(n*qty);
  const site=s.buildings.find(b=>BUILDINGS[b.type]?.recipes?.length>0).site;
- // Stückvergütung: 18 % des Produktwerts, gerundet (Balancing A02); Material stellt der Kunde.
- const price=Math.round(ITEMS[item].price*.18);
+ // Stückvergütung: 35 % des Produktwerts, gerundet (A02 0.15, docs/BALANCING-0.15.md; vorher 18 %); Material stellt der Kunde.
+ const price=Math.round(ITEMS[item].price*.35);
  s.orders.push({id:api.id('order'),kind:'vas',service:'Lohnfertigung',customer:VAS_CUSTOMERS[day%VAS_CUSTOMERS.length],item,qty,price,due:s.t+2880,quality:75,site,status:'offer',delivered:0,paid:0,materials});
  api.log('order',`Mehrwertdienst-Anfrage: ${qty} × ${ITEMS[item].name} in Lohnfertigung (Kundenmaterial).`,[s.orders.at(-1).id]);
 }
