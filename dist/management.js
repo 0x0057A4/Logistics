@@ -2,6 +2,9 @@ import {RESEARCH,ITEMS,VEHICLES,BUILDINGS} from './catalog.js';
 import {committedQty} from './tours.js';
 export function init(s){s.research??=[];s.rules??=[];}
 const result=(ok,message,id)=>({ok,message,...(id?{id}:{})});
+/** Bausperre durch Forschung (A04, 0.15 S3): Gebäude mit Katalogfeld `research` erst nach abgeschlossener Forschung.
+ * Rückgabe Meldung oder null. Wird von core.worldCommand beim Bau geprüft (Versetzen bestehender Anlagen bleibt frei). */
+export function buildResearchMissing(s,type){const key=BUILDINGS[type]?.research;if(!key||(s.research||[]).some(r=>r.key===key&&r.status==='completed'))return null;return 'Forschung „'+(RESEARCH[key]?.name||key)+'“ zuerst abschließen.';}
 export function handle(s,c,api){
  if(c.type==='startResearch'){
   const spec=RESEARCH[c.key],site=c.site||s.selectedSite;if(!spec)return result(false,'Forschungsziel unbekannt.');if(s.research.some(r=>r.key===c.key))return result(false,'Forschung bereits begonnen oder abgeschlossen.');

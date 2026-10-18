@@ -17,7 +17,7 @@ export function handle(s,c,api){
  if(c.type==='createReturn'){
   const o=s.orders.find(o=>o.id===c.orderId),qty=c.qty,site=c.site||o?.site||s.selectedSite;
   if(!o||!Number.isInteger(qty)||qty<1||qty>o.delivered-s.returns.filter(r=>r.orderId===o.id).reduce((n,r)=>n+r.qty,0))return {ok:false,message:'Retourenmenge überschreitet bereits gelieferte, noch nicht retournierte Ware.'};
-  if(o.kind==='logistics')return {ok:false,message:'Fremdeigentum benötigt Rückführung gemäß Logistikvertrag; Warenwerterstattung ausgeschlossen.'};
+  if(o.kind==='logistics'||o.kind==='vas')return {ok:false,message:'Fremdeigentum benötigt Rückführung gemäß Logistikvertrag; Warenwerterstattung ausgeschlossen.'};
   const v=s.vehicles.find(v=>(!c.vehicleId||v.id===c.vehicleId)&&v.site===site&&v.status==='idle'&&v.condition>=15&&(!ITEMS[o.item]?.cold||VEHICLES[v.type]?.cold)&&v.capacity>=qty*(ITEMS[o.item]?.volume||1)&&(VEHICLES[v.type].weightCapacity||v.capacity*4)>=qty*(ITEMS[o.item]?.weight||1));
   if(!v)return {ok:false,message:'Freies, ausreichend großes Fahrzeug am Standort fehlt.'};
   const sources=returnSources(s,o.id,qty);if(!sources)return {ok:false,message:'Zustellnachweis für Retourenmenge fehlt.'};

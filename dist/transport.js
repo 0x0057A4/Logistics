@@ -36,7 +36,7 @@ export function handle(s,c,api){
   if(o.airExport)return {ok:false,message:'Luftexport: Pakete per Flughafen-Zubringer zum Frachtterminal bringen.'};
   const committed=committedQty(s,o.id);
   if(!Number.isInteger(c.qty)||c.qty<1||c.qty>o.qty-o.delivered-committed||!fits(v,o.item,c.qty))return {ok:false,message:'Menge überschreitet Restauftrag oder Fahrzeugkapazität.'};
-  const id=api.id('shipment');if(!api.inventory.reserve(o.item,c.qty,site,id,o.kind==='logistics'?o.id:'company'))return {ok:false,message:'Verfügbarer Fertigwarenbestand fehlt.'};
+  const id=api.id('shipment');if(!api.inventory.reserve(o.item,c.qty,site,id,(o.kind==='logistics'||o.kind==='vas')?o.id:'company'))return {ok:false,message:'Verfügbarer Fertigwarenbestand fehlt.'};
   const reservations=s.reservations.filter(r=>r.job===id);if(reservations.some(r=>(s.batches.find(b=>b.id===r.batchId)?.quality||0)<o.quality)){api.inventory.release(id);return {ok:false,message:'Reservierte Ware erfüllt Qualitätsanforderung nicht.'};}
   s.shipments.push({id,orderId:o.id,vehicleId:v.id,site,qty:c.qty,status:'loading',remaining:2+Math.ceil(c.qty/5),cargo:[],driver:null,worker:null,paid:false,createdAt:s.t,distance:30});v.status='loading';v.shipment=id;api.log('transport',`Teillieferung ${c.qty} Stück für ${o.customer} eingeplant.`,[id,o.id,v.id]);return {ok:true,id};
  }
@@ -97,7 +97,7 @@ export function step(s,api){
    const cost=Math.round(sh.distance*2*VEHICLES[v.type].runningCost*100)/100;
    if(s.money<cost){sh.remaining=1;sh.blocked='Betriebskosten können nicht bezahlt werden';/* QS-W2-01: Stapler/Kraft beim Warten freigeben */if(pallet)releaseForklift(s,forkliftKey(sh.id));api.workforce.release(`${sh.id}:warehouse`);sh.worker=null;continue;}
    const cargo=api.inventory.transfer(sh.id,'vehicle',sh.site);if(!cargo){sh.remaining=1;sh.blocked='Ladung nicht verfügbar';/* QS-W2-01: Stapler/Kraft beim Warten freigeben */if(pallet)releaseForklift(s,forkliftKey(sh.id));api.workforce.release(`${sh.id}:warehouse`);sh.worker=null;continue;}
-   delete sh.loadDone;sh.cargo=cargo.map(b=>b.id);sh.materialCost=o.kind==='logistics'?0:Math.round(cargo.reduce((n,b)=>n+b.qty*b.unitCost,0)*100)/100;sh.transportCost=cost;sh.tripCost=cost;const dock=s.buildings.find(b=>b.task===sh.id);if(dock){const k=dock.task;for(const b of s.buildings)if(b.task===k)b.task=null;};api.book(`trip:${sh.id}`,-cost,'Transport',`Tour ${sh.id}`,[sh.id,v.id,o.id]);api.workforce.release(`${sh.id}:warehouse`);if(pallet)releaseForklift(s,forkliftKey(sh.id));sh.worker=null;sh.status='transit';v.status='transit';sh.remaining=Math.ceil(sh.distance/VEHICLES[v.type].speed);sh.departedAt=s.t;
+   delete sh.loadDone;sh.cargo=cargo.map(b=>b.id);sh.materialCost=o.kind==='logistics'||o.kind==='vas'?0:Math.round(cargo.reduce((n,b)=>n+b.qty*b.unitCost,0)*100)/100;sh.transportCost=cost;sh.tripCost=cost;const dock=s.buildings.find(b=>b.task===sh.id);if(dock){const k=dock.task;for(const b of s.buildings)if(b.task===k)b.task=null;};api.book(`trip:${sh.id}`,-cost,'Transport',`Tour ${sh.id}`,[sh.id,v.id,o.id]);api.workforce.release(`${sh.id}:warehouse`);if(pallet)releaseForklift(s,forkliftKey(sh.id));sh.worker=null;sh.status='transit';v.status='transit';sh.remaining=Math.ceil(sh.distance/VEHICLES[v.type].speed);sh.departedAt=s.t;
   }else{
    sh.blocked=null;if(--sh.remaining>0)continue;
    if(sh.status==='transit'){sh.status='unloading';v.status='unloading';sh.remaining=2+Math.ceil(sh.qty/10);}

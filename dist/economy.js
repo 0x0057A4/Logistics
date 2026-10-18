@@ -1,5 +1,5 @@
 import {committedQty} from './tours.js';
-import {ITEMS,BUILDINGS} from './catalog.js';
+import {ITEMS,BUILDINGS,RECIPES} from './catalog.js';
 const suppliers={standard:{factor:1,lead:30,quality:88},express:{factor:1.3,lead:10,quality:86},quality:{factor:1.18,lead:45,quality:98}};
 const ledgerIndexes=new WeakMap();
 function keys(s){let index=ledgerIndexes.get(s);if(!index||index.rows!==s.ledger||index.length!==s.ledger.length){index={rows:s.ledger,length:s.ledger.length,keys:new Set(s.ledger.map(l=>l.key)),byKey:new Map(s.ledger.map(l=>[l.key,l]))};ledgerIndexes.set(s,index);}return index;}
@@ -18,6 +18,35 @@ export function book(s,key,amount,category,note,refs=[]){
 }
 /** Fertigungsanlage vorhanden: mindestens ein Gebäude mit Rezept (Montage, Prüfung, Verpackung) an irgendeinem Standort. */
 export const hasManufacturing=s=>s.buildings.some(b=>BUILDINGS[b.type]?.recipes?.length>0);
+// ---- Mehrwertdienste / Lohnfertigung (A04, 0.15 S3) ----------------------------------------------------------
+// Auftragsart kind 'vas': Kunde liefert das Material (Einkauf kostenlos, owner=Auftrag), wir fertigen mit den bestehenden
+// Rezepten unter Kundeneigentum (production.js: nur Material genau dieses Auftrags, Ausgabe owner=Auftrag), Vergütung
+// o.price je fertigem Stück bei Zustellung über den bestehenden Zahlungsweg (transport/tours: invoiceAmount=qty·price).
+// Angebote nur mit Fertigungsanlage, frühestens ab Tag 2 einmal täglich um 14:00 (VAS_OFFER_AT), höchstens ein offenes
+// Angebot. Werte deterministisch aus Tag und Katalog, kein api.random: der übrige Zufall bleibt unberührt.
+export const VAS_OFFER_AT=840,VAS_FROM_DAY=1;
+const VAS_CUSTOMERS=['Kranichsteg Elektro','Talgrund Montage','Sonnwiese Technik','Lindenhof Gerätebau'];
+/** Materialbedarf (Einkaufsteile) je Stück eines Endprodukts aus der Rezeptkette; null, wenn nicht herstellbar.
+ * Gewählt wird je Zwischenprodukt das erste Rezept, das es nicht selbst verbraucht (keine Nacharbeit). */
+const chainRecipe=item=>Object.values(RECIPES).find(x=>x.output.item===item&&!(item in x.inputs));
+export function vasBom(item,depth=0){
+ if(ITEMS[item]?.purchasable)return {[item]:1};
+ const r=chainRecipe(item);if(!r||depth>8)return null;
+ const out={};for(const [k,q] of Object.entries(r.inputs)){const sub=vasBom(k,depth+1);if(!sub)return null;for(const [m,n] of Object.entries(sub))out[m]=(out[m]||0)+n*q/r.output.qty;}return out;
+}
+/** Forschungsschlüssel aller Rezepte der Kette. */
+function chainResearch(item,out=new Set(),depth=0){const r=chainRecipe(item);if(!r||depth>8)return out;if(r.research)out.add(r.research);for(const k of Object.keys(r.inputs))chainResearch(k,out,depth+1);return out;}
+/** Lohnfertigbare Produkte: verkaufsfähig, herstellbar, alle Rezepte der Kette ohne offene Forschung. */
+function vasItems(s){return Object.keys(ITEMS).filter(item=>ITEMS[item].sellable&&!ITEMS[item].cold&&vasBom(item)&&[...chainResearch(item)].every(key=>s.research.some(r=>r.key===key&&r.status==='completed')));}
+function vasOffer(s,api){
+ const day=Math.floor(s.t/1440),items=vasItems(s);if(!items.length)return;
+ const item=items[day%items.length],qty=10+(day*7)%21,bom=vasBom(item),materials={};for(const [k,n] of Object.entries(bom))materials[k]=Math.ceil(n*qty);
+ const site=s.buildings.find(b=>BUILDINGS[b.type]?.recipes?.length>0).site;
+ // Stückvergütung: 18 % des Produktwerts, gerundet (Balancing A02); Material stellt der Kunde.
+ const price=Math.round(ITEMS[item].price*.18);
+ s.orders.push({id:api.id('order'),kind:'vas',service:'Lohnfertigung',customer:VAS_CUSTOMERS[day%VAS_CUSTOMERS.length],item,qty,price,due:s.t+2880,quality:75,site,status:'offer',delivered:0,paid:0,materials});
+ api.log('order',`Mehrwertdienst-Anfrage: ${qty} × ${ITEMS[item].name} in Lohnfertigung (Kundenmaterial).`,[s.orders.at(-1).id]);
+}
 // Erste Fertigungsanfragen (früher Startaufträge in init). Nur einmal: Aufträge werden nie gelöscht, daher genügt
 // „noch nie ein Fertigungsauftrag“ als Bedingung; alte Stände besitzen ihre Startaufträge bereits.
 function startOffers(s,api){
@@ -52,7 +81,10 @@ export function handle(s,c,api){
   const o=s.orders.find(x=>x.id===c.id);if(!o||o.status!=='offer')return {ok:false,message:'Auftrag nicht verfügbar.'};
   if(o.due<=s.t)return {ok:false,message:'Lieferfrist bereits abgelaufen.'};o.status='active';if(o.kind==='logistics'){
    const id=api.id('purchase');s.purchases.push({id,orderId:o.id,item:o.item,qty:o.qty,owner:o.id,site:o.site,supplier:'standard',cost:0,quality:94,status:'ordered',eta:s.t+20,remaining:0,batchId:null,worker:null});
-  }api.log('order',`Auftrag von ${o.customer} angenommen.`,[o.id]);return {ok:true,id:o.id};
+  }
+  // Mehrwertdienst: Kunde liefert Material kostenlos an den Auftragsstandort; Eigentum bleibt beim Auftrag.
+  if(o.kind==='vas')for(const [item,qty] of Object.entries(o.materials)){const id=api.id('purchase');s.purchases.push({id,orderId:o.id,item,qty,owner:o.id,site:o.site,supplier:'standard',cost:0,quality:92,status:'ordered',eta:s.t+30,remaining:0,batchId:null,worker:null});}
+  api.log('order',`Auftrag von ${o.customer} angenommen.`,[o.id]);return {ok:true,id:o.id};
  }
  if(c.type==='cancelOrder'){
   const o=s.orders.find(x=>x.id===c.id);if(!o||!['offer','active'].includes(o.status))return {ok:false,message:'Auftrag kann nicht storniert werden.'};
@@ -99,11 +131,13 @@ export function step(s,api){
  // New fictional tenders keep a completed company playable. Ohne Fertigungsanlage nur Fremdlogistik (A01 W1c).
  // Zufallszüge bleiben gleich: gezogene Fremdlogistik zieht wie bisher ihren Preis nach, umgewandelte Angebote
  // nutzen den schon gezogenen Preiszufall (gleiche Verteilung 12–24 €), damit Vertrags- und Störungszufall gleich bleiben.
- if(s.t%720===0&&s.orders.filter(o=>o.status==='offer').length<5){const n=api.id('order'),products=Object.keys(ITEMS).filter(k=>ITEMS[k].sellable||k==='lamp'),item=products[Math.floor(api.random()*products.length)],drawn=api.random()<.25,qty=12+Math.floor(api.random()*30),r=api.random(),kind=drawn||!hasManufacturing(s)?'logistics':'manufacturing';s.orders.push({id:n,kind,customer:`Werkverbund ${s.seq}`,item,qty,price:Math.round(ITEMS[item].price*(1.12+r*.15)),due:s.t+2160,quality:75,site:s.selectedSite,status:'offer',delivered:0,paid:0});const offer=s.orders.at(-1);if(drawn)offer.price=Math.round(12+api.random()*12);else if(kind==='logistics')offer.price=Math.round(12+r*12);}
+ if(s.t%1440===VAS_OFFER_AT&&Math.floor(s.t/1440)>=VAS_FROM_DAY&&hasManufacturing(s)&&!s.orders.some(o=>o.kind==='vas'&&o.status==='offer'&&o.due>s.t))vasOffer(s,api);
+ if(s.t%720===0&&s.orders.filter(o=>o.status==='offer'&&o.kind!=='vas').length<5){const n=api.id('order'),products=Object.keys(ITEMS).filter(k=>ITEMS[k].sellable||k==='lamp'),item=products[Math.floor(api.random()*products.length)],drawn=api.random()<.25,qty=12+Math.floor(api.random()*30),r=api.random(),kind=drawn||!hasManufacturing(s)?'logistics':'manufacturing';s.orders.push({id:n,kind,customer:`Werkverbund ${s.seq}`,item,qty,price:Math.round(ITEMS[item].price*(1.12+r*.15)),due:s.t+2160,quality:75,site:s.selectedSite,status:'offer',delivered:0,paid:0});const offer=s.orders.at(-1);if(drawn)offer.price=Math.round(12+api.random()*12);else if(kind==='logistics')offer.price=Math.round(12+r*12);}
 }
 export function validate(s){
  const bad=m=>{throw new Error('Spielstand ungültig: '+m);};
  if(s.loanBalance!==undefined&&(!Number.isFinite(s.loanBalance)||s.loanBalance<0||s.loanBalance>50000))bad('Kredit beschädigt.');
+ for(const o of s.orders)if(o.kind==='vas'&&(!o.materials||typeof o.materials!=='object'||Array.isArray(o.materials)||!Object.keys(o.materials).length||Object.entries(o.materials).some(([k,n])=>!ITEMS[k]?.purchasable||!Number.isInteger(n)||n<1)))bad('Mehrwertdienstauftrag beschädigt.');
  for(const p of s.purchases){
   if(!ITEMS[p.item]||!Number.isInteger(p.qty)||p.qty<1||!suppliers[p.supplier]||!['ordered','waiting','receiving','checking','storing','stored'].includes(p.status)||!Number.isFinite(p.cost)||p.cost<0||!Number.isFinite(p.eta)||!Number.isFinite(p.remaining))bad('Einkauf beschädigt.');
   if(['receiving','checking','storing'].includes(p.status)&&!s.batches.some(b=>b.id===p.batchId&&b.item===p.item&&b.qty===p.qty&&b.location==='inbound'))bad('Laufende Anlieferung ohne Ware.');

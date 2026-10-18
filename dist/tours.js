@@ -3,7 +3,8 @@ import {returnSources} from './service.js';
 import {onShift} from './workforce.js';
 import {acquireForklift,releaseForklift,useForklift,forkliftKey,PALLET} from './yard.js';
 const active=t=>!['complete','cancelled'].includes(t.status);
-const owner=o=>o.kind==='logistics'?o.id:'company';
+// Mehrwertdienst (vas, 0.15 S3): Fertigware gehört dem Auftrag wie bei Fremdlogistik.
+const owner=o=>o.kind==='logistics'||o.kind==='vas'?o.id:'company';
 const cents=n=>Math.round(n*100)/100;
 export function init(s){s.tours??=[];}
 // W3c-S1: Flughafen-Zubringer vor Übergabe binden die Menge ebenfalls (gleiche Regel wie airexport.shuttleQty, ohne Import).
@@ -43,7 +44,7 @@ export function planTour(s,vehicleId,entries){
   const o=s.orders.find(o=>o.id===entry.orderId),returnQty=entry.returnQty??0;
   if(!o||o.status!=='active'||!Number.isInteger(entry.qty)||entry.qty<1||entry.qty>o.qty-o.delivered-committedQty(s,o.id))return fail('Stopp benötigt aktiven Auftrag und freie Restmenge.');
   if(!Number.isInteger(returnQty)||returnQty<0)return fail('Rückladung benötigt ganze, nicht negative Menge.');
-  if(returnQty&&(o.kind==='logistics'||!returnSources(s,o.id,returnQty)))return fail('Rückladung benötigt eigene, bereits gelieferte und noch nicht retournierte Ware.');
+  if(returnQty&&(o.kind==='logistics'||o.kind==='vas'||!returnSources(s,o.id,returnQty)))return fail('Rückladung benötigt eigene, bereits gelieferte und noch nicht retournierte Ware.');
   if(o.airExport)return fail('Luftexport: Pakete per Flughafen-Zubringer zum Frachtterminal bringen.');
   if(ITEMS[o.item].cold&&!type.cold)return fail('Kühlware benötigt gekühltes Fahrzeug.');
   // W3-S2: Fremdware nur am Zustellstandort (wie contracts.deliverySiteOf; Import dort wäre ein Modulzyklus).

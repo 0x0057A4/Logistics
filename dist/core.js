@@ -118,6 +118,8 @@ export class Simulation{
  const d=BUILDINGS[old.type];const check=reachable(s,old.site,s.buildings.filter(b=>b!==old));if(!check.ok)return check;if(d.capacity){const used=api.inventory.used(old.site),capacity=api.inventory.capacity(old.site)-d.capacity;if(used>capacity)return {ok:false,message:'Lagerinhalt schützt Gebäude vor Abriss.'};}
  if(!api.book('demolish:'+old.id,Math.round(d.cost*.35),'construction','Rückbau '+d.name,[old.id]))return {ok:false,message:'Rückbau konnte nicht gebucht werden.'};s.buildings=s.buildings.filter(b=>b!==old);api.log('build','Gebäude zurückgebaut.',[old.id]);return {ok:true};}
  const type=c.type==='build'?c.buildingType:old.type,d=BUILDINGS[type];if(!d)return {ok:false,message:'Gebäudetyp unbekannt.'};
+ // 0.15 S3 (A04): Forschungsvoraussetzung aus dem Katalog (BUILDINGS[type].research, z. B. Quergurtsorter → megahub).
+ if(c.type==='build'){const locked=management.buildResearchMissing(s,type);if(locked)return {ok:false,message:locked};}
  const site=c.type==='build'?(c.site||s.selectedSite):old.site;const rotation=c.rotation??old?.rotation??0;if(![0,90,180,270].includes(rotation))return {ok:false,message:'Drehung ungültig.'};
  const candidate={...(old||{}),id:old?.id||'proposed',type,site,x:c.x,y:c.y,rotation,status:'idle',progress:0,job:null,condition:old?.condition??100,recipe:old?.recipe??null,enabled:old?.enabled??true};
  const list=[...s.buildings.filter(b=>b!==old),candidate];const check=reachable(s,site,list);if(!check.ok)return check;

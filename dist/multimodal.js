@@ -28,7 +28,7 @@ export function handle(s,c,api){
  const item=ITEMS[o.item];if(c.qty*(item.volume||1)>mode.capacity||c.qty*(item.weight||1)>mode.weightCapacity)return {ok:false,message:'Volumen oder Gewicht überschreitet Verkehrsmittelkapazität.'};
  const cold=!!item.cold;if(cold&&!s.research.some(r=>r.key==='coldchain'&&r.status==='completed'))return {ok:false,message:'Kühlkettenforschung für temperaturgeführte Fracht fehlt.'};
  const id=api.id('freight'),cost=round(mode.cost+c.qty*mode.unitCost);
- if(!api.inventory.reserve(o.item,c.qty,site,id,o.kind==='logistics'?o.id:'company'))return {ok:false,message:'Verfügbarer Warenbestand fehlt.'};
+ if(!api.inventory.reserve(o.item,c.qty,site,id,(o.kind==='logistics'||o.kind==='vas')?o.id:'company'))return {ok:false,message:'Verfügbarer Warenbestand fehlt.'};
  const reserved=s.reservations.filter(r=>r.job===id);if(reserved.some(r=>(s.batches.find(b=>b.id===r.batchId)?.quality||0)<o.quality)){api.inventory.release(id);return {ok:false,message:'Qualitätsanforderung nicht erfüllt.'};}
  if(!api.book(`freight-book:${id}`,-cost,'Transport',`${mode.name}: externe Transportleistung`,[id,o.id])){api.inventory.release(id);return {ok:false,message:'Kapital für Frachtbuchung fehlt.'};}
  s.freights.push({id,orderId:o.id,site,item:o.item,mode:c.mode,qty:c.qty,status:'loading',remaining:5+Math.ceil(c.qty/10),duration:5+Math.ceil(c.qty/10),documents:'pending',documentRemaining:10,cargo:[],terminal:null,nextDeparture:(Math.floor(s.t/mode.period)+1)*mode.period,period:mode.period,transportCost:cost,tripCost:cost,materialCost:0,paid:false,cold,storageDue:0,storageCost:0,missedConnections:0,createdAt:s.t});

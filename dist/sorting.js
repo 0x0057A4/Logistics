@@ -8,7 +8,7 @@
 // Reihenfolge: früheste Fälligkeit des Auftrags (owner), dann Arrayreihenfolge (FIFO).
 // Laufzeitzustand nur in Chargen, b.sortAcc, b.status und s.sorting (erst beim ersten Sortierbedarf angelegt,
 // damit Spielstände ohne Hub-Betrieb bitgleich bleiben).
-import {BUILDINGS} from './catalog.js';
+import {BUILDINGS, ITEMS} from './catalog.js';
 import {siteItemBatches} from './inventory.js';
 import {onShift, workRate} from './workforce.js';
 import {forkliftAvailable, forkliftKey, PALLET} from './yard.js';
@@ -21,13 +21,26 @@ export const HAND_RATE = 3;
 const HAND_STATES = new Set(['idle', 'working', 'staff', 'storage', 'off']);
 export const handKey = site => `${site}:handsort`;
 export const sorterKey = b => `${b.id}:sort`;
+// Quergurtsorter (A04, 0.15 S3): zweite Lagerkraft-Bindung `${b.id}:sort2`; Fehlwurf jedes MISSORT_EVERY-te Paket (1 %).
+export const CROSSBELT = 'crossbelt';
+export const MISSORT_EVERY = 100;
+export const sorterKey2 = b => `${b.id}:sort2`;
+const SORT_TYPES = new Set(['sorter', CROSSBELT]);
+const keysOf = b => b.type === CROSSBELT ? [sorterKey(b), sorterKey2(b)] : [sorterKey(b)];
+const releaseAll = (api, b) => { for (const k of keysOf(b)) api.workforce.release(k); };
 
 export function handle() { return null; }
 
 /** Sortierbare Inbound-Pakete eines Standorts in Arrayreihenfolge. */
 function inbound(s, site) {
   const out = [];
-  for (const b of siteItemBatches(s, site, ITEM)) if (b.site === site && b.location === 'inbound' && !b.blocked && !b.locked && b.qty - b.reserved > 1e-9) out.push(b);
+  for (const b of siteItemBatches(s, site, ITEM)) if (b.site === site && b.location === 'inbound' && !b.resort && !b.blocked && !b.locked && b.qty - b.reserved > 1e-9) out.push(b);
+  return out;
+}
+/** Fehlwürfe des Quergurts (b.resort) warten inbound auf Nachsortierung von Hand; Arrayreihenfolge (FIFO). */
+function resortList(s, site) {
+  const out = [];
+  for (const b of siteItemBatches(s, site, ITEM)) if (b.resort && b.site === site && b.location === 'inbound' && !b.blocked && !b.locked && b.qty - b.reserved > 1e-9) out.push(b);
   return out;
 }
 
@@ -84,26 +97,26 @@ const freeWarehouse = (s, site) => { let n = 0; for (const w of s.workers) if (!
 function stats(s, site) {
   const day = Math.floor(s.t / 1440);
   s.sorting ??= {day, sites:{}};
-  if (s.sorting.day !== day) { s.sorting.day = day; for (const x of Object.values(s.sorting.sites)) x.today = 0; }
+  if (s.sorting.day !== day) { s.sorting.day = day; for (const x of Object.values(s.sorting.sites)) { x.today = 0; if (x.rejectsToday !== undefined) x.rejectsToday = 0; } }
   return s.sorting.sites[site] ??= {hand:'idle', today:0, total:0};
 }
 
 export function step(s, api) {
   let sorters = null;
-  for (const b of s.buildings) if (b.type === 'sorter') { sorters ??= new Map(); let l = sorters.get(b.site); if (!l) sorters.set(b.site, l = []); l.push(b); }
+  for (const b of s.buildings) if (SORT_TYPES.has(b.type)) { sorters ??= new Map(); let l = sorters.get(b.site); if (!l) sorters.set(b.site, l = []); l.push(b); }
   // Strom wie production.js: Grundlast aller eingeschalteten Nebenanlagen (ohne Sortierplätze), dann Sortierplätze
   // in Gebäudereihenfolge. production.js zählt Sortierplätze als Grundlast vor den Maschinen.
   let power = null;
   if (sorters) {
     power = new Map();
     const supply = new Map(), demand = new Map();
-    for (const b of s.buildings) { if (!b.enabled || b.type === 'sorter') continue; const d = BUILDINGS[b.type]; if (b.type === 'power') supply.set(b.site, (supply.get(b.site) ?? 0) + (d.energy || 0)); if (!d?.recipes.length) demand.set(b.site, (demand.get(b.site) ?? 0) + (d?.power || 0)); }
+    for (const b of s.buildings) { if (!b.enabled || SORT_TYPES.has(b.type)) continue; const d = BUILDINGS[b.type]; if (b.type === 'power') supply.set(b.site, (supply.get(b.site) ?? 0) + (d.energy || 0)); if (!d?.recipes.length) demand.set(b.site, (demand.get(b.site) ?? 0) + (d?.power || 0)); }
     for (const site of s.sites) power.set(site.id, site.energy + (supply.get(site.id) ?? 0) - (demand.get(site.id) ?? 0));
   }
   let orders = null;
   for (const site of s.sites) {
-    const id = site.id, list = sorters?.get(id), cand = inbound(s, id);
-    if (!list && !cand.length) { if (s.sorting?.sites[id]) { api.workforce.release(handKey(id)); s.sorting.sites[id].hand = 'idle'; } continue; }
+    const id = site.id, list = sorters?.get(id), cand = inbound(s, id), rs = resortList(s, id);
+    if (!list && !cand.length && !rs.length) { if (s.sorting?.sites[id]) { api.workforce.release(handKey(id)); s.sorting.sites[id].hand = 'idle'; } continue; }
     if (cand.length > 1) {
       orders ??= new Map(s.orders.map(o => [o.id, o]));
       const due = b => orders.get(b.owner)?.due ?? Infinity;
@@ -130,7 +143,7 @@ export function step(s, api) {
     let spare = Infinity;
     if (need) {
       spare = freeWarehouse(s, id) - need;
-      const holders = [handKey(id), ...(list || []).map(sorterKey).reverse()];
+      const holders = [handKey(id), ...(list || []).flatMap(keysOf).reverse()];
       for (const key of holders) { if (spare >= 0) break; if (s.workers.some(w => w.task === key)) { api.workforce.release(key); yielded.add(key); spare++; } }
     }
     const grab = (site, key) => {
@@ -146,12 +159,18 @@ export function step(s, api) {
     let active = false;
     for (const b of list || []) {
       const key = sorterKey(b), spec = BUILDINGS[b.type];
-      if (!b.enabled) { b.status = 'paused'; api.workforce.release(key); continue; }
+      if (!b.enabled) { b.status = 'paused'; releaseAll(api, b); continue; }
       active = true;
-      if (b.condition <= 5) { b.status = 'broken'; api.workforce.release(key); continue; }
+      if (b.condition <= 5) { b.status = 'broken'; releaseAll(api, b); continue; }
       const p = power.get(id);
-      if (p < spec.power) { b.status = 'power'; api.workforce.release(key); continue; }
+      if (p < spec.power) { b.status = 'power'; releaseAll(api, b); continue; }
       power.set(id, p - spec.power);
+      if (b.type === CROSSBELT) {
+        const q = {list:cand, i:ci, blocked};
+        crossbelt(s, api, b, q, st, grab);
+        ci = q.i; blocked = q.blocked;
+        continue;
+      }
       if (ci >= cand.length || blocked) { b.status = blocked ? 'storage' : 'idle'; api.workforce.release(key); continue; }
       const w = grab(b.site, key);
       if (!w) { b.status = 'staff'; continue; }
@@ -161,32 +180,114 @@ export function step(s, api) {
       b.status = blocked && !moved ? 'storage' : 'working';
       w.activity = 'Sortierung';
     }
-    if (active || !cand.length || ci >= cand.length) { api.workforce.release(handKey(id)); st.hand = active ? 'off' : 'idle'; continue; }
+    const main = !(active || !cand.length || ci >= cand.length);
+    // Nachsortierung von Quergurt-Fehlwürfen (A04, 0.15 S3) läuft von Hand, auch wenn Sortieranlagen arbeiten.
+    // Ohne Fehlwürfe (rs leer) ist der Ablauf unverändert.
+    if (!main && !rs.length) { api.workforce.release(handKey(id)); st.hand = active ? 'off' : 'idle'; continue; }
     const w = grab(id, handKey(id));
     if (!w) { st.hand = 'staff'; continue; }
-    const moved = take(workRate(w, HAND_RATE)); // Standardkraft = HAND_RATE, Erfahrung bis ×1,5 (A06 W1b)
+    const rate = workRate(w, HAND_RATE); // Standardkraft = HAND_RATE, Erfahrung bis ×1,5 (A06 W1b)
+    let moved = 0;
+    if (rs.length) {
+      const q = {list:rs, i:0, blocked:false};
+      moved = takeQueue(api, q, rate, st);
+      if (q.blocked) blocked = true;
+    }
+    if (main && rate - moved > 1e-9 && !blocked) moved += take(rate - moved);
     st.hand = blocked && !moved ? 'storage' : 'working';
-    w.activity = 'Handsortierung';
+    w.activity = rs.length ? 'Nachsortierung' : 'Handsortierung';
   }
+}
+
+// ---- Quergurtsorter (A04, 0.15 S3) ----------------------------------------------------------------------------
+// Durchsatz BUILDINGS.crossbelt.throughput (2.400/h) mit spec.staff (2) gebundenen Lagerkräften; eine Kraft = halbe
+// Leistung. Akkumulator b.sortAcc in Sechzigsteln wie beim Sortierplatz (2400·k/2 ganzzahlig → exakt).
+// Fehlwurf deterministisch über Zähler b.sortCount (0 ≤ x < MISSORT_EVERY): jedes 100. Paket wird nicht nach stock
+// gebucht, sondern als eigene Charge (parents:[Quelle], resort:true, owner bleibt) inbound abgespalten und von Hand
+// nachsortiert (Handsortierung, Vorrang wie bisher hinter Entladen/Beladen). Sperrgut (ITEMS.noSorter) nie.
+// Statistik s.sorting.sites[site].rejects/rejectsToday; sortiert (today/total) zählt erst die tatsächlich nach stock
+// gebuchten Pakete (Fehlwürfe nach der Nachsortierung), damit jedes Paket genau einmal zählt.
+// Erschöpft: ganz verschoben (relocateQty wechselt bei ganzer Charge nur location) oder ohne freie Menge.
+const spent = x => x.location !== 'inbound' || x.qty - x.reserved <= 1e-9;
+const sortable = x => !ITEMS[x.item]?.noSorter && !spent(x);
+function crossbelt(s, api, b, q, st, grab) {
+  const spec = BUILDINGS[b.type];
+  let work = false;
+  if (!q.blocked) for (let j = q.i; j < q.list.length; j++) if (sortable(q.list[j])) { work = true; break; }
+  if (!work) { b.status = q.blocked ? 'storage' : 'idle'; b.crew = 0; releaseAll(api, b); return; }
+  let crew = 0, first = null;
+  for (const key of keysOf(b)) { const w = grab(b.site, key); if (w) { crew++; first ??= w; w.activity = 'Sortierung'; } }
+  b.crew = crew;
+  if (!crew) { b.status = 'staff'; return; }
+  const acc = (b.sortAcc || 0) + spec.throughput * crew / (spec.staff || 1), n = Math.floor(acc / 60);
+  b.sortAcc = acc - n * 60;
+  const moved = n > 0 ? crossbeltTake(s, api, b, q, n, st) : 0;
+  b.status = q.blocked && !moved ? 'storage' : 'working';
+}
+function crossbeltTake(s, api, b, q, limit, st) {
+  let left = limit, done = 0;
+  for (let j = q.i; j < q.list.length && left > 1e-9; j++) {
+    const x = q.list[j];
+    if (!sortable(x)) { if (j === q.i && spent(x)) q.i++; continue; }
+    const n = Math.min(x.qty - x.reserved, left), c0 = b.sortCount || 0, c1 = c0 + n;
+    const miss = Math.min(Math.floor(n), Math.floor(c1 / MISSORT_EVERY) - Math.floor(c0 / MISSORT_EVERY));
+    if (miss > 0) {
+      // Abspaltung über inventory (remove + add am selben Ort): Lagerbedarf unverändert, add kann daher nicht scheitern.
+      const part = api.inventory.remove(x.id, miss);
+      if (!part) { q.blocked = true; break; }
+      const spec = {item:x.item, qty:miss, site:x.site, owner:x.owner, location:'inbound', quality:x.quality, unitCost:x.unitCost, parents:[x.id]};
+      for (const k of ['temperature', 'exposure', 'peakTemperature', 'coldDamaged']) if (x[k] !== undefined) spec[k] = x[k];
+      const r = api.inventory.add(spec);
+      if (r) r.resort = true;
+      st.rejects = (st.rejects || 0) + miss; st.rejectsToday = (st.rejectsToday || 0) + miss;
+    }
+    const good = n - miss;
+    if (good > 1e-9 && !api.inventory.relocateQty(x.id, good, 'stock')) { q.blocked = true; b.sortCount = (c0 + miss) % MISSORT_EVERY; break; }
+    b.sortCount = c1 % MISSORT_EVERY;
+    left -= n; done += n;
+    st.today += good; st.total += good;
+    if (spent(x) && j === q.i) q.i++;
+  }
+  return done;
+}
+/** Handsortierung einer Warteschlange (Nachsortierung), atomar je Teilmenge wie take in step. */
+function takeQueue(api, q, limit, st) {
+  let moved = 0;
+  while (q.i < q.list.length && limit - moved > 1e-9) {
+    const b = q.list[q.i], n = Math.min(b.qty - b.reserved, limit - moved);
+    if (spent(b)) { q.i++; continue; }
+    if (!api.inventory.relocateQty(b.id, n, 'stock')) { q.blocked = true; break; }
+    moved += n;
+    if (spent(b)) q.i++;
+  }
+  st.today += moved; st.total += moved;
+  return moved;
 }
 
 /** Lesesicht für Darstellung/HUD: Pakete inbound/stock, Nennrate je Minute, Handstatus, heute sortiert. */
 export function summary(s, site) {
-  let inb = 0, stock = 0;
-  for (const b of siteItemBatches(s, site, ITEM)) if (b.site === site) { if (b.location === 'inbound') inb += b.qty; else if (b.location === 'stock') stock += b.qty; }
-  const sorters = s.buildings.filter(b => b.type === 'sorter' && b.site === site && b.enabled);
+  let inb = 0, stock = 0, resort = 0;
+  for (const b of siteItemBatches(s, site, ITEM)) if (b.site === site) { if (b.location === 'inbound') { inb += b.qty; if (b.resort) resort += b.qty; } else if (b.location === 'stock') stock += b.qty; }
+  const sorters = s.buildings.filter(b => SORT_TYPES.has(b.type) && b.site === site && b.enabled);
   const x = s.sorting?.sites?.[site];
-  return {inbound:inb, stock, rate:sorters.length ? sorters.reduce((n, b) => n + BUILDINGS.sorter.throughput / 60, 0) : HAND_RATE,
-    sorters:sorters.map(b => ({id:b.id, status:b.status})), hand:sorters.length ? 'off' : (x?.hand || 'idle'), today:x?.today || 0, total:x?.total || 0};
+  // Quergurt: Nennrate nach gebundener Besetzung (crew/staff); Sortierplatz wie bisher.
+  const rate = b => b.type === CROSSBELT ? BUILDINGS[b.type].throughput / 60 * ((b.crew ?? BUILDINGS[b.type].staff) / BUILDINGS[b.type].staff) : BUILDINGS.sorter.throughput / 60;
+  return {inbound:inb, stock, rate:sorters.length ? sorters.reduce((n, b) => n + rate(b), 0) : HAND_RATE,
+    sorters:sorters.map(b => ({id:b.id, type:b.type, status:b.status, ...(b.type === CROSSBELT ? {crew:b.crew || 0} : {})})),
+    hand:sorters.length && !resort ? 'off' : (x?.hand || 'idle'), today:x?.today || 0, total:x?.total || 0,
+    rejects:x?.rejects || 0, rejectsToday:x?.rejectsToday || 0, resort};
 }
 
 export function validate(s) {
   const fail = m => { throw new Error('Sortierdaten beschädigt: ' + m); };
   const finite = (n, min, max) => typeof n === 'number' && Number.isFinite(n) && n >= min && n <= max;
-  for (const b of s.buildings) if (b.type === 'sorter' && b.sortAcc !== undefined && !finite(b.sortAcc, 0, 60)) fail('Akkumulator');
+  for (const b of s.buildings) if (SORT_TYPES.has(b.type) && b.sortAcc !== undefined && !finite(b.sortAcc, 0, 60)) fail('Akkumulator');
+  for (const b of s.buildings) if (b.type === CROSSBELT && ((b.sortCount !== undefined && !finite(b.sortCount, 0, MISSORT_EVERY - 1e-9)) || (b.crew !== undefined && ![0, 1, 2].includes(b.crew)))) fail('Quergurt');
+  for (const b of s.batches) if (b.resort !== undefined && b.resort !== true) fail('Nachsortierung');
   if (s.sorting === undefined) return;
   const x = s.sorting;
   if (!x || typeof x !== 'object' || Array.isArray(x) || !Number.isSafeInteger(x.day) || x.day < 0 || !x.sites || typeof x.sites !== 'object' || Array.isArray(x.sites)) fail('Struktur');
   const sites = new Set(s.sites.map(a => a.id));
-  for (const [id, v] of Object.entries(x.sites)) if (!sites.has(id) || !v || !HAND_STATES.has(v.hand) || !finite(v.today, 0, Infinity) || !finite(v.total, v.today - 1e-6, Infinity)) fail('Standortwerte');
+  for (const [id, v] of Object.entries(x.sites)) if (!sites.has(id) || !v || !HAND_STATES.has(v.hand) || !finite(v.today, 0, Infinity) || !finite(v.total, v.today - 1e-6, Infinity)
+    || (v.rejects !== undefined && !finite(v.rejects, 0, Infinity)) || (v.rejectsToday !== undefined && !finite(v.rejectsToday, 0, v.rejects ?? 0))) fail('Standortwerte');
 }
