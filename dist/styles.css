@@ -508,3 +508,19 @@ body.replay #game::after{content:'';position:absolute;inset:0;border:3px solid v
 .countdown{font-variant-numeric:tabular-nums;font-weight:var(--w-med)}
 .countdown.tone-bad{color:var(--c-bad-ink)}.countdown.tone-wait{color:var(--c-wait-ink)}
 @media(max-width:1100px){.assist-btn span{display:none}.assist-btn{padding:0 8px}}
+/* 0.15 (A10): GuV & Anlagen, Warenarten, Quergurt-Sperre, Mehrwertdienste */
+.panel-seg{margin:0 0 14px;width:max-content;max-width:100%;overflow:auto}
+.panel-seg button{width:auto;padding:4px 12px;white-space:nowrap}
+.guv-head{display:flex;align-items:center;gap:var(--s-2,8px);flex-wrap:wrap;margin-bottom:12px}
+.guv-head .panel-seg{margin:0}
+.guv-table tr.sum td{border-top:1px solid var(--c-line-strong);font-weight:var(--w-semi)}
+.guv-table tr.total td{background:var(--c-surface-2)}
+.asset-table tr.sum td{border-top:1px solid var(--c-line-strong);background:var(--c-surface-2)}
+.asset-table td .progress{margin-top:4px;height:3px}
+.guv-recon{margin-top:8px}
+.build-items button.locked{opacity:.62;cursor:not-allowed;border-style:dashed}
+.build-items button.locked small{color:var(--c-wait-ink)}
+.badge.vas{background:var(--c-accent-soft);color:var(--c-accent)}
+.ware-chip{font-size:.86em}
+.vas-materials{margin-top:10px;padding-top:8px;border-top:1px solid var(--c-line)}
+.vas-materials h4{font-size:var(--t-sm,12px);margin:0}
