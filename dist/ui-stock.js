@@ -1,3 +1,4 @@
+import {suppliers as economySuppliers} from './economy.js';
 // 0.17 Abschnitt 4 (A05/A10-S): Lagerfenster als Tabelle. Eine Zeile je Produkt und Eigentümerklasse, aufklappbare Chargen,
 // Suche (Fenstersuche), Filter, sortierbare Spalten, Ressourcen aus echten Rezepten mit [+] Bestellen (öffnet nur das
 // vorhandene Einkaufsformular, kauft nie selbst). Rechnet nicht selbst, sondern nutzt stock-view.js (gemeinsame Bestandsrechnung).
@@ -10,7 +11,9 @@ const NF=new Intl.NumberFormat('de-DE',{maximumFractionDigits:2});
 const fmt=n=>NF.format(Number(n)||0);
 export const LOCATION={stock:'Lagerplatz',inbound:'Wareneingang',quarantine:'Quarantäne',machine:'Maschine',vehicle:'Fahrzeug'};
 /** Lieferbedingungen der Lieferanten wie economy.js (Preisfaktor, Lieferzeit in Minuten). Gleichheit prüft tests/ui-017-stock.test.js. */
-export const SUPPLIERS={standard:{name:'Regulär',factor:1,lead:30},express:{name:'Express',factor:1.3,lead:10},quality:{name:'Premium',factor:1.18,lead:45}};
+// Konditionen aus economy.js (einzige Quelle), hier nur mit Anzeigenamen ergänzt.
+const SUPPLIER_NAMES={standard:'Regulär',express:'Express',quality:'Premium'};
+export const SUPPLIERS=Object.fromEntries(Object.entries(economySuppliers).map(([k,v])=>[k,{name:SUPPLIER_NAMES[k]||k,...v}]));
 /** Angebot vor dem Kauf: Stückpreis, Gesamtkosten (wie Einkaufsbefehl, auf Cent gerundet), Lieferzeit. */
 export function buyQuote(item,qty,supplier='standard'){
  const it=ITEMS[item],sp=SUPPLIERS[supplier]||SUPPLIERS.standard,n=Number.isInteger(qty)&&qty>0?qty:0;
