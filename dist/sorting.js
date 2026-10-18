@@ -9,6 +9,7 @@
 // Laufzeitzustand nur in Chargen, b.sortAcc, b.status und s.sorting (erst beim ersten Sortierbedarf angelegt,
 // damit Spielstände ohne Hub-Betrieb bitgleich bleiben).
 import {BUILDINGS, ITEMS} from './catalog.js';
+import {gridEnergy} from './disruptions.js'; // 0.16 S1: Netzstörung → nur Energiegebäude
 import {siteItemBatches} from './inventory.js';
 import {onShift, workRate, freeCount} from './workforce.js';
 import {forkliftAvailable, forkliftKey, COLD, forkItem} from './yard.js';
@@ -120,7 +121,7 @@ export function step(s, api) {
     power = new Map();
     const supply = new Map(), demand = new Map();
     for (const b of s.buildings) { if (!b.enabled || SORT_TYPES.has(b.type)) continue; const d = BUILDINGS[b.type]; if (b.type === 'power') supply.set(b.site, (supply.get(b.site) ?? 0) + (d.energy || 0)); if (!d?.recipes.length) demand.set(b.site, (demand.get(b.site) ?? 0) + (d?.power || 0)); }
-    for (const site of s.sites) power.set(site.id, site.energy + (supply.get(site.id) ?? 0) - (demand.get(site.id) ?? 0));
+    for (const site of s.sites) power.set(site.id, gridEnergy(s, site.id) + (supply.get(site.id) ?? 0) - (demand.get(site.id) ?? 0));
   }
   let orders = null;
   for (const site of s.sites) {

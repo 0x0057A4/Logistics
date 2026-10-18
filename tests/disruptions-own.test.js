@@ -178,3 +178,16 @@ test('Einstellung Störungen aus: keine Tagesplanung, keine Wirkung',()=>{
  const sim=new Simulation({mode:'sandbox',seed:3});cmd(sim,{type:'settings',incidents:false});sim.step(5*1440-sim.state.t);
  assert.equal(sim.state.disruptions,undefined);assert.equal(D.travelFactor(sim.state,'site-1'),1);
 });
+
+test('Netzstörung: Fertigung und Sortierung stehen ohne Energiegebäude, mit Energieversorgung laufen sie weiter',()=>{
+ const make=withPower=>{const sim=new Simulation({mode:'sandbox'}),s=sim.state;
+  const m=cmd(sim,{type:'build',buildingType:'assembly',x:2,y:2}).id,so=cmd(sim,{type:'build',buildingType:'sorter',x:6,y:2}).id;
+  if(withPower)cmd(sim,{type:'build',buildingType:'power',x:12,y:2});
+  at(sim,T,{events:[ev('grid','site-1',T,T+30)]});sim.step(1);
+  const st=id=>s.buildings.find(b=>b.id===id).status;return {m:st(m),so:st(so),sim,ids:[m,so]};};
+ const off=make(false),on=make(true);
+ assert.equal(off.m,'power');assert.equal(off.so,'power');
+ assert.notEqual(on.m,'power');assert.notEqual(on.so,'power');
+ off.sim.step(30);assert.equal(D.gridDown(off.sim.state,'site-1'),false);
+ for(const id of off.ids)assert.notEqual(off.sim.state.buildings.find(b=>b.id===id).status,'power','nach Ende wieder versorgt');
+});

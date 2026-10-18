@@ -1,4 +1,5 @@
 import {BUILDINGS,RECIPES} from './catalog.js';
+import {gridEnergy} from './disruptions.js'; // 0.16 S1: Netzstörung → nur Energiegebäude
 export function init(s){s.jobs??=[];}
 const researched=(s,key)=>(s.research||[]).some(r=>r.key===key&&r.status==='completed');
 export function handle(s,c,api){if(!['setRecipe','toggleBuilding','maintain'].includes(c.type))return null;const b=s.buildings.find(b=>b.id===c.id);if(!b)return {ok:false,message:'Anlage nicht gefunden.'};
@@ -30,7 +31,7 @@ export function abortJobs(s,api,owner){
 export function step(s,api){
  // Ein Durchlauf statt zwei Filtern je Standort; Summen je Standort weiter in Gebäudereihenfolge.
  const supply=new Map(),demand=new Map();for(const b of s.buildings){if(!b.enabled)continue;const d=BUILDINGS[b.type];if(b.type==='power')supply.set(b.site,(supply.get(b.site)??0)+(d.energy||0));if(!d?.recipes.length)demand.set(b.site,(demand.get(b.site)??0)+(d?.power||0));}
- const power={};for(const site of s.sites)power[site.id]=site.energy+(supply.get(site.id)??0)-(demand.get(site.id)??0);
+ const power={};for(const site of s.sites)power[site.id]=gridEnergy(s,site.id)+(supply.get(site.id)??0)-(demand.get(site.id)??0);
  // Laufzeitlokaler Auftragsindex für diesen Minutenschritt (erste ID gewinnt wie s.jobs.find).
  const jobs=new Map();for(const j of s.jobs)if(!jobs.has(j.id))jobs.set(j.id,j);let vas=null;
  for(const b of s.buildings){const spec=BUILDINGS[b.type];if(!spec)continue;let j=jobs.get(b.job);if(!spec.recipes.length&&!j)continue;
