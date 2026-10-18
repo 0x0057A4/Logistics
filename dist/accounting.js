@@ -56,7 +56,7 @@ export function report(s,options={}) {
   assets:assetRegister(s,options),
   liabilities:{loan,overdraft,terminalFees,total:round(loan+overdraft+terminalFees)},
   limitations:[
-   'Geldfluss seit Spielbeginn, keine Gewinn-und-Verlust-Rechnung. Kredit und Tilgung sind Finanzierung; Bau, Fuhrpark und Standortkäufe sind Investitionen. Forschung zählt zum betrieblichen Geldfluss.',
+   'Geldfluss seit Spielbeginn; die GuV mit Abschreibung steht getrennt in report().guv. Kredit und Tilgung sind Finanzierung; Bau, Fuhrpark und Standortkäufe sind Investitionen. Forschung zählt zum betrieblichen Geldfluss.',
    'Anfangsbestand aus Kontostand minus gespeicherten Buchungen rückgerechnet. Sammelbuchungen werden genau einmal gezählt; keine untertägige Periodenabgrenzung.',
    'Eigener Warenwert umfasst Lager, Eingang, Quarantäne und Fahrzeuge zu gespeicherten Stückkosten. Reservierungen sind darin enthalten. Fremde Ware bleibt ausgeschlossen. Laufende Fertigung und noch nicht eingetroffene Einkäufe stehen separat.',
    'Warenwerte sind Modellwerte: Fertigung enthält zugerechnete Arbeit und Energie, Retouren können zum Rücknahmepreis bewertet sein. Gesperrte Ware ist nicht abgeschrieben; gesperrter Wert ist Teil des eigenen Warenwerts.',
