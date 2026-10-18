@@ -178,6 +178,6 @@ export function initRail({ doc = globalThis.document } = {}) {
   }
   doc?.addEventListener?.('pointerdown', e => { if (!e.target.closest?.('.rail-group')) closeAll(); }, true);
   // Esc schließt zuerst nur das offene Gruppenmenü (nicht zusätzlich Fenster oder Baumodus).
-  doc?.addEventListener?.('keydown', e => { if (e.key === 'Escape' && closeAll()) e.stopPropagation(); }, true);
+  doc?.addEventListener?.('keydown', e => { if (e.key !== 'Escape' || e.target?.closest?.('input,textarea,select,[contenteditable="true"]')) return; if (closeAll()) e.stopPropagation(); }, true);
   return { closeAll };
 }
