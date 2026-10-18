@@ -2,6 +2,7 @@
 // Suche (Fenstersuche), Filter, sortierbare Spalten, Ressourcen aus echten Rezepten mit [+] Bestellen (öffnet nur das
 // vorhandene Einkaufsformular, kauft nie selbst). Rechnet nicht selbst, sondern nutzt stock-view.js (gemeinsame Bestandsrechnung).
 import {ITEMS} from './catalog.js';
+import {siteDisplayName} from './ui-explain.js';
 import {productRows,resourceNeeds,needText,suggestOrder,orderToProduce,orderOwner} from './stock-view.js';
 
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -53,7 +54,7 @@ function stateText(b){
  return 'Verwendbar';
 }
 function batchTable(row,s){
- const list=row.batches.slice(0,200),siteName=id=>s.sites.find(x=>x.id===id)?.name||id;
+ const list=row.batches.slice(0,200),siteName=id=>siteDisplayName(s,id);
  const inc=row.incomingOrders.map(p=>`<tr class="sv-incoming"><td>${esc(p.id)}</td><td class="num">${fmt(p.qty)}</td><td>Im Zulauf · ${esc(siteName(p.site))}</td><td>${esc({ordered:'bestellt',waiting:'wartet auf Annahme',receiving:'Annahme',checking:'Prüfung',storing:'Einlagerung'}[p.status]||p.status)}${p.blocked?' · '+esc(p.blocked):''}</td><td>${p.status==='ordered'?'Ankunft '+esc(clock(p.eta)):'—'}</td></tr>`).join('');
  return `<table class="data-table sv-batches"><thead><tr><th>Charge</th><th class="num">Menge</th><th>Lagerort</th><th>Zustand · Qualität</th><th>Reservierung / Auftrag</th></tr></thead><tbody>${list.map(b=>`<tr><td><button class="sv-link" data-action="select" data-id="${esc(b.id)}" title="Chargenakte öffnen">${esc(b.id)}</button>${b.owner!=='company'?`<br><small class="muted">Eigentum ${esc(b.owner)}</small>`:''}</td><td class="num">${fmt(b.qty)}${b.reserved?`<br><small>${fmt(b.reserved)} reserviert</small>`:''}</td><td>${esc(LOCATION[b.location]||b.location)}<br><small class="muted">${esc(siteName(b.site))}</small></td><td>${esc(stateText(b))}<br><small class="muted">Qualität ${fmt(b.quality)} %</small></td><td>${b.jobs.length?b.jobs.map(j=>`${fmt(j.qty)} · ${esc(j.label)}`).join('<br>'):'<span class="muted">frei</span>'}</td></tr>`).join('')}${inc}</tbody></table>${row.batches.length>200?`<p class="fine">${fmt(row.batches.length-200)} weitere Chargen über die Suche eingrenzen.</p>`:''}`;
 }

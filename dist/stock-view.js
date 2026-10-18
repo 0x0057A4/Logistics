@@ -11,6 +11,7 @@
 // Die Verfügbarkeitsanzeige ist keine Zusage: verbindlich ist nur eine vorhandene Reservierung (inventory.js).
 import {ITEMS,RECIPES} from './catalog.js';
 import {activeBatches} from './inventory.js';
+import {displayName,siteDisplayName} from './ui-explain.js';
 
 const STORED=new Set(['stock','inbound','quarantine']);
 // Hinweis: Summen in eigenen Anzeigeobjekten über ['qty']/['reserved'], damit die Prüfung „nur inventory.js schreibt Chargenmengen“
@@ -48,7 +49,7 @@ function jobIndex(s){
  for(const f of s.freights||[])single.set(f.id,f.orderId);
  for(const l of s.linehauls||[])if(Array.isArray(l.orders))multi.set(l.id,{kind:'Linienfahrt',orders:l.orders});
  for(const a of s.airShuttles||[])if(Array.isArray(a.orders))multi.set(a.id,{kind:'Luftzubringer',orders:a.orders});
- for(const j of s.jobs||[])text.set(j.id,j.status==='maintenance'?'Wartung':'Fertigung');
+ for(const j of s.jobs||[])text.set(j.id,(j.status==='maintenance'?'Wartung':'Fertigung')+(j.building?' · '+displayName(s,j.building):''));
  for(const tr of s.transfers||[])text.set(tr.id,'Standorttransfer');
  return {single,multi,text};
 }
@@ -124,7 +125,7 @@ export function incomingQty(s,item,sites,owner='company'){const B=base(s);let n=
  *  opts.site: Standort (Standard: alle Standorte). Rückgabe nach Artikelname sortiert. */
 export function productRows(s,opts={}){
  const site=opts.site??null,c=cache(s),ck=site||'*';if(c.rows.has(ck))return c.rows.get(ck);
- const B=base(s),rows=new Map(),siteName=id=>s.sites.find(x=>x.id===id)?.name||id;
+ const B=base(s),rows=new Map(),siteName=id=>siteDisplayName(s,id);
  const row=(item,owner)=>{const cls=ownerClass(owner),k=item+'|'+cls;let r=rows.get(k);
   if(!r){const recipe=chainRecipe(item);rows.set(k,r={key:k,item,name:ITEMS[item]?.name||item,unit:unitOf(item),variant:cls==='company'?'eigen':'Kundenware',ownerClass:cls,
    total:0,reserved:0,free:0,blocked:0,pending:0,inProduction:0,incoming:0,inTransit:0,locations:[],batches:[],owners:new Set(),bands:[],qualityMin:null,qualityMax:null,
