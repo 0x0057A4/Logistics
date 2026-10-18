@@ -85,7 +85,7 @@ test('Personalrollen: Erklärung beim Einstellen, Einstellung über hire, Spezia
  const money=ui.run('sim.state.money');
  ui.submit('hire',{role:'forklift'});ui.submit('hire',{role:'gate'});
  const ws=ui.run('sim.state.workers.map(w=>w.role)');assert.deepEqual([...ws],['forklift','gate']);
- assert.equal(ui.run('sim.state.money'),money-400-300,'Einstellungskosten aus dem Fachmodul');
+ assert.equal(ui.run('sim.state.money'),money-400-250,'Einstellungskosten aus dem Fachmodul'); // A02 0.16: Torposten 250 €
  ui.run('render(true)');h=body(ui);assert.match(h,/Staplerfahrer · Spezialist \+25 %/);assert.match(h,/Torposten · Spezialist \+25 %/);
  // Anzeige der Staplerrate (Zustandsattrappe nur für die Lesesicht): Staplerfahrer 1,25 Paletten/min, Lagerkraft 1.
  const crew=role=>ui.run(`arrivalCrew({workers:[{id:'w',name:'Kim',role:'${role}',task:'y-1:warehouse',skill:1,fatigue:0}],buildings:[],yard:[]},{id:'y-1',phase:'unloading',item:'pallet'})`);

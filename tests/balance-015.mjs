@@ -151,7 +151,7 @@ const WARE_SCEN={
 const POS={coldstore:['coldstore',12,2],forklift:['forklift',16,2],dock:['dock',6,13],rack2:['rack',12,6],rack3:['rack',15,6]};
 const perDay=k=>k.arrivals.reduce((n,a)=>n+a.parcels,0);
 const kind=k=>k?wareOf(k)||unitOf(k):'parcel';
-function readyQty(s,o){return s.batches.filter(b=>b.item===o.item&&b.location==='stock'&&b.owner===o.id&&b.site===o.site).reduce((n,b)=>n+b.qty-(b.reserved||0),0);}
+function readyQty(s,o){return s.batches.filter(b=>b.item===o.item&&b.location==='stock'&&b.owner===o.id&&b.site===o.site&&!b.blocked&&!b.locked).reduce((n,b)=>n+b.qty-(b.reserved||0),0);} // 0.16: gesperrte (Kühlschaden) Chargen sind nicht versandfähig
 function committedQty(s,o){
  const sh=s.shipments.filter(x=>x.orderId===o.id&&x.deliveredAt==null&&!['cancelled','complete'].includes(x.status)).reduce((n,x)=>n+x.qty,0);
  const tr=(s.tours||[]).flatMap(t=>['cancelled','complete'].includes(t.status)?[]:t.stops).filter(x=>x.orderId===o.id&&x.status==='pending').reduce((n,x)=>n+x.qty,0);
