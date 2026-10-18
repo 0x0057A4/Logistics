@@ -78,6 +78,8 @@ export function validateState(s){
  for(const b of s.batches)if(Math.abs((reserved.get(b.id)||0)-b.reserved)>1e-7)fail('Reservierte Menge widersprüchlich.');
  const buildings=new Set(s.buildings.map(b=>b.id));const workers=new Set(s.workers.map(w=>w.id));const jobs=new Set(s.jobs.map(j=>j.id));
  for(const b of s.buildings)if(b.job&&!jobs.has(b.job))fail('Maschinenauftrag fehlt.');
+ for(const b of s.buildings)if(b.label!==undefined&&(typeof b.label!=='string'||!b.label.trim()||b.label.length>40))fail('Anlagenname beschädigt.');
+ for(const x of s.sites)if(x.defaultName!==undefined&&(typeof x.defaultName!=='string'||!x.defaultName))fail('Standortname beschädigt.');
  for(const j of s.jobs)if(!buildings.has(j.building)||!(RECIPES[j.recipe]||(j.recipe===null&&j.status==='maintenance'))||!finite(j.remaining,0)||!finite(j.duration,0)||(j.worker&&!workers.has(j.worker)))fail('Fertigungsauftrag beschädigt.');
  for(const w of s.workers)if(!ROLES[w.role]||!finite(w.fatigue,0,100)||!finite(w.skill,0)||!finite(w.wage,0)||!['day','night','all'].includes(w.shift))fail('Personaldaten beschädigt.');
  const keys=new Set();for(const l of s.ledger){if(typeof l.key!=='string'||keys.has(l.key)||!finite(l.amount)||!finite(l.t,0))fail('Buchung beschädigt.');keys.add(l.key);}
@@ -111,6 +113,11 @@ export class Simulation{
  return {ok:false,message:'Befehl unbekannt.'};}
  worldCommand(c){const s=this.state,api=this.api;
  if(c.type==='selectSite'){if(!s.sites.some(a=>a.id===c.id))return {ok:false,message:'Standort fehlt.'};s.selectedSite=c.id;return {ok:true};}
+ // 0.17 S2: eigene Anzeigenamen. Gebäude: optionales b.label; Standort: site.name (Startname in site.defaultName). Leer → Standardname.
+ if(c.type==='rename'){const name=typeof c.name==='string'?c.name.trim().replace(/\s+/g,' '):null;if(name===null||name.length>40)return {ok:false,message:'Name mit höchstens 40 Zeichen eingeben.'};
+  if(c.target==='building'){const b=s.buildings.find(b=>b.id===c.id);if(!b)return {ok:false,message:'Anlage nicht gefunden.'};if(name)b.label=name;else delete b.label;return {ok:true};}
+  if(c.target==='site'){const x=s.sites.find(x=>x.id===c.id);if(!x)return {ok:false,message:'Standort nicht gefunden.'};if(name){x.defaultName??=x.name;x.name=name;}else if(x.defaultName){x.name=x.defaultName;delete x.defaultName;}return {ok:true};}
+  return {ok:false,message:'Ziel unbekannt.'};}
  if(c.type==='settings'){if(typeof c.incidents!=='boolean')return {ok:false,message:'Einstellung ungültig.'};s.settings.incidents=c.incidents;return {ok:true};}
  if(!['build','move','demolish'].includes(c.type))return null;
  const old=s.buildings.find(x=>x.id===c.id);if(c.type!=='build'&&!old)return {ok:false,message:'Gebäude fehlt.'};
