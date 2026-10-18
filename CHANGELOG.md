@@ -1,5 +1,16 @@
 # Änderungen
 
+## 0.15 – 18.10.2026 · Wirtschaft, neue Warenarten, Mega-Hub, Grafikqualität (Entwicklungsfassung)
+
+- Unternehmensrechnung mit Tab „GuV & Anlagen“: Ergebnisrechnung (Umsatz, Kostenarten, EBITDA, Abschreibung, EBIT, Ergebnis) mit Abstimmung zum Geldfluss; lineare Abschreibung (Gebäude 180, Fahrzeuge 90 Spieltage), Anlagenspiegel, Abgänge bei Abriss.
+- Neue Warenarten als Verträge: Kühlpaket (Kühllager und Kühlfahrzeug nötig, Zuschlag 7,50 €/Paket, Temperaturschaden) und Sperrgut (Stapler, nie Sortierung, Lieferwagen max. 3 Stück).
+- Quergurtsorter (60.000 €, Forschung Mega-Hub 12.000 €): 2.400 Pakete/h mit 2 Kräften, jedes 100. Paket Fehlwurf zur Handnachsortierung.
+- Mehrwertdienste (Lohnfertigung): Kunden liefern Material, Vergütung 35 % des Produktwerts je Stück; nie Vermischung mit eigenem Material.
+- Grafikqualität Automatisch/Niedrig/Mittel/Hoch (Einstellungen → Darstellung), Detailstufen nach Kameraabstand, feste Budgets (≤ 150 Draw Calls).
+- 3D: Quergurtsorter mit umlaufenden Wagen, Kühlboxen, Sperrgut, Kühlauflieger und Pritschen-Lkw.
+- Fremd-Lkw ohne Lagerplatz gibt das Dock nach 5 Min. frei, wenn ein eigenes Fahrzeug wartet (Fix B-0.15-1, vorher Dauerblockade).
+- Balancing: docs/BALANCING-0.15.md. Unabhängige Prüfung: docs/QS-0.15.md.
+
 ## 0.14 – 17.10.2026 · Luftexport, Dispositionsassistent, Replay (Entwicklungsfassung)
 
 - Luftexport zum fiktiven Frachtterminal Heidmoor: Verträge mit Flugplan und Annahmeschluss (11–14 €/Paket), eigener Zubringer (Fenster „Luftexport“, Taste X), Übergabe = Zustellung mit sofortiger Zahlung; verpasster Annahmeschluss → nächster Flug, Strafe höchstens einmal je Auftrag.

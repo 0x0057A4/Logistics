@@ -203,6 +203,6 @@ test('QS-W3c-02 Assistent-Budget: Luftzubringer wird mit 30-km-Schätzung geprü
  const spent=-keys(s,'air-trip:').reduce((n,l)=>n+l.amount,0);
  assert.ok(spent<=est+0.01,`Budget ${est} €, gebucht ${spent} € (Fahrt real ${real} €)`);
 });
-test('QS-W3c-03 Versionsanzeige auf 0.14 anheben',async()=>{
- const {readFileSync}=await import('node:fs');assert.match(readFileSync(new URL('../dist/app.js',import.meta.url),'utf8'),/VERSION='0\.14/);
+test('QS-W3c-03 Versionsanzeige mindestens 0.14',async()=>{
+ const {readFileSync}=await import('node:fs');assert.match(readFileSync(new URL('../dist/app.js',import.meta.url),'utf8'),/VERSION='0\.1[4-9]/);
 });
