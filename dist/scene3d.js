@@ -12,7 +12,7 @@ import { AIRPORT } from './airexport.js';
 export const VIEWS = ['hall', 'site', 'network', 'flat'];
 export const LABEL_MODES = ['fleet', 'infra', 'all', 'none'];
 export const MAX_LABELS = 40;
-const HEIGHT = { assembly: 1.5, testing: 1.45, packing: 1.2, rack: 1.75, dock: 2.3, power: 1.4, workshop: 1.25, research: 1.6, coldstore: 1.6, terminal: 1.45, sorter: 1.35, forklift: 1.3, containeryard: .35 };
+const HEIGHT = { assembly: 1.5, testing: 1.45, packing: 1.2, rack: 1.75, dock: 2.3, power: 1.4, workshop: 1.25, research: 1.6, coldstore: 1.6, terminal: 1.45, sorter: 1.35, crossbelt: 1.45, forklift: 1.3, containeryard: .35 };
 const ACTIVE = ['working', 'running', 'producing', 'active'];
 const BLOCKED = /wait|blocked|paused|material|staff|off|broken|power|storage/;
 const OUT = ['transit', 'collecting', 'linehaul', 'outbound'], IN = ['returning', 'inbound'];
@@ -183,7 +183,7 @@ export function vehicleT(plan, v, clock, stateT, visibleMinutes = 8) {
 export function rackPallets(state, rack) {
   const racks = (state?.buildings || []).filter(a => a.site === rack.site && /rack|shelf|regal/.test(a.type));
   // Pakete (Fremdware, W1) erscheinen als Kartonstapel (parcelLoads), Ladeeinheit Palette (W2) als Palettenstapel (palletLoads).
-  let qty = 0; for (const a of state?.batches || []) if (a.site === rack.site && a.location === 'stock' && a.item !== 'parcel' && a.item !== 'pallet') qty += a.qty;
+  let qty = 0; for (const a of state?.batches || []) if (a.site === rack.site && a.location === 'stock' && a.item !== 'parcel' && a.item !== 'pallet' && a.item !== COLD_ITEM && a.item !== BULKY_ITEM) qty += a.qty;
   qty -= Math.max(0, racks.findIndex(a => a.id === rack.id)) * 80;
   const width = Math.max(1, Math.floor(BUILDINGS[rack.type]?.w || 2)), slots = [];
   for (let k = 0; k < 3; k++) for (let j = 0; j < width; j++) if (qty > k * 25 + j * 12) slots.push({ level: k, cell: j });
@@ -495,7 +495,7 @@ export const TOUR_TRAVEL = 2.6, TOUR_DWELL = 2.4; // Sekunden je Fahrt bzw. Halt
 export function tourStops(state, siteId) {
   const s = state?.sites?.find(x => x.id === siteId) || defaultSite(state), L = yardLayout(s), b = (state?.buildings || []).filter(o => o.site === s.id);
   const mid = list => { let x = 0, z = 0; for (const o of list) { const box = buildingBox(o); x += (box.x0 + box.x1) / 2; z += (box.z0 + box.z1) / 2; } return { x: x / list.length, z: z / list.length }; };
-  const docks = b.filter(o => o.type === 'dock'), sorters = b.filter(o => o.type === 'sorter'), racks = b.filter(o => RACK.test(o.type)), out = [];
+  const docks = b.filter(o => o.type === 'dock'), sorters = b.filter(o => o.type === 'sorter' || o.type === 'crossbelt'), racks = b.filter(o => RACK.test(o.type)), out = [];
   out.push({ key: 'gate', label: 'Tor', tx: L.exitX, tz: L.yardGateZ - 1, dist: 17, yaw: Math.PI / 5 });
   const d = docks.length ? mid(docks) : { x: (L.bays[0] + L.bays[L.bays.length - 1]) / 2, z: L.H };
   out.push({ key: 'docks', label: 'Docks', tx: d.x, tz: L.H + 1.5, dist: 19, yaw: 0 });
@@ -616,7 +616,7 @@ export function arrivalPlan(L, a, ctx = {}) {
   if (a?.kind === 'container') return containerChassisPlan(L, a, ctx);
   if (!a || !PHASE_LABEL[a.phase]) return null;
   const g = gatePose(L), dock = ctx.dock || null, timed = Number.isFinite(a.phaseStart) && Number.isFinite(a.phaseEnd);
-  const plan = { id: a.id, phase: a.phase, path: null, t0: timed ? a.phaseStart : null, t1: timed ? a.phaseEnd : null, pose: g, fixedHeading: null, tone: arrivalTone(a), label: arrivalLabel(a), color: carrierColor(a.carrier), x: g.x, z: g.z, heading: g.heading, pallet: a.item === 'pallet', pallets: trailerPallets(a) };
+  const plan = { id: a.id, phase: a.phase, path: null, t0: timed ? a.phaseStart : null, t1: timed ? a.phaseEnd : null, pose: g, fixedHeading: null, tone: arrivalTone(a), label: arrivalLabel(a), color: carrierColor(a.carrier), x: g.x, z: g.z, heading: g.heading, pallet: a.item === 'pallet', pallets: trailerPallets(a), ware: arrivalWare(a), bulky: trailerBulky(a) };
   switch (a.phase) {
     case 'approach': plan.path = approachPath(L); break;
     case 'gate': break;
@@ -654,29 +654,121 @@ function toWorld(b, lx, lz, out) {
   const box = buildingBox(b), cx = (box.x0 + box.x1) / 2, cz = (box.z0 + box.z1) / 2, rot = -((b.rotation || 0) % 360) * Math.PI / 180, c = Math.cos(rot), s = Math.sin(rot);
   out.x = cx + lx * c + lz * s; out.z = cz - lx * s + lz * c; out.rot = rot; return out;
 }
-/** Paketplätze am Standort, Dichte nach Menge (gedeckelt). Nur item 'parcel'; Docks mit entladendem Fremd-Lkw zuerst. */
+/** Docks am Standort; Docks mit entladendem Fremd-Lkw bzw. Container zuerst. */
+function dockOrder(state, siteId, buildings) {
+  const busy = new Set(); for (const a of state?.yard || []) if (a.site === siteId && a.dock && a.phase === 'unloading') busy.add(a.dock);
+  for (const c of state?.containers || []) if (c.site === siteId && c.dock && c.status === 'unstuffing') busy.add(c.dock);
+  return buildings.filter(b => b.type === 'dock').sort((p, q) => (busy.has(q.id) ? 1 : 0) - (busy.has(p.id) ? 1 : 0));
+}
+/** Rollcontainerplatz i (0 … CAGES_PER_DOCK·Docks − 1) auf den Docks. */
+function cageSlot(docks, i, extra) { const j = i % CAGES_PER_DOCK, d = docks[Math.floor(i / CAGES_PER_DOCK)]; return toWorld(d, -.6 + (j % 4) * .5, -.6 + Math.floor(j / 4) * .55, { dock: d.id, ...extra }); }
+/** Stapelplätze an der Ausgangsseite (+z) der Anker, zwei Reihen. */
+function stackSlots(anchors) {
+  const slots = [];
+  for (const b of anchors) { const d = BUILDINGS[b.type] || { w: 2, h: 2 }, cols = Math.max(1, Math.floor(d.w / .7)); for (let row = 0; row < 2; row++) for (let col = 0; col < cols; col++) slots.push([b, -d.w / 2 + .4 + col * .7, d.h / 2 + .35 + row * .6]); }
+  return slots;
+}
+/** Stapel nach Menge; der letzte angebrochene Stapel ist niedriger. */
+function fillStacks(slots, qty, extra = {}) {
+  const ns = Math.min(MAX_STACKS, slots.length, Math.ceil(qty / PARCELS_PER_STACK)), out = [];
+  for (let i = 0; i < ns; i++) { const [b, lx, lz] = slots[i], rest = qty - i * PARCELS_PER_STACK, fill = i === ns - 1 && ns === Math.ceil(qty / PARCELS_PER_STACK) ? Math.min(1, rest / PARCELS_PER_STACK) : 1; out.push(toWorld(b, lx, lz, { anchor: b.id, sy: .35 + .65 * fill, ...extra })); }
+  return out;
+}
+const SORT_ANCHOR = new Set(['sorter', 'crossbelt']);
+const stackAnchors = (buildings, docks) => { const a = buildings.filter(b => SORT_ANCHOR.has(b.type)).concat(buildings.filter(b => /rack|shelf|regal/.test(b.type))); return a.length ? a : docks; };
+/** Paketplätze am Standort, Dichte nach Menge (gedeckelt). Nur item 'parcel'; Docks mit entladendem Fremd-Lkw zuerst. Ausgang: Sortierplatz/Quergurt, dann Regale. */
 export function parcelLoads(state, siteId, buildings = (state?.buildings || []).filter(b => b.site === siteId)) {
   let inbound = 0, stock = 0;
   for (const a of state?.batches || []) if (a.site === siteId && a.item === 'parcel' && a.qty > 0) { if (a.location === 'inbound') inbound += a.qty; else if (a.location === 'stock') stock += a.qty; }
-  const busy = new Set(); for (const a of state?.yard || []) if (a.site === siteId && a.dock && a.phase === 'unloading') busy.add(a.dock);
-  for (const c of state?.containers || []) if (c.site === siteId && c.dock && c.status === 'unstuffing') busy.add(c.dock);
-  const docks = buildings.filter(b => b.type === 'dock').sort((p, q) => (busy.has(q.id) ? 1 : 0) - (busy.has(p.id) ? 1 : 0));
-  const cages = [], stacks = [];
+  const docks = dockOrder(state, siteId, buildings), cages = [];
   const nc = Math.min(MAX_CAGES, docks.length * CAGES_PER_DOCK, Math.ceil(inbound / PARCELS_PER_CAGE));
-  for (let i = 0; i < nc; i++) { const j = i % CAGES_PER_DOCK; cages.push(toWorld(docks[Math.floor(i / CAGES_PER_DOCK)], -.6 + (j % 4) * .5, -.6 + Math.floor(j / 4) * .55, { dock: docks[Math.floor(i / CAGES_PER_DOCK)].id })); }
-  let anchors = buildings.filter(b => b.type === 'sorter').concat(buildings.filter(b => /rack|shelf|regal/.test(b.type))); if (!anchors.length) anchors = docks;
-  const slots = [];
-  for (const b of anchors) {
-    const d = BUILDINGS[b.type] || { w: 2, h: 2 }, cols = Math.max(1, Math.floor(d.w / .7));
-    for (let row = 0; row < 2; row++) for (let col = 0; col < cols; col++) slots.push([b, -d.w / 2 + .4 + col * .7, d.h / 2 + .35 + row * .6]);
-  }
-  const ns = Math.min(MAX_STACKS, slots.length, Math.ceil(stock / PARCELS_PER_STACK));
-  for (let i = 0; i < ns; i++) {
-    const [b, lx, lz] = slots[i], rest = stock - i * PARCELS_PER_STACK, fill = i === ns - 1 && ns === Math.ceil(stock / PARCELS_PER_STACK) ? Math.min(1, rest / PARCELS_PER_STACK) : 1;
-    stacks.push(toWorld(b, lx, lz, { anchor: b.id, sy: .35 + .65 * fill }));
-  }
-  return { inbound, stock, cages, stacks };
+  for (let i = 0; i < nc; i++) cages.push(cageSlot(docks, i));
+  return { inbound, stock, cages, stacks: fillStacks(stackSlots(stackAnchors(buildings, docks)), stock) };
 }
+
+// ---------- 0.15 Modelle (A09): Kühlpakete, Sperrgut, Quergurtsorter. Nur lesend; Animation nur aus der Anzeigeuhr. ----------
+export const COLD_ITEM = 'parcel_cold', BULKY_ITEM = 'bulky';
+/**
+ * Kühlpakete (item 'parcel_cold'), gleiche Dichte wie Pakete: Rollcontainer (inbound) auf den Docks hinter den Paket-Rollcontainern,
+ * Stapel (stock) vor dem Kühllager (Ausgangsseite), danach auf den freien Paket-Stapelplätzen. base: Ergebnis von parcelLoads.
+ */
+export function coldLoads(state, siteId, buildings = (state?.buildings || []).filter(b => b.site === siteId), base = parcelLoads(state, siteId, buildings)) {
+  let inbound = 0, stock = 0;
+  for (const a of state?.batches || []) if (a.site === siteId && a.item === COLD_ITEM && a.qty > 0) { if (a.location === 'inbound') inbound += a.qty; else if (a.location === 'stock') stock += a.qty; }
+  const docks = dockOrder(state, siteId, buildings), used = base.cages.length, cages = [];
+  const nc = Math.max(0, Math.min(MAX_CAGES - used, docks.length * CAGES_PER_DOCK - used, Math.ceil(inbound / PARCELS_PER_CAGE)));
+  for (let i = 0; i < nc; i++) cages.push(cageSlot(docks, used + i, { cold: true }));
+  const slots = stackSlots(buildings.filter(b => b.type === 'coldstore')).concat(stackSlots(stackAnchors(buildings, docks)).slice(base.stacks.length));
+  return { inbound, stock, cages, stacks: fillStacks(slots, stock, { cold: true }) };
+}
+export const BULKY_PER_PIECE = 2, MAX_BULKY = 24, BULKY_PER_TRAILER = 6, BULKY_LEVELS = 3;
+/** Formen der Sperrgutstücke (Skalierung des Grundkörpers 1,0 × 0,38 × 0,42): lange Kiste, hohe Kiste, flaches Paket, Ballen. */
+export const BULKY_SHAPES = [[1, 1, 1], [.72, 1.55, 1.08], [1.12, .62, 1.22], [.86, 1.12, .86]];
+export const BULKY_HEX = ['#c79a5b', '#8f9ea3', '#b5824a', '#d8c9a3', '#9fb0a2'];
+/** Form, Farbe und Schräglage des Sperrgutstücks i (deterministisch). */
+export function bulkyShape(i) { return { s: BULKY_SHAPES[((i * 7) % 11) % BULKY_SHAPES.length], hex: BULKY_HEX[(i * 3 + 1) % BULKY_HEX.length], tilt: ((i * 37) % 7 - 3) * .045 }; }
+/**
+ * Sperrgut im Lager (item 'bulky', location stock): je Stück BULKY_PER_PIECE Einheiten, gedeckelt auf MAX_BULKY. Plätze an beiden
+ * Stirnseiten der Regale (längs zur Regaltiefe), bis BULKY_LEVELS übereinander; ohne Regal an der Hallenseite von Staplerplatz/Dock.
+ */
+export function bulkyLoads(state, siteId, buildings = (state?.buildings || []).filter(b => b.site === siteId)) {
+  let stock = 0; for (const a of state?.batches || []) if (a.site === siteId && a.item === BULKY_ITEM && a.location === 'stock' && a.qty > 0) stock += a.qty;
+  let anchors = buildings.filter(b => /rack|shelf|regal/.test(b.type)), ends = true; if (!anchors.length) { anchors = buildings.filter(b => b.type === 'forklift' || b.type === 'dock'); ends = false; }
+  const cols = [];
+  for (const b of anchors) {
+    const d = BUILDINGS[b.type] || { w: 2, h: 2 };
+    if (ends) cols.push([b, -d.w / 2 - .32, 0, Math.PI / 2], [b, d.w / 2 + .32, 0, Math.PI / 2]);
+    else { const k = Math.max(1, Math.floor(d.w / 1.15)); for (let j = 0; j < k; j++) cols.push([b, -(k - 1) * .575 + j * 1.15, -d.h / 2 - .4, 0]); }
+  }
+  const n = Math.min(MAX_BULKY, cols.length * BULKY_LEVELS, Math.ceil(stock / BULKY_PER_PIECE)), pieces = [], height = cols.map(() => 0);
+  for (let i = 0; i < n; i++) {
+    const c = i % cols.length, [b, lx, lz, turn] = cols[c], sh = bulkyShape(i), p = toWorld(b, lx, lz, { anchor: b.id, level: Math.floor(i / cols.length) });
+    p.y = height[c]; height[c] += .38 * sh.s[1] + .015; p.rot += turn + sh.tilt; p.sx = sh.s[0]; p.sy = sh.s[1]; p.sz = sh.s[2]; p.hex = sh.hex; pieces.push(p);
+  }
+  return { stock, pieces };
+}
+/** Sperrgutstücke auf der Pritsche eines Fremd-Lkw (a.item 'bulky'): Anteil der noch nicht entladenen, höchstens BULKY_PER_TRAILER. */
+export function trailerBulky(a) {
+  if (a?.item !== BULKY_ITEM || !(a.parcels > 0)) return 0;
+  return Math.max(0, Math.min(BULKY_PER_TRAILER, Math.ceil(BULKY_PER_TRAILER * (a.parcels - (a.unloaded || 0)) / a.parcels)));
+}
+/** Ware eines Fremd-Lkw für die Darstellung: 'pallet' | 'cold' | 'bulky' | 'parcel'. */
+export function arrivalWare(a) { return a?.item === 'pallet' ? 'pallet' : a?.item === COLD_ITEM ? 'cold' : a?.item === BULKY_ITEM ? 'bulky' : 'parcel'; }
+
+// Quergurtsorter 6×3 (BUILDINGS.crossbelt): umlaufende Schleife (Geraden bei z = ±BELT.r, Halbkreise um x = ±BELT.hx) mit Wagen und Querbändern,
+// Einschleusung und Scannerportal an der Nordseite (−z), Endstellen (Rutschen mit Behältern) Süd und Nordost, Fehlwurfbehälter Ost (+x).
+export const BELT = { hx: 1.75, r: .62, y: .82 };
+export const BELT_CARRIERS = { low: 12, medium: 20, high: 28 };
+export const BELT_LAPS = .12;          // Runden je Spielminute (1× ≈ 8 s je Runde)
+export const BELT_MAX_LAPS_S = .3;     // höchstens 0,3 Runden je Sekunde, auch bei hohem Spieltempo
+const BELT_FULL = new Set(['working', 'staff', 'power', 'storage', 'broken']);
+/** Schleife läuft nur im Betrieb (b.status 'working'); sonst steht sie. */
+export function beltRunning(b) { return b?.status === 'working' && b.enabled !== false; }
+/** Wagen tragen Pakete im Betrieb und beim Stillstand mitten im Ablauf (Personal, Strom, Lager voll, Defekt); leer bei Bereit/Pausiert. */
+export function beltLoaded(b) { return BELT_FULL.has(b?.status) && b.enabled !== false; }
+/** Belegung des Wagens i (deterministisch, 60 %). */
+export function beltCarrierFull(i) { return (i * 7) % 5 < 3; }
+export function beltLength(L = BELT) { return 4 * L.hx + 2 * Math.PI * L.r; }
+/** Punkt (lokal, unrotierter Grundriss) und Fahrtrichtung bei Anteil u (0…1) der Schleife; Umlauf gegen den Uhrzeigersinn (Draufsicht, Norden = −z oben). Schreibt in out. */
+export function beltPoint(u, out = {}, L = BELT) {
+  const { hx, r } = L, straight = 2 * hx, arc = Math.PI * r, total = 2 * straight + 2 * arc;
+  let d = (((u % 1) + 1) % 1) * total;
+  if (d < straight) { out.x = -hx + d; out.z = r; out.heading = 0; return out; }
+  d -= straight;
+  if (d < arc) { const a = d / r; out.x = hx + Math.sin(a) * r; out.z = Math.cos(a) * r; out.heading = -a; return out; }
+  d -= arc;
+  if (d < straight) { out.x = hx - d; out.z = -r; out.heading = Math.PI; return out; }
+  d -= straight; const a = d / r; out.x = -hx - Math.sin(a) * r; out.z = -Math.cos(a) * r; out.heading = Math.PI - a; return out;
+}
+/** Vorschub der Schleife (Anteil 0…1) aus dem Fortschritt der Anzeigeuhr dClock (Spielminuten) in dtSec Sekunden; Pause/Rücksprung → steht. */
+export function beltAdvance(phase, dClock, dtSec) {
+  if (!(dClock > 0) || !(dtSec > 0)) return phase;
+  return (phase + Math.min(dClock * BELT_LAPS, dtSec * BELT_MAX_LAPS_S)) % 1;
+}
+/** Fehlwürfe zur Nachsortierung am Standort (Chargen mit resort, inbound). */
+export function resortQty(state, siteId) { let n = 0; for (const a of state?.batches || []) if (a.site === siteId && a.resort && a.location === 'inbound' && a.qty > 0) n += a.qty; return n; }
+/** Lage des Fehlwurfbehälters (Osten) im unrotierten Grundriss. */
+export const BELT_REJECT = { x: 2.72, z: 0 };
 
 // ---------- Stapler und Paletten (W2-S2), nur lesend ----------
 // Staplerplatz b (type 'forklift', 1×1): b.charge 0–100 (fehlend = 100), Bindung b.task = '<Vorgang>:forklift' (yard.js).
@@ -966,6 +1058,43 @@ function buildingModel(P, type, d) {
       P.box(-hw + .1, 0, -hh + .1, 1.25, 1.2, d.h - .2, '#ece8f7'); P.box(-hw + .07, .8, -hh + .07, 1.31, .16, d.h - .14, tint); P.box(-hw + .07, 1.2, -hh + .07, 1.31, .06, d.h - .14, '#8f84b8');
       P.box(-.1, 0, -.75, 1.35, .55, .6, '#c96f4a'); P.box(-.1, 0, .05, 1.35, .55, .6, '#4f86a6'); P.box(-.1, .55, -.75, 1.35, .55, .6, '#7ea36a');
       for (const x of [-.25, 1.35]) P.box(x, 0, -hh + .1, .08, 1.35, d.h - .2, '#f2c363'); break;
+    case 'crossbelt': {
+      // Quergurtsorter 6×3 (0.15): Schleife auf Stützen mit Antriebsmittelteil (Wagen sind Instanzen, s. placeBelts), zwei Einschleusbänder und
+      // Scannerportal an der Nordseite (−z), Endstellen (Rutsche + Behälter) Süd und Nordost, Fehlwurfbehälter Ost, Schaltschrank mit Signalsäule.
+      const { hx, r } = BELT, deck = .7, half = .27, rail = '#5b6b6e', frame = '#5f7478';
+      plinth('#6f8584');
+      for (const x of [-hx, -hx / 2, 0, hx / 2, hx]) for (const z of [-r, r]) P.box(x - .04, .12, z - .04, .08, deck - .12, .08, frame);
+      P.box(-hx, .12, -r + half, 2 * hx, deck - .08, 2 * (r - half), tint); P.box(-hx - .05, deck - .02, -r + half - .02, 2 * hx + .1, .05, 2 * (r - half) + .04, '#d3dadb');
+      for (const z of [-r, r]) { P.box(-hx, deck, z - half, 2 * hx, .06, 2 * half, rail); P.box(-hx, deck + .06, z + (z > 0 ? half : -half - .04), 2 * hx, .07, .04, tint); }
+      for (const cx of [-hx, hx]) {
+        P.cyl(cx, .12, 0, r - half - .02, deck - .1, tint, true);
+        for (let k = 0; k < 8; k++) {
+          const a = (k + .5) / 8 * Math.PI, sx = cx > 0 ? 1 : -1, x = cx + sx * Math.sin(a) * r, z = Math.cos(a) * r;
+          P.add(prims().box, _m.compose(_p.set(x, deck, z), _q.setFromAxisAngle(_up, sx > 0 ? a : -a), _s.set(Math.PI * r / 8 * 1.12, .06, 2 * half)), rail);
+          P.add(prims().box, _m.compose(_p.set(cx + sx * Math.sin(a) * (r + half + .02), deck + .06, Math.cos(a) * (r + half + .02)), _q.setFromAxisAngle(_up, sx > 0 ? a : -a), _s.set(Math.PI * (r + half) / 8 * 1.12, .07, .04)), tint);
+          P.box(x - .03, .12, z - .03, .06, deck - .12, .06, frame);
+        }
+      }
+      // Endstellen: Rutsche (schräg nach außen) und Behälter mit Paketen.
+      const chute = (x, side) => {
+        const z0 = side * (r + half + .04);
+        P.add(prims().box, _m.compose(_p.set(x, .52, z0 + side * .2), _q.setFromAxisAngle(_v.set(1, 0, 0), side * .55), _s.set(.46, .03, .44)), '#a9b8bb');
+        P.box(x - .24, .12, side > 0 ? hh - .4 : -hh + .12, .48, .28, .28, '#4f6667'); P.box(x - .16, .4, side > 0 ? hh - .34 : -hh + .18, .2, .08, .16, '#d9b37a'); P.box(x + .02, .4, side > 0 ? hh - .32 : -hh + .2, .14, .1, .12, '#e3c08a');
+      };
+      for (let i = 0; i < 6; i++) chute(-hx + i * .7, 1);
+      for (const x of [.35, 1.05, 1.75]) chute(x, -1);
+      // Einschleusung: zwei Zuführbänder mit Aufgabetisch von Norden.
+      for (const x of [-1.95, -1.15]) { P.box(x - .2, .12, -hh + .1, .4, .48, .5, '#c7cfcb'); P.box(x - .18, .6, -hh + .1, .36, .04, .55, '#2f3a3c'); P.box(x - .2, .6, -hh + .08, .04, .08, .57, tint); P.box(x + .16, .6, -hh + .08, .04, .08, .57, tint); P.box(x - .1, .64, -hh + .2, .2, .14, .2, '#d9b37a'); }
+      // Scannerportal über der Nordgeraden.
+      P.box(-.45, .12, -r - half - .12, .07, 1.2, .07, tint); P.box(-.45, .12, -.12, .07, 1.2, .07, tint); P.box(-.48, 1.3, -r - half - .14, .13, .13, r + half + .1, tint); P.box(-.47, 1.12, -r - .1, .11, .16, .2, '#2e3a3c');
+      // Fehlwurfbehälter Ost (rot), Rutsche vom Schleifenkopf.
+      P.add(prims().box, _m.compose(_p.set(hx + r + half + .02, .52, 0), _q.setFromAxisAngle(_v.set(0, 0, 1), -.5), _s.set(.3, .03, .4)), '#a9b8bb');
+      P.box(BELT_REJECT.x - .17, .12, -.27, .34, .3, .54, '#cb675d'); P.box(BELT_REJECT.x - .17, .42, -.27, .34, .03, .04, '#f2c363'); P.box(BELT_REJECT.x - .17, .42, .23, .34, .03, .04, '#f2c363');
+      // Schaltschrank mit Signalsäule (Südwest), Antriebskasten.
+      P.box(-hw + .1, .12, hh - .42, .32, .9, .3, '#d3dadb'); P.box(-hw + .14, .5, hh - .115, .24, .3, .01, '#2e3a3c');
+      P.cyl(-hw + .26, 1.02, hh - .27, .04, .2, '#5d6d70'); P.cyl(-hw + .26, 1.22, hh - .27, .07, .1, '#3cbb8e'); P.cyl(-hw + .26, 1.32, hh - .27, .07, .1, '#e4ab4b'); P.cyl(-hw + .26, 1.42, hh - .27, .07, .1, '#cb675d');
+      break;
+    }
     case 'sorter': {
       // Sortierplatz 3×2: Aufgabetisch (−x), Förderband mit Rollen, Scanner-Portal, drei Rutschen zur Ausgangsseite (+z), Schaltschrank mit Signalsäule.
       plinth();
@@ -1323,7 +1452,15 @@ export class Scene3D {
         for (const x of [-2.5, .98]) for (const z of [-.5, .38]) P.box(x, .54, z, .1, .04, .12, '#e9b94d');
         P.box(-.4, .1, -.4, .06, .34, .06, '#5d6d70'); P.box(-.4, .1, .34, .06, .34, .06, '#5d6d70');
         for (const x of [-2.05, -1.6, -1.15]) for (const z of [-.66, .52]) { const r = new THREE.Matrix4().makeRotationX(Math.PI / 2).multiply(new THREE.Matrix4().makeScale(.56, .14, .56)).setPosition(x, .28, z); P.add(prims().cyl10, r, '#2f3a3d'); }
-      }), this.mat.inst, 4)
+      }), this.mat.inst, 4),
+      // 0.15: Kühlpakete (weiße Isolierboxen mit blauem Deckelband) als Rollcontainer/Stapel, Sperrgutstück (Grundkörper 1,0 × 0,38 × 0,42,
+      // Instanzfarbe/-skalierung je Stück), Kühlaggregat + blaue Seitenbänder für Kühlauflieger, Quergurtwagen und Paket auf dem Wagen.
+      ccage: inst(mergedGeo(P => { P.box(-.22, .03, -.24, .44, .04, .48, '#7d8a8e'); for (const x of [-.22, .2]) for (const z of [-.24, .22]) P.box(x, .07, z, .02, .8, .02, '#a9b6ba'); P.box(-.22, .45, -.24, .44, .015, .48, '#a9b6ba'); P.box(-.18, .07, -.2, .36, .3, .4, '#f1f5f7'); P.box(-.18, .33, -.2, .36, .04, .4, '#4f8fcf'); P.box(-.16, .47, -.18, .32, .26, .36, '#e9f0f4'); P.box(-.16, .69, -.18, .32, .04, .36, '#4f8fcf'); P.box(-.21, .07, -.235, .42, .78, .005, '#c7d0d3'); }), this.mat.inst, 8),
+      cstack: inst(mergedGeo(P => { P.box(-.26, 0, -.26, .52, .08, .52, '#9fb2bd'); for (const [x, z] of [[-.24, -.24], [.01, -.24], [-.24, .01], [.01, .01]]) { P.box(x, .08, z, .23, .17, .23, '#f1f5f7'); P.box(x, .25, z, .23, .03, .23, '#4f8fcf'); } P.box(-.22, .28, -.22, .44, .19, .44, '#e9f0f4'); P.box(-.22, .47, -.22, .44, .03, .44, '#4f8fcf'); P.box(-.18, .5, -.18, .36, .17, .36, '#f1f5f7'); P.box(-.18, .67, -.18, .36, .03, .36, '#4f8fcf'); }), this.mat.inst, 8),
+      bulky: inst(mergedGeo(P => { P.box(-.5, 0, -.21, 1.0, .38, .42, '#ffffff'); for (const x of [-.46, -.03, .4]) P.box(x, -.005, -.215, .06, .39, .43, '#d2d2d2'); P.box(-.505, .3, -.215, 1.01, .04, .43, '#c4c4c4'); P.box(-.2, .38, -.1, .4, .008, .2, '#e8e8e8'); }), this.mat.inst, 8),
+      freefer: inst(mergedGeo(P => { P.box(1.05, 1.2, -.42, .2, .62, .84, '#e8eef2'); P.box(1.25, 1.28, -.34, .015, .46, .68, '#3c4a4d'); P.box(1.05, 1.82, -.42, .2, .04, .84, '#4f8fcf'); for (const z of [-.648, .633]) P.box(-2.45, 1.55, z, 3.45, .12, .015, '#4f8fcf'); P.box(-2.535, 1.55, -.6, .015, .12, 1.2, '#4f8fcf'); }), this.mat.inst, 4),
+      xcar: inst(mergedGeo(P => { P.box(-.16, -.06, -.25, .32, .06, .5, '#3c4a4d'); P.box(-.13, 0, -.23, .26, .03, .46, '#2f3a3c'); for (const z of [-.25, .22]) P.box(-.16, 0, z, .32, .06, .03, '#f0b84a'); for (const x of [-.12, .1]) P.box(x, .03, -.22, .02, .005, .44, '#5d6d70'); }), this.mat.inst, 28),
+      xpar: inst(mergedGeo(P => { P.box(-.1, .03, -.12, .2, .13, .24, '#ffffff'); P.box(-.02, .03, -.125, .04, .132, .25, '#d6d6d6'); }), this.mat.inst, 20)
     };
     for (const m of Object.values(this.inst)) g.add(m);
     this.selectBox = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1).translate(.5, .5, .5)), this.mat.select); this.selectBox.visible = false;
@@ -1501,9 +1638,21 @@ export class Scene3D {
     // Pakete (W1): Rollcontainer (inbound) auf den Docks, Kartonstapel (stock) am Sortierplatz-Ausgang bzw. an Regalen.
     // Qualität: Obergrenze je Art, jenseits LOD-Abstand nur jeder zweite Rollcontainer/Stapel (Andeutung der Menge bleibt).
     const loads = parcelLoads(st, s.id, buildings), lodK = q.lod.parcel, thin = (list, cap) => { const out = []; list.forEach((c, i) => { if (out.length < cap && (i % 2 === 0 || this.lodDist(c.x, c.z) <= lodK)) out.push(c); }); return out; };
-    const cages = thin(loads.cages, q.cap.parcels), stacks = thin(loads.stacks, q.cap.parcels), cage = this.ensure('cage', cages.length), stack = this.ensure('stack', stacks.length);
+    const cages = thin(loads.cages, q.cap.parcels), stacks = thin(loads.stacks, q.cap.parcels), cage = this.ensure('cage', cages.length), stack = this.ensure('stack', stacks.length + buildings.filter(b => b.type === 'crossbelt').length); // + Fehlwurfstapel je Quergurt
     cages.forEach((c, i) => this.setInst(cage, i, c.x, .56, c.z, c.rot, 1, 1, 1)); this.finish(cage, cages.length);
     stacks.forEach((c, i) => this.setInst(stack, i, c.x, .065, c.z, c.rot, 1, c.sy, 1)); this.finish(stack, stacks.length);
+    // 0.15: Kühlpakete (eigene Instanzen, gleiche Dichte und Obergrenze wie Pakete), Sperrgut im Lager (Form/Farbe je Stück).
+    const cold = coldLoads(st, s.id, buildings, loads), ccages = thin(cold.cages, q.cap.parcels), cstacks = thin(cold.stacks, q.cap.parcels), ccage = this.ensure('ccage', ccages.length), cstack = this.ensure('cstack', cstacks.length);
+    ccages.forEach((c, i) => this.setInst(ccage, i, c.x, .56, c.z, c.rot, 1, 1, 1)); this.finish(ccage, ccages.length);
+    cstacks.forEach((c, i) => this.setInst(cstack, i, c.x, .065, c.z, c.rot, 1, c.sy, 1)); this.finish(cstack, cstacks.length);
+    const bl = bulkyLoads(st, s.id, buildings), pieces = bl.pieces.slice(0, q.cap.pallets), trailerBulk = yplans.reduce((n, p) => n + (p.ware === 'bulky' ? p.bulky : 0), 0), bk = this.ensure('bulky', pieces.length + trailerBulk);
+    pieces.forEach((c, i) => this.setInst(bk, i, c.x, .065 + c.y, c.z, c.rot, c.sx, c.sy, c.sz, c.hex)); this.bulkyBase = pieces.length; this.finish(bk, pieces.length);
+    this.ensure('freefer', yplans.filter(p => p.ware === 'cold').length);
+    // Quergurtsorter: Wagenzahl je Stufe; Lage pro Frame (placeBelts), Fehlwurfbehälter zeigt Nachsortierung als kleinen Paketstapel.
+    const nCar = BELT_CARRIERS[this.qualityLevel] || BELT_CARRIERS.high, resort = resortQty(st, s.id) > 0, coldIn = cold.inbound > 0;
+    const belts = this.belts = buildings.filter(b => b.type === 'crossbelt').map(b => ({ b, running: beltRunning(b), loaded: beltLoaded(b), coldIn }));
+    this.ensure('xcar', belts.length * nCar); this.ensure('xpar', belts.length * nCar); this.beltCars = nCar; this.beltsDirty = true;
+    if (resort && belts.length) { const rp = {}; belts.forEach((x, i) => { toWorld(x.b, BELT_REJECT.x, BELT_REJECT.z, rp); this.setInst(stack, stacks.length + i, rp.x, .38, rp.z, rp.rot, .55, .45, .9); }); this.finish(stack, stacks.length + belts.length); }
     // Paletten (W2-S2): Palettenstapel im Lager (gedeckelt), Ladung der Palettenauflieger, Stapler mit Akkubalken.
     const pl = palletLoads(st, s.id, buildings), plist = pl.pallets.slice(0, q.cap.pallets * PALLET_LEVELS), ps = this.ensure('pstack', plist.length);
     plist.forEach((c, i) => this.setInst(ps, i, c.x, .065 + c.level * .47, c.z, c.rot, 1, 1, 1)); this.finish(ps, plist.length);
@@ -1598,7 +1747,7 @@ export class Scene3D {
       const lk = `${this.view}:${Math.round(c.tx / 4)},${Math.round(c.tz / 4)},${Math.round(c.dist / 4)},${Math.round(c.yaw * 2)}`; if (lk !== this.lodKey) { this.lodKey = lk; this.dynDirty = true; }
     }
     const net = this.view === 'network'; this.siteGroup.visible = !net; this.netGroup.visible = net;
-    const clock = this.displayClock(now), animated = net ? this.placeTransfers(clock) : !!(this.placeVehicles(clock) | this.placeYard(clock) | this.placeForklifts(clock));
+    const clock = this.displayClock(now), animated = net ? this.placeTransfers(clock) : !!(this.placeVehicles(clock) | this.placeYard(clock) | this.placeForklifts(clock) | this.placeBelts(clock, dt));
     if (this.camMode?.mode === 'follow') {
       const f = net ? netFollowTarget(this.trips, this.camMode.id, this.airTrips) : followTarget(this.fleet, this.yardFleet, this.camMode.id);
       if (!f) this.stopCamera('lost'); else if (Math.abs(f.x - g.tx) > 1e-3 || Math.abs(f.z - g.tz) > 1e-3) { g.tx = f.x; g.tz = f.z; this.needs = true; }
@@ -1641,6 +1790,7 @@ export class Scene3D {
   }
   placeYard(clock) {
     const tr = this.inst.ftrailer, cab = this.inst.fcab, flat = this.inst.fflat, load = this.inst.tload, chs = this.inst.cchassis, cont = this.inst.cont, mark = this.inst.cmark;
+    const bk = this.inst.bulky, reefer = this.inst.freefer; let nb = this.bulkyBase || 0, nr = 0;
     let n = 0, nt = 0, nf = 0, nl = 0, nch = 0, nc = this.contBase || 0, nm = this.markBase || 0, animated = false; const lodV = this.q.lod.vehicle;
     const onChassis = (p, rot, hex, demurrage) => {
       this.setInst(chs, nch++, p.x, 0, p.z, rot, 1, 1, 1, '#ffffff'); if (!hex) return;
@@ -1655,6 +1805,13 @@ export class Scene3D {
         // Palettenauflieger: Ladung von vorn (Stirnwand) nach hinten, hintere Plätze leeren sich beim Entladen zuerst.
         this.setInst(flat, nf++, p.x, 0, p.z, rot, 1, 1, 1, '#e3e6ea'); const c = Math.cos(p.heading), sn = Math.sin(p.heading);
         if (!far) for (let i = 0; i < p.pallets; i++) { const lx = .4 - Math.floor(i / 2) * .85, lz = i % 2 ? .3 : -.3; this.setInst(load, nl++, p.x + lx * c - lz * sn, .62, p.z + lx * sn + lz * c, rot, .75, .9, .75); }
+      } else if (p.ware === 'bulky') {
+        // 0.15 Sperrgut: Pritsche mit langen Kisten (Form/Farbe je Platz), hintere Plätze leeren sich zuerst.
+        this.setInst(flat, nf++, p.x, 0, p.z, rot, 1, 1, 1, '#d9cdb8'); const c = Math.cos(p.heading), sn = Math.sin(p.heading);
+        if (!far) for (let i = 0; i < p.bulky; i++) { const sh = bulkyShape(i), lx = .35 - Math.floor(i / 2) * 1.12, lz = i % 2 ? .3 : -.3; this.setInst(bk, nb++, p.x + lx * c - lz * sn, .62, p.z + lx * sn + lz * c, rot + sh.tilt * .5, sh.s[0], Math.min(1.2, sh.s[1]), Math.min(1.05, sh.s[2]), sh.hex); }
+      } else if (p.ware === 'cold') {
+        // 0.15 Kühlpaket: Kühlauflieger (hellblau-weiß) mit Kühlaggregat an der Stirnwand und blauen Seitenbändern.
+        this.setInst(tr, nt++, p.x, 0, p.z, rot, 1, 1, 1, '#e4f0f8'); this.setInst(reefer, nr++, p.x, 0, p.z, rot, 1, 1, 1);
       } else this.setInst(tr, nt++, p.x, 0, p.z, rot, 1, 1, 1, '#e3e6ea');
       const r = FOREIGN_LEN / 2, hb = p.hit.box; hb.x0 = p.x - r; hb.x1 = p.x + r; hb.z0 = p.z - r; hb.z1 = p.z + r;
     }
@@ -1665,7 +1822,7 @@ export class Scene3D {
       if (p.chip) { p.chip.x = p.x + CHASSIS_LX * Math.cos(p.heading); p.chip.z = p.z + CHASSIS_LX * Math.sin(p.heading); }
       const r = FOREIGN_LEN / 2, hb = p.hit.box; hb.x0 = p.x - r; hb.x1 = p.x + r; hb.z0 = p.z - r; hb.z1 = p.z + r;
     }
-    this.finish(tr, nt); this.finish(cab, n); this.finish(flat, nf); this.finish(load, nl); this.finish(chs, nch); this.finish(cont, nc); this.finish(mark, nm); return animated;
+    this.finish(tr, nt); this.finish(cab, n); this.finish(flat, nf); this.finish(load, nl); this.finish(chs, nch); this.finish(cont, nc); this.finish(mark, nm); this.finish(bk, nb); this.finish(reefer, nr); return animated;
   }
   /** Stapler: Pose aus der Anzeigeuhr (rein optisch), mitgeführte Palette, Label folgt dem Fahrzeug. */
   placeForklifts(clock) {
@@ -1678,6 +1835,27 @@ export class Scene3D {
       const hb = f.hit.box; hb.x0 = f.x - .45; hb.x1 = f.x + .45; hb.z0 = f.z - .45; hb.z1 = f.z + .45;
     }
     this.finish(m, n); this.finish(load, nl); return animated;
+  }
+  /**
+   * Quergurtsorter: Wagen gleichmäßig auf der Schleife; im Betrieb rückt die Schleife mit der Anzeigeuhr vor (beltAdvance, gedeckelt),
+   * sonst steht sie. Pakete auf belegten Wagen (beltLoaded), jenseits des Paket-LOD-Abstands ausgeblendet. Rein optisch.
+   */
+  placeBelts(clock, dt) {
+    const belts = this.belts || [], dClock = this.beltClock == null ? 0 : clock - this.beltClock; this.beltClock = clock;
+    let moved = false; const phase = this.beltPhase ||= new Map();
+    for (const x of belts) if (x.running) { const p0 = phase.get(x.b.id) || 0, p1 = beltAdvance(p0, dClock, dt); if (p1 !== p0) { phase.set(x.b.id, p1); moved = true; } }
+    if (!moved && !this.beltsDirty) return false;
+    this.beltsDirty = false;
+    const car = this.inst.xcar, par = this.inst.xpar, n = this.beltCars || BELT_CARRIERS.high, pt = this.tmp.belt ||= {}, w = this.tmp.beltW ||= {}, lodK = this.q.lod.parcel; let nc = 0, np = 0;
+    for (const x of belts) {
+      const b = x.b, ph = phase.get(b.id) || 0; toWorld(b, 0, 0, w); const show = x.loaded && this.lodDist(w.x, w.z) <= lodK;
+      for (let i = 0; i < n; i++) {
+        beltPoint(i / n + ph, pt); toWorld(b, pt.x, pt.z, w); const rot = w.rot - pt.heading;
+        this.setInst(car, nc++, w.x, .06 + BELT.y, w.z, rot, 1, 1, 1);
+        if (show && beltCarrierFull(i)) this.setInst(par, np++, w.x, .06 + BELT.y, w.z, rot, 1, 1, 1, x.coldIn && i % 4 === 1 ? '#e6f1f8' : ['#d9b37a', '#e3c08a', '#c9a26a'][i % 3]);
+      }
+    }
+    this.finish(car, nc); this.finish(par, np); return moved;
   }
   placeTransfers(clock) {
     const m = this.inst.marker, st = this.state; let n = 0, animated = false;
