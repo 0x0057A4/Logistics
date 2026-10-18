@@ -5,6 +5,7 @@
 import {workRate,UNLOAD_BASE,GATE_ROLE} from './workforce.js';
 import {BUILDINGS,ITEMS} from './catalog.js';
 import {coolingCapacity,coolingFree} from './special.js';
+import {arrivalDelay,gateDown,gridEnergy,WEATHER_NAME,weatherAt} from './disruptions.js';
 // W3b-S2: Containerchassis (a.kind==='container') nutzen approach→gate→queue→toYard→drop→exit→gone (Logik containers.js).
 export const PHASES=['approach','gate','queue','toDock','docking','unloading','exit','gone'];
 export const CONTAINER_PHASES=['approach','gate','queue','toYard','drop','exit','gone'];
@@ -17,6 +18,8 @@ export const WAIT={gate:'Keine Torkontrolle',dock:'Kein freies Dock',staff:'Kein
 WAIT.forklift='Kein Stapler';WAIT.forkliftCharge='Stapler lädt';WAIT.forkliftPower='Kein Strom für Stapler';
 // W3b-S2 Containerhof (A07/A05).
 WAIT.yardFull='Containerhof voll';WAIT.noYard='Kein Containerhof';
+// 0.16 S1 (A03/A07): Torstörung (disruptions.gateDown) – Lkw wartet im Tor, keine Kraft gebunden, Kontrolle läuft danach weiter.
+WAIT.gateDown='Torstörung';
 /** Haken für containers.js (registriert beim Laden des Moduls; kein Importzyklus). schedule: Container-Ankunft anlegen;
  * step: Container-Chassis (queue/toYard/drop) und Containerumschlag – läuft in yard.step vor tickForklifts, damit
  * Staplernutzung in denselben Akkutakt fällt; holder(id): Staplerbindung eines Containers aktiv. */
@@ -100,7 +103,7 @@ export function useForklift(s,b){let x=forkUse.get(s);if(!x||x.t!==s.t){x={t:s.t
 const usedNow=(s,b)=>{const x=forkUse.get(s);return !!x&&x.t===s.t&&x.ids.has(b.id);};
 /** Strombilanz der Grundlast am Standort ≥ 0 (gleiche Rechnung wie production.js). */
 export function sitePowered(s,site){
- const st=s.sites.find(x=>x.id===site);if(!st)return false;let bal=st.energy;
+ const st=s.sites.find(x=>x.id===site);if(!st)return false;let bal=gridEnergy(s,site); // 0.16 S1: Netzstörung → nur Energiegebäude
  for(const b of s.buildings){if(b.site!==site||!b.enabled)continue;const d=BUILDINGS[b.type];if(!d)continue;if(b.type==='power')bal+=d.energy||0;if(!d.recipes?.length)bal-=d.power||0;}
  return bal>=0;
 }
@@ -161,6 +164,8 @@ export function apportion(total,weights){
 export function makePlate(api){return `${pick(api,PLATE)}-${pick(api,LETTERS.split(''))}${pick(api,LETTERS.split(''))} ${100+Math.floor(api.random()*9900)%9900}`;}
 /** Legt eine Ankunft an. Aufruf durch contracts.js zur Fälligkeit. */
 export function schedule(s,api,payload={}){
+ // 0.16 S1: Wetterverspätung fremder Lkw – Ankunft (eta) beim Anlegen verschoben; Auftragsfristen bleiben am Plan.
+ {const delay=Number.isInteger(payload.eta)?arrivalDelay(s,payload.site,payload.contractId):0;if(delay>0){api.log('disruption',`${WEATHER_NAME[weatherAt(s,payload.site)]}: Lkw-Ankunft ${delay} Min. später (Minute ${payload.eta+delay}).`,[payload.contractId,payload.site].filter(Boolean));payload={...payload,eta:payload.eta+delay,delay};}}
  const {contractId,site,parcels,eta,orderIds=[],laneShare}=payload;
  if(containerHooks.schedule&&(payload.kind==='container'||payload.unit==='container'||(s.contracts||[]).find(c=>c.id===contractId)?.unit==='container'))return containerHooks.schedule(s,api,payload);
  if(!s.sites.some(x=>x.id===site)||!Number.isInteger(parcels)||parcels<1||!Number.isInteger(eta))return null;
@@ -180,7 +185,7 @@ export function schedule(s,api,payload={}){
  const a={id:api.id('arrival'),site,contractId:contractId??null,orderIds:ids,carrier,plate,parcels,
   phase:'approach',phaseStart:eta-DURATION.approach,phaseEnd:eta,eta,dock:null,waitReason:null,waitSince:null,
   unloaded:0,atRisk:false,forecast:null,gateAt:null,priority:false,
-  split:owners.map((owner,i)=>({owner,target:targets[i],done:0})),...(item?{item}:{})};
+  split:owners.map((owner,i)=>({owner,target:targets[i],done:0})),...(item?{item}:{}),...(payload.delay?{delay:payload.delay}:{})};
  s.yard.push(a);api.log('yard',`${carrier} (${plate}) angekündigt: ${parcels} ${pallet?'Paletten':item?word(a,2):'Pakete'}, Ankunft Minute ${eta}.`,[a.id]);
  updateRisk(s,a);
  return a;
@@ -230,7 +235,7 @@ function due(s,a){
  const ds=a.orderIds.map(id=>s.orders.find(o=>o.id===id)?.due).filter(Number.isFinite);
  if(ds.length)return Math.min(...ds);
  const c=(s.contracts||[]).find(c=>c.id===a.contractId);
- return Number.isFinite(c?.slaMinutes)?a.eta+c.slaMinutes:null;
+ return Number.isFinite(c?.slaMinutes)?a.eta-(a.delay||0)+c.slaMinutes:null; // Frist ab geplanter Ankunft (0.16 S1)
 }
 // Einfache Prognose: Restzeit im Hof + Warteschlange + Entladen + Sortieren.
 function updateRisk(s,a){
@@ -286,6 +291,7 @@ function stepYard(s,api){
  for(const a of s.yard){
   if(a.phase==='approach'&&t>=a.phaseEnd){setPhase(a,'gate',t);a.gateAt=t;a.gateDone=0;}
   else if(a.phase==='gate'){
+   if(gateDown(s,a.site)){api.workforce.release(gateKey(a));wait(a,WAIT.gateDown,t);a.phaseEnd=t+DURATION.gate-(a.gateDone||0);continue;}
    const worker=api.workforce.acquire(GATE_ROLE,a.site,gateKey(a));
    if(!worker){wait(a,WAIT.gate,t);a.phaseEnd=t+DURATION.gate-(a.gateDone||0);}
    else{
@@ -359,6 +365,7 @@ export function validate(s){
   if(typeof a.carrier!=='string'||typeof a.plate!=='string')fail('Spediteur');
   if(!int(a.parcels,1)||!int(a.unloaded)||a.unloaded>a.parcels)fail('Paketmenge');
   if(!int(a.eta)||!int(a.phaseStart))fail('Zeitpunkt');
+  if(a.delay!==undefined&&!int(a.delay,1))fail('Verspätung');
   if(a.phaseEnd!==null&&(!int(a.phaseEnd)||a.phaseEnd<a.phaseStart))fail('Phasenende');
   if(['queue','unloading','gone'].includes(a.phase)!==(a.phaseEnd===null))fail('Phasenende');
   if(a.waitReason!==null&&typeof a.waitReason!=='string')fail('Wartegrund');

@@ -1,4 +1,5 @@
 import {committedQty} from './tours.js';
+import {travelMinutes} from './disruptions.js'; // 0.16 S1: Fahrtdauer beim Start inkl. Wetter/Stau
 import {VEHICLES,ITEMS} from './catalog.js';
 import {acquireForklift,releaseForklift,useForklift,forkliftKey,forkItem} from './yard.js';
 import {deliverySiteOf} from './contracts.js';
@@ -97,7 +98,7 @@ export function step(s,api){
    const cost=Math.round(sh.distance*2*VEHICLES[v.type].runningCost*100)/100;
    if(s.money<cost){sh.remaining=1;sh.blocked='Betriebskosten können nicht bezahlt werden';/* QS-W2-01: Stapler/Kraft beim Warten freigeben */if(pallet)releaseForklift(s,forkliftKey(sh.id));api.workforce.release(`${sh.id}:warehouse`);sh.worker=null;continue;}
    const cargo=api.inventory.transfer(sh.id,'vehicle',sh.site);if(!cargo){sh.remaining=1;sh.blocked='Ladung nicht verfügbar';/* QS-W2-01: Stapler/Kraft beim Warten freigeben */if(pallet)releaseForklift(s,forkliftKey(sh.id));api.workforce.release(`${sh.id}:warehouse`);sh.worker=null;continue;}
-   delete sh.loadDone;sh.cargo=cargo.map(b=>b.id);sh.materialCost=o.kind==='logistics'||o.kind==='vas'?0:Math.round(cargo.reduce((n,b)=>n+b.qty*b.unitCost,0)*100)/100;sh.transportCost=cost;sh.tripCost=cost;const dock=s.buildings.find(b=>b.task===sh.id);if(dock){const k=dock.task;for(const b of s.buildings)if(b.task===k)b.task=null;};api.book(`trip:${sh.id}`,-cost,'Transport',`Tour ${sh.id}`,[sh.id,v.id,o.id]);api.workforce.release(`${sh.id}:warehouse`);if(pallet)releaseForklift(s,forkliftKey(sh.id));sh.worker=null;sh.status='transit';v.status='transit';sh.remaining=Math.ceil(sh.distance/VEHICLES[v.type].speed);sh.departedAt=s.t;
+   delete sh.loadDone;sh.cargo=cargo.map(b=>b.id);sh.materialCost=o.kind==='logistics'||o.kind==='vas'?0:Math.round(cargo.reduce((n,b)=>n+b.qty*b.unitCost,0)*100)/100;sh.transportCost=cost;sh.tripCost=cost;const dock=s.buildings.find(b=>b.task===sh.id);if(dock){const k=dock.task;for(const b of s.buildings)if(b.task===k)b.task=null;};api.book(`trip:${sh.id}`,-cost,'Transport',`Tour ${sh.id}`,[sh.id,v.id,o.id]);api.workforce.release(`${sh.id}:warehouse`);if(pallet)releaseForklift(s,forkliftKey(sh.id));sh.worker=null;sh.status='transit';v.status='transit';sh.remaining=travelMinutes(s,sh.site,Math.ceil(sh.distance/VEHICLES[v.type].speed),{lane:o.lane,contract:o.contractId});sh.departedAt=s.t;
   }else{
    sh.blocked=null;if(--sh.remaining>0)continue;
    if(sh.status==='transit'){sh.status='unloading';v.status='unloading';sh.remaining=2+Math.ceil(sh.qty/10);}
@@ -106,7 +107,7 @@ export function step(s,api){
     // Every unit is removed from its physical vehicle batch exactly once.
     for(const bid of sh.cargo){const b=s.batches.find(x=>x.id===bid);if(b)api.inventory.remove(b.id,b.qty);}
     o.delivered+=sh.qty;s.stats.delivered+=sh.qty;sh.deliveredAt=s.t;sh.invoiceAmount=Math.round(sh.qty*o.price*(s.t>o.due?0.9:1)*100)/100;sh.paymentAt=s.t+60;
-    if(o.delivered>=o.qty){o.status='fulfilled';s.reputation=Math.min(100,s.reputation+3);}sh.status='returning';v.status='returning';sh.remaining=Math.ceil(sh.distance/VEHICLES[v.type].speed);api.log('delivery',`${o.customer}: ${sh.qty} Stück zugestellt. Zahlung in 60 Minuten.`,[sh.id,o.id]);
+    if(o.delivered>=o.qty){o.status='fulfilled';s.reputation=Math.min(100,s.reputation+3);}sh.status='returning';v.status='returning';sh.remaining=travelMinutes(s,sh.site,Math.ceil(sh.distance/VEHICLES[v.type].speed),{lane:o.lane,contract:o.contractId});api.log('delivery',`${o.customer}: ${sh.qty} Stück zugestellt. Zahlung in 60 Minuten.`,[sh.id,o.id]);
    }else if(sh.status==='returning'){sh.status='complete';sh.completedAt=s.t;v.status='idle';v.shipment=null;v.condition=Math.max(0,v.condition-2);api.workforce.release(`${sh.id}:driver`);sh.driver=null;}
   }
  }
@@ -150,10 +151,10 @@ function stepTransfers(s,api){
     const cost=Math.round(tr.distance*2*VEHICLES[v.type].runningCost*100)/100;
     if(s.money<cost){tr.blocked='Transferkosten nicht gedeckt';tr.remaining=1;continue;}
     const cargo=api.inventory.transfer(tr.id,'vehicle',tr.site);if(!cargo){tr.blocked='Reservierte Transferladung fehlt';tr.remaining=1;continue;}
-    tr.cargo=cargo.map(b=>b.id);tr.transportCost=cost;api.book(`transfer-trip:${tr.id}`,-cost,'Transport','Standorttransfer',[tr.id,v.id]);tr.status='transit';tr.remaining=Math.ceil(tr.distance/VEHICLES[v.type].speed);tr.duration=tr.remaining;
+    tr.cargo=cargo.map(b=>b.id);tr.transportCost=cost;api.book(`transfer-trip:${tr.id}`,-cost,'Transport','Standorttransfer',[tr.id,v.id]);tr.status='transit';tr.remaining=travelMinutes(s,tr.site,Math.ceil(tr.distance/VEHICLES[v.type].speed));tr.duration=tr.remaining;
    }else{
     if(!api.inventory.relocate(tr.cargo,'stock',tr.toSite)){tr.blocked='Zielkapazität fehlt; Ware bleibt im Fahrzeug';tr.remaining=1;continue;}
-    tr.deliveredAt=s.t;tr.status='returning';tr.remaining=Math.ceil(tr.distance/VEHICLES[v.type].speed);tr.duration=tr.remaining;api.log('transfer',`${tr.qty} × ${ITEMS[tr.item].name} am Zielstandort eingelagert.`,[tr.id,tr.toSite]);
+    tr.deliveredAt=s.t;tr.status='returning';tr.remaining=travelMinutes(s,tr.toSite,Math.ceil(tr.distance/VEHICLES[v.type].speed));tr.duration=tr.remaining;api.log('transfer',`${tr.qty} × ${ITEMS[tr.item].name} am Zielstandort eingelagert.`,[tr.id,tr.toSite]);
    }
    {const k=dock.task;for(const b of s.buildings)if(b.task===k)b.task=null;};api.workforce.release(`${tr.id}:warehouse`);tr.worker=null;
   }else{

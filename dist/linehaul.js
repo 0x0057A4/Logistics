@@ -20,6 +20,7 @@ import {ITEMS,VEHICLES} from './catalog.js';
 import {UNLOAD_BASE} from './workforce.js';
 import {acquireForklift,releaseForklift,useForklift,forkliftKey,PALLET,PALLET_BASE,BULKY,BULKY_BASE,forkItem,coldWait} from './yard.js';
 import {coolingCapacity,coolingFree} from './special.js';
+import {travelMinutes} from './disruptions.js'; // 0.16 S1: Fahrtdauer beim Start inkl. Wetter/Stau
 // 0.15 S2: lh.pallet = Staplerumschlag (Palette oder Sperrgut, yard.forkItem); Sperrgut wie Paletten direkt nach stock.
 // Kühlpakete nur im Kühlfahrzeug (room) und nur zu Zielen mit Kühllager; Entladen am Ziel nur in freie Kühlplätze.
 import {deliverySiteOf,siteDistance} from './contracts.js';
@@ -162,7 +163,7 @@ function stepTrip(s,api,lh){
   const cargo=api.inventory.transfer(lh.id,'vehicle',lh.from);if(!cargo){lh.blocked=WAIT.cargo;return;}
   lh.cargo=cargo.map(b=>b.id);api.book(`linehaul:${lh.id}`,-lh.cost,'Transport','Linienfahrt',[lh.id,lh.lineId,v.id]);
   for(const b of s.buildings)if(b.task===lh.id)b.task=null;lh.dock=null;delete lh.loadDone;lh.blocked=null;
-  lh.status='transit';lh.remaining=lh.duration=Math.ceil(lh.distance/speed);lh.departedAt=s.t;
+  lh.status='transit';lh.remaining=lh.duration=travelMinutes(s,lh.from,Math.ceil(lh.distance/speed),{line:lh.lineId});lh.departedAt=s.t;
   api.log('linehaul',`Linien-Lkw abgefahren: ${lh.qty} Einheiten${s.t>lh.departAt?`, ${s.t-lh.departAt} Min. verspätet`:''}.`,[lh.id,lh.lineId,v.id]);
   return;
  }
@@ -180,7 +181,7 @@ function stepTrip(s,api,lh){
   if(parcels.length&&!api.inventory.relocate(parcels,'inbound',lh.to)){lh.blocked=WAIT.full;endHandling(s,api,lh);return;/* QS-W3-01 */}
   if(pallets.length&&!api.inventory.relocate(pallets,'stock',lh.to)){lh.blocked=WAIT.full;endHandling(s,api,lh);return;/* QS-W3-01 */}
   endHandling(s,api,lh);for(const b of s.buildings)if(b.task===lh.id)b.task=null;lh.dock=null;lh.blocked=null;
-  lh.arrivedAt=s.t;lh.status='returning';lh.remaining=lh.duration=Math.ceil(lh.distance/speed);
+  lh.arrivedAt=s.t;lh.status='returning';lh.remaining=lh.duration=travelMinutes(s,lh.to,Math.ceil(lh.distance/speed),{line:lh.lineId});
   api.log('linehaul',`Linien-Lkw am Ziel entladen: ${lh.qty} Einheiten im Wareneingang.`,[lh.id,lh.lineId,lh.to]);
   return;
  }

@@ -22,6 +22,7 @@
 // Modul importiert bewusst weder contracts.js noch linehaul.js (contracts.js importiert AIRPORT/nextFlight von hier).
 import {ITEMS,VEHICLES} from './catalog.js';
 import {UNLOAD_BASE} from './workforce.js';
+import {travelMinutes} from './disruptions.js'; // 0.16 S1: Fahrtdauer beim Start inkl. Wetter/Stau
 
 /** Fester Zielknoten (fiktiv, kein kaufbarer Standort). Koordinaten im Standortnetz (km wie sites[].x/y). */
 export const AIRPORT=Object.freeze({id:'airport',name:'Frachtterminal Flughafen Heidmoor',short:'Heidmoor',x:30,y:-38});
@@ -167,7 +168,7 @@ function stepShuttle(s,api,sh){
   if(!cargo){api.workforce.release(key(sh,'driver'));sh.driver=null;sh.blocked=WAIT.cargo;return;}
   sh.driver=driver.id;driver.activity='Fährt Flughafen-Zubringer';
   sh.cargo=cargo.map(b=>b.id);api.book(`air-trip:${sh.id}`,-sh.cost,'Transport','Flughafen-Zubringer',[sh.id,v.id]);
-  delete sh.loadDone;sh.blocked=null;sh.status='transit';sh.remaining=sh.duration=Math.ceil(sh.distance/speed);sh.departedAt=s.t;
+  delete sh.loadDone;sh.blocked=null;sh.status='transit';sh.remaining=sh.duration=travelMinutes(s,sh.site,Math.ceil(sh.distance/speed));sh.departedAt=s.t;
   api.log('airexport',`Flughafen-Zubringer abgefahren: ${sh.qty} Pakete, Ankunft Terminal ca. ${clock(s.t+sh.remaining)}.`,[sh.id,v.id]);
   return;
  }
@@ -194,7 +195,7 @@ function stepShuttle(s,api,sh){
   if(late){const fee=cents(late*AIR.storagePerParcel);sh.storageFee=fee;api.book(`air-storage:${sh.id}`,-fee,'Lagergeld',`Terminal ${AIRPORT.short}: ${late} Pakete warten auf nächsten Flug`,[sh.id]);}
   const next=sh.orders.filter(x=>x.late).map(x=>x.nextFlightT).sort((a,b)=>a-b)[0];
   api.log(late?'warning':'payment',`Frachtterminal ${AIRPORT.short}: ${sh.qty} Pakete übergeben, Zahlung ${sh.invoiceAmount.toFixed(2)} €.${late?` ${late} Pakete nach Annahmeschluss: Weiterflug ${clock(next)}, Lagergeld ${sh.storageFee.toFixed(2)} €.`:''}`,[sh.id,...sh.orders.map(x=>x.orderId)]);
-  sh.cargo=[];sh.status='returning';sh.remaining=sh.duration=Math.ceil(sh.distance/speed);
+  sh.cargo=[];sh.status='returning';sh.remaining=sh.duration=travelMinutes(s,sh.site,Math.ceil(sh.distance/speed));
   return;
  }
  if(sh.status==='returning'){

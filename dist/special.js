@@ -1,5 +1,6 @@
 import {ITEMS,BUILDINGS,VEHICLES} from './catalog.js';
 import {activeBatches,findBatch,siteItemBatches} from './inventory.js';
+import {gridDown} from './disruptions.js';
 const COLD_ITEMS=Object.keys(ITEMS).filter(k=>ITEMS[k].cold);
 const COLD_STORED=new Set(['stock','inbound','quarantine']);
 export function init(){}
@@ -7,7 +8,7 @@ export function init(){}
 export function coolingCapacity(s,siteId){
  const site=s.sites.find(x=>x.id===siteId);if(!site)return 0;
  const enabled=s.buildings.filter(b=>b.site===siteId&&b.enabled&&b.condition>0);
- const supply=site.energy+enabled.reduce((n,b)=>n+(BUILDINGS[b.type]?.energy||0),0);
+ const supply=(gridDown(s,siteId)?0:site.energy)+enabled.reduce((n,b)=>n+(BUILDINGS[b.type]?.energy||0),0);
  const demand=enabled.reduce((n,b)=>n+(BUILDINGS[b.type]?.power||0),0);
  if(supply<demand)return 0;
  return enabled.filter(b=>b.type==='coldstore').reduce((n,b)=>n+(BUILDINGS[b.type].capacity||0),0);
