@@ -148,7 +148,8 @@ test('Mehrwertdienste: Auftragsliste kennzeichnet Lohnfertigung, Kundenmaterial-
  for(const role of ['production','warehouse']){const id=ok(sim,{type:'hire',role}).id;ok(sim,{type:'setShift',id,shift:'all'});}
  let o=null;for(let i=0;i<3000&&!o;i++){o=sim.state.orders.find(o=>o.kind==='vas'&&o.status==='offer');if(!o)sim.step(1);}
  assert.ok(o,'Mehrwertdienst-Angebot');
- const ui=await load(sim);ui.run("openPanel('orders')");let h=body(ui);
+ // 0.17: Auftragstabelle, Details (bisherige Karte) in der aufklappbaren Zeile.
+ const ui=await load(sim);ui.run(`ordersUi.expanded.add('${o.id}')`);ui.run("openPanel('orders')");let h=body(ui);
  const card=h.slice(h.indexOf(`${o.id} · `)-400,h.indexOf(`${o.id} · `)+4000);
  for(const t of ['Mehrwertdienst · Lohnfertigung','badge vas','Vergütung / Stück','Vergütung gesamt','Kundenmaterial','liefert Kunde nach Annahme','nach Annahme'])assert.ok(card.includes(t),'Angebot: '+t);
  assert.ok(card.includes(euroDe(o.qty*o.price)),'Vergütung gesamt = Menge × Preis');

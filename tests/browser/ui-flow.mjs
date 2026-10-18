@@ -26,6 +26,8 @@ try{
  await page.waitForFunction(()=>/Abgefertigt/.test(document.querySelector('#panelBody')?.textContent||''),null,{timeout:240000}).catch(()=>{});
  await page.waitForTimeout(8000);await page.click('[data-speed="0"]');
  await openP('orders','Auftr');
+ // 0.17: Versandformular liegt in der aufklappbaren Auftragszeile (Auftragstabelle).
+ { const t=page.locator('#panelBody [data-action="orderToggle"]',{hasText:'Liefern'}).first();if(await t.count()){await t.click();await page.waitForTimeout(400);} }
  const forms=page.locator('#panelBody form');const n=await forms.count();ok('Versandformular vorhanden',n>0,'Formulare '+n);
  if(n){const f=forms.first();const qty=await f.locator('input[type=number]').first().inputValue().catch(()=>'?');ok('Menge vorgeschlagen',+qty>20,'Menge '+qty);await f.locator('button').last().click();await page.waitForTimeout(500);}
  const cash=async()=>Number((await txt('#cash')).replace(/[^\d,]/g,'').replace(',','.'));const before=await cash();

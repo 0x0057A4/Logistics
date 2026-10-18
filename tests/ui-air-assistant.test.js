@@ -117,7 +117,7 @@ test('Glocke: Annahmeschluss < 60 Min. mit Luftpaketen ohne Zubringer, verpasste
  assert.equal(alerts(ui).some(x=>x.key.startsWith('acut:')),false,'umgebucht: nächster Annahmeschluss weit weg');
  const html=body(ui);assert.match(html,/Strafe verpasster Flug<\/span><b><span class="money-minus">-90 €<\/span> · 1 Buchung/);assert.match(html,/1× verpasst/);
  press(ui,{panel:'contracts'});assert.ok(body(ui).slice(body(ui).indexOf(`data-contract="${k.id}"`)).includes('Verpasste Flüge</span><b><span class="money-minus">-90 €</span> · 1 Buchung'));
- press(ui,{panel:'orders'});assert.match(body(ui),/<b>Luftexport:<\/b> Zustellung per Flughafen-Zubringer/);assert.ok(body(ui).includes('data-action="panel-air"'));
+ ui.run(`ordersUi.expanded.add('${o1}')`);press(ui,{panel:'orders'});assert.match(body(ui),/<b>Luftexport:<\/b> Zustellung per Flughafen-Zubringer/);assert.ok(body(ui).includes('data-action="panel-air"'));
  step(ui,AIR_RECENT_TEST);assert.equal(alerts(ui).some(x=>x.key.startsWith('amiss:')),false,'Meldung verpasster Flug läuft nach 3 Std. aus');
  ui.run('guard.dispose()');
 });
