@@ -3,14 +3,28 @@ import {activeBatches,findBatch,siteItemBatches} from './inventory.js';
 const COLD_ITEMS=Object.keys(ITEMS).filter(k=>ITEMS[k].cold);
 const COLD_STORED=new Set(['stock','inbound','quarantine']);
 export function init(){}
+// Netzstrom eines Standorts (Anschlussleistung). Einhängepunkt S1 (A03/A07): bei Netzstörung hier 0 liefern,
+// z. B. `return gridDown(s,site.id)?0:site.energy;` – Energiegebäude speisen weiter.
+function gridEnergy(s,site){return site.energy;}
+/** QS-015-01 (A04/A05): Lastverteilung eines Standorts mit Vorrang. Angebot = Netz + eingeschaltete Energiegebäude.
+ *  Ohne Engpass (Angebot ≥ Summe aller eingeschalteten Verbraucher) laufen alle, bitgleich zum bisherigen Verhalten.
+ *  Bei Engpass werden zuerst Kühllager in Gebäudereihenfolge versorgt, danach die übrigen Verbraucher; eine Anlage,
+ *  die mangels Strom steht (Status „power“), nimmt der Kühlung daher keine Leistung weg. Rein lesend.
+ *  Rückgabe {supply, demand, cooling:[versorgte Kühllager], shortage}. */
+export function powerBalance(s,siteId){
+ const site=s.sites.find(x=>x.id===siteId);if(!site)return {supply:0,demand:0,cooling:[],shortage:false};
+ const enabled=s.buildings.filter(b=>b.site===siteId&&b.enabled&&b.condition>0);
+ const supply=gridEnergy(s,site)+enabled.reduce((n,b)=>n+(BUILDINGS[b.type]?.energy||0),0);
+ const demand=enabled.reduce((n,b)=>n+(BUILDINGS[b.type]?.power||0),0);
+ const stores=enabled.filter(b=>b.type==='coldstore');
+ if(supply>=demand)return {supply,demand,cooling:stores,shortage:false};
+ const cooling=[];let left=supply;
+ for(const b of stores){const p=BUILDINGS[b.type].power||0;if(left>=p){left-=p;cooling.push(b);}}
+ return {supply,demand,cooling,shortage:true};
+}
 // Ganze Chargen werden FIFO auf reale Kühlplätze verteilt. Kein virtueller Überlauf.
 export function coolingCapacity(s,siteId){
- const site=s.sites.find(x=>x.id===siteId);if(!site)return 0;
- const enabled=s.buildings.filter(b=>b.site===siteId&&b.enabled&&b.condition>0);
- const supply=site.energy+enabled.reduce((n,b)=>n+(BUILDINGS[b.type]?.energy||0),0);
- const demand=enabled.reduce((n,b)=>n+(BUILDINGS[b.type]?.power||0),0);
- if(supply<demand)return 0;
- return enabled.filter(b=>b.type==='coldstore').reduce((n,b)=>n+(BUILDINGS[b.type].capacity||0),0);
+ return powerBalance(s,siteId).cooling.reduce((n,b)=>n+(BUILDINGS[b.type].capacity||0),0);
 }
 /** 0.15 S2: Belegte Kühlplätze eines Standorts (Menge aller Kühlartikel in stock/inbound/quarantine). Nur lesend. */
 export function coolingUsed(s,siteId){

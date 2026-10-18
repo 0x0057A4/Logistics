@@ -362,7 +362,7 @@ test('Quergurt: Sperrgut nie über den Quergurt; Kühlpaket-Fehlwurf behält Tem
  assert.ok(near(total(s,o),1500,1e-9));
 });
 
-test('BEFUND QS-015-01: Quergurt im Status „power“ zählt weiter als Last → Kühllager fällt bei Ausfall der Energieversorgung ganz aus', {todo:'A04/A05: Lastberechnung special.coolingCapacity vs. sorting-Vorrangregel'}, ()=>{
+test('QS-015-01 behoben: Quergurt im Status „power“ nimmt der Kühlung keine Leistung weg – Kühllager bleiben bei Ausfall der Energieversorgung versorgt', ()=>{
  const sim=megaBase(),s=sim.state;
  const pw=cmd(sim,{type:'build',buildingType:'power',x:16,y:2,rotation:0}).id;
  cmd(sim,{type:'build',buildingType:'coldstore',x:8,y:6,rotation:0});cmd(sim,{type:'build',buildingType:'coldstore',x:12,y:6,rotation:0});
@@ -370,7 +370,7 @@ test('BEFUND QS-015-01: Quergurt im Status „power“ zählt weiter als Last �
  cmd(sim,{type:'toggleBuilding',id:pw});sim.step(2);
  // Quergurt läuft wegen Strommangels nicht (Grundlast hat Vorrang) …
  assert.equal(beltOf(s).status,'power');
- // … trotzdem verliert der Standort die gesamte Kühlung, obwohl die Grundlast (1+4+16 = 21 kW) gedeckt wäre.
+ // … und die Kühlung bleibt versorgt (Vorrang Kühlung, Grundlast 1+4+16 = 21 kW ≤ 30 kW).
  assert.equal(coolingCapacity(s,SITE),200,`Kühlkapazität ${coolingCapacity(s,SITE)} statt 200`);
 });
 
@@ -441,7 +441,7 @@ test('Mehrwertdienst: eigene Fertigung nutzt nie Kundenmaterial; Pflicht Persona
  jobsClean(s,'Ende');validateState(s);void custTotal;
 });
 
-test('BEFUND QS-015-03: Storno eines Mehrwertdienstauftrags lässt Kundenmaterial und Halbfabrikate dauerhaft im Lager', {todo:'A04/A05/A08: Rückgabe Fremdmaterial bei cancelOrder kind vas'}, ()=>{
+test('QS-015-03 behoben: Storno eines Mehrwertdienstauftrags gibt Kundenmaterial und Halbfabrikate an den Kunden zurück', ()=>{
  const sim=factory(31),s=sim.state;const o=vasOffer(sim);cmd(sim,{type:'acceptOrder',id:o.id});
  assert.ok(until(sim,()=>s.purchases.filter(p=>p.orderId===o.id).every(p=>p.status==='stored'),600));
  cmd(sim,{type:'cancelOrder',id:o.id});sim.step(3*1440);
