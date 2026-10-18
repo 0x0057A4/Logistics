@@ -29,6 +29,7 @@ Die Messanzeige erscheint nur, wenn an die Adresse `?perf=1` angehängt wird. Oh
 | Long Tasks (10 s) | Blockaden des Browsers über 50 ms: Anzahl und Summe (nur Chrome/Edge) |
 | Sim je Frame | Rechenzeit der Spielsimulation, umgelegt auf ein Bild |
 | Draw Calls / Dreiecke / Pixelratio | Aufwand der 3D-Darstellung; Pixelratio sinkt automatisch bei Last |
+| Grafikqualität | Aktuelle Stufe Niedrig/Mittel/Hoch, „(automatisch)“ bei Einstellung Automatisch (ab 0.15) |
 | Renderer | WebGL-Version und Grafikchip (falls der Browser ihn nennt) |
 | Geschwindigkeit | Aktuelle Spielgeschwindigkeit |
 
@@ -46,3 +47,15 @@ Die Messanzeige erscheint nur, wenn an die Adresse `?perf=1` angehängt wird. Oh
 - Messung im Browser über `requestAnimationFrame`; GPU-Zeit selbst wird nicht gemessen.
 - Long Tasks gibt es nur in Chromium-Browsern; Firefox/Safari zeigen „n. v.“.
 - Automatischer Browsertest (`tests/browser/perf-overlay-check.mjs`, `npm run perf:browser -- --overlay`) läuft headless mit Software-Rendering. Diese Werte sagen nichts über echte Hardware; maßgeblich ist die Messung auf dem eigenen Gerät.
+
+## Grafikqualität (ab 0.15)
+
+Einstellungen → Darstellung → **Grafikqualität**: Automatisch (Standard), Niedrig, Mittel, Hoch. Rein darstellend, Spielstand unverändert.
+
+| Stufe | Pixelratio max/min | Labels | Details |
+|---|---|---|---|
+| Niedrig | 1,0 / 0,6 | 16 | keine Bodenschatten, Nachtlicht ohne Lichtkegel/Hallenflächen, wenige Bäume/Autos, LOD ab ~42–50 Einheiten |
+| Mittel | 1,25 / 0,7 | 28 | Schatten, Nachtlicht reduziert, LOD ab ~60–75 Einheiten |
+| Hoch | 1,5 / 0,75 | 40 | bisherige Darstellung, LOD ab ~95–110 Einheiten |
+
+LOD: entfernte Fahrzeuge nur als Box, Personen ausgeblendet, Pakete halbiert. Automatisch: Start Mittel; p95 der Bildabstände über 10 s; runter bei p95 > 18 ms, hoch erst nach 30 s durchgehend < 13 ms; nach jedem Wechsel neues 10-s-Fenster (kein Flattern). Budget je Stufe: Draw Calls ≤ 150, Dreiecke 60k/120k/250k (Prüfung `node tests/browser/quality.mjs`).

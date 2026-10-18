@@ -54,6 +54,9 @@ const n2 = v => v == null ? '—' : (Math.round(v * 100) / 100).toLocaleString('
 const pct = v => n1(v * 100) + ' %';
 export const speedLabel = s => s ? s + '×' : 'Pause';
 const VIEW = { hall: 'Halle', site: 'Gelände', network: 'Netzwerk', flat: 'Grundriss' };
+const QUALITY_NAME = { low: 'Niedrig', medium: 'Mittel', high: 'Hoch' };
+/** Grafikqualität aus renderInfo (0.15-S4): „Mittel (automatisch)“ bzw. „Hoch“; ohne Angabe null. */
+export function qualityLabel(ri) { if (!ri?.quality) return null; const n = QUALITY_NAME[ri.quality] || ri.quality; return ri.qualityMode === 'auto' ? `${n} (automatisch)` : n; }
 
 /** Ergebnistext der 60-s-Messung (zum Kopieren). r: {stats,longTasks,sim,meta,render,hidden,seconds}. */
 export function formatReport(r) {
@@ -66,7 +69,7 @@ export function formatReport(r) {
     `Frames > 16,7 ms: ${pct(s.overBudget)} (mit 0,5 ms Toleranz: ${pct(s.overBudgetTol)}) · > 20 ms: ${pct(s.over20)} · > 33,4 ms: ${pct(s.over33)}`,
     `Long Tasks: ${lt ? `${lt.count} · Summe ${Math.round(lt.totalMs)} ms · längste ${Math.round(lt.maxMs)} ms` : 'nicht verfügbar (Browser)'}`,
     `Sim-Zeit: Ø ${n2(r.sim.perFrame)} ms je Frame · ${r.sim.steps} Schritte · max ${n2(r.sim.maxMs)} ms je Schritt`,
-    `Darstellung: ${ri ? `${ri.drawCalls} Draw Calls · ${ri.triangles.toLocaleString('de-DE')} Dreiecke · Pixelratio ${n2(ri.pixelRatio)}` : 'Canvas 2D'}`,
+    `Darstellung: ${ri ? `${ri.drawCalls} Draw Calls · ${ri.triangles.toLocaleString('de-DE')} Dreiecke · Pixelratio ${n2(ri.pixelRatio)}${qualityLabel(ri) ? ` · Grafikqualität ${qualityLabel(ri)}` : ''}` : 'Canvas 2D'}`,
     `Renderer: ${m.renderer || '—'}`,
     `Einstellung: Geschwindigkeit ${m.speed || '—'} · Ansicht ${m.view || '—'} · Fenster ${m.viewport || '—'} · devicePixelRatio ${m.dpr ?? '—'}`,
     `Version: ${m.version || '—'} · Zeit: ${m.date || '—'}`,
@@ -147,7 +150,7 @@ export function startPerfOverlay(opts = {}) {
       + row('Frames > 16,7 ms', pct(st.overBudget), st.overBudgetTol >= .05 ? 'bad' : '')
       + row('Long Tasks (10 s)', s.longTasks ? `${s.longTasks.count} · ${Math.round(s.longTasks.totalMs)} ms` : 'n. v.')
       + row('Sim je Frame', n2(s.simPerFrame) + ' ms')
-      + (r ? row('Draw Calls / Dreiecke', `${r.drawCalls} / ${r.triangles.toLocaleString('de-DE')}`) + row('Pixelratio', n2(r.pixelRatio)) : row('Darstellung', 'Canvas 2D'))
+      + (r ? row('Draw Calls / Dreiecke', `${r.drawCalls} / ${r.triangles.toLocaleString('de-DE')}`) + row('Pixelratio', n2(r.pixelRatio)) + (qualityLabel(r) ? row('Grafikqualität', `<b>${qualityLabel(r)}</b>`) : '') : row('Darstellung', 'Canvas 2D'))
       + row('Geschwindigkeit', speedLabel(s.speed));
     if (run) { const left = Math.max(0, Math.ceil((run.end - now()) / 1000)); btn.textContent = `Messung läuft … ${left} s`; if (now() >= run.end) finish(); }
   }

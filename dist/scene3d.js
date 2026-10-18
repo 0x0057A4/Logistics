@@ -228,6 +228,60 @@ export function adaptResolution(st, frameMs, now) {
   if (st.ratio < st.max && ((cond === 'fast' && held >= 2000) || (cond === 'steady' && held >= 5000 && now - (st.lastDrop ?? -1e9) >= 20000))) { st.ratio = Math.min(st.max, Math.round((st.ratio + .25) * 100) / 100); st.since = now; return true; }
   return false;
 }
+// ---------- Grafikqualität (0.15-S4, A12+A09): Stufen, LOD, Budgets, Automatik. Nur Darstellung, kein Spielzustand. ----------
+
+export const QUALITY_LEVELS = ['low', 'medium', 'high'];
+export const QUALITY_MODES = ['auto', ...QUALITY_LEVELS];
+export const QUALITY_NAMES = { auto: 'Automatisch', low: 'Niedrig', medium: 'Mittel', high: 'Hoch' };
+/**
+ * Stufen: maxRatio/minRatio (Pixelratio-Ober-/Untergrenze der adaptiven Auflösung), labels (Chip-Anzahl),
+ * cap (Instanz-Obergrenzen je Kategorie), lod (Kameraabstand in Welteinheiten: Fahrzeuge → Box, Personen aus, Pakete halbiert),
+ * night (Nachtlicht: Kreissegmente, Lichtkegel, Hallenlichtflächen), net (Zierflächen der Netzkarte), shadow (Bodenschatten-Andeutung unter Anlagen).
+ */
+export const QUALITY = {
+  low: { maxRatio: 1.0, minRatio: .6, labels: 16, cap: { parcels: 16, pallets: 16, containers: 12, people: 12, trees: 8, cars: 4 }, lod: { vehicle: 50, person: 42, parcel: 42 }, night: { seg: 8, cones: false, hall: false }, net: { patches: 6 }, shadow: false },
+  medium: { maxRatio: 1.25, minRatio: .7, labels: 28, cap: { parcels: 32, pallets: 24, containers: 24, people: 24, trees: 16, cars: 10 }, lod: { vehicle: 75, person: 60, parcel: 60 }, night: { seg: 12, cones: true, hall: true }, net: { patches: 14 }, shadow: true },
+  high: { maxRatio: 1.5, minRatio: .75, labels: MAX_LABELS, cap: { parcels: 48, pallets: 32, containers: 64, people: 64, trees: 40, cars: 16 }, lod: { vehicle: 110, person: 95, parcel: 95 }, night: { seg: 18, cones: true, hall: true }, net: { patches: 26 }, shadow: true }
+};
+/** Render-Budget je Stufe (Probe-Szenen, tests/browser/quality.mjs). */
+export const QUALITY_BUDGET = { low: { drawCalls: 150, triangles: 60000 }, medium: { drawCalls: 150, triangles: 120000 }, high: { drawCalls: 150, triangles: 250000 } };
+/** Konfiguration einer Stufe; unbekannt → 'high' (bisheriges Verhalten). */
+export function qualityConfig(level) { return QUALITY[level] || QUALITY.high; }
+/** Pixelratio-Grenzen der Stufe bei gegebenem devicePixelRatio: {max, min} mit min ≤ max. */
+export function qualityRatio(level, dpr = 1) { const q = qualityConfig(level), max = Math.min(Math.max(.5, dpr || 1), q.maxRatio); return { max, min: Math.min(q.minRatio, max) }; }
+/** LOD-Entscheidung je Kameraabstand d. */
+export function lodFor(level, d) { const l = qualityConfig(level).lod; return { vehicleBox: d > l.vehicle, personHidden: d > l.person, parcelReduced: d > l.parcel }; }
+/** Budgetprüfung von renderInfo ({drawCalls, triangles}) gegen die Stufe. */
+export function checkBudget(level, info) {
+  const b = QUALITY_BUDGET[level] || QUALITY_BUDGET.high, issues = [];
+  if (!(info?.drawCalls <= b.drawCalls)) issues.push(`Draw Calls ${info?.drawCalls} > ${b.drawCalls}`);
+  if (!(info?.triangles <= b.triangles)) issues.push(`Dreiecke ${info?.triangles} > ${b.triangles}`);
+  return { ok: !issues.length, level, budget: b, issues };
+}
+export const AUTO_WINDOW_MS = 10000, AUTO_DOWN_P95 = 18, AUTO_UP_P95 = 13, AUTO_UP_HOLD_MS = 30000, AUTO_EVAL_MS = 500, AUTO_MIN_FRAMES = 120;
+/** Zustand der Automatik; Start in 'medium' (sicher für Referenzgerät, steigt bei Reserve). */
+export function autoQualityState(level = 'medium') { return { level: QUALITY_LEVELS.includes(level) ? level : 'medium', times: [], deltas: [], since: null, fastSince: null, lastEval: -Infinity, p95: null, changes: 0 }; }
+/**
+ * Automatik: Frame-Abstände (ms) der letzten 10 s, p95 alle 500 ms. Runter bei p95 > 18 ms, hoch erst nach 30 s
+ * durchgehend p95 < 13 ms. Nach jedem Wechsel wird das Fenster geleert: neue Entscheidung erst mit vollem 10-s-Fenster
+ * (Hysterese 13/18 ms + Neubeginn → kein Flattern). Liefert die neue Stufe bei Wechsel, sonst null.
+ */
+export function autoQuality(st, frameMs, now) {
+  if (st.since == null) st.since = now;
+  if (frameMs > 0 && frameMs <= 250) { st.times.push(now); st.deltas.push(frameMs); }
+  let cut = 0; while (cut < st.times.length && st.times[cut] <= now - AUTO_WINDOW_MS) cut++;
+  if (cut) { st.times.splice(0, cut); st.deltas.splice(0, cut); }
+  if (now - st.lastEval < AUTO_EVAL_MS) return null; st.lastEval = now;
+  if (now - st.since < AUTO_WINDOW_MS || st.deltas.length < AUTO_MIN_FRAMES) { st.fastSince = null; return null; }
+  const v = st.deltas.slice().sort((a, b) => a - b), p95 = st.p95 = v[Math.min(v.length - 1, Math.ceil(.95 * v.length) - 1)];
+  const i = QUALITY_LEVELS.indexOf(st.level); let next = null;
+  if (p95 > AUTO_DOWN_P95) { st.fastSince = null; if (i > 0) next = QUALITY_LEVELS[i - 1]; }
+  else if (p95 < AUTO_UP_P95) { if (st.fastSince == null) st.fastSince = now; if (now - st.fastSince >= AUTO_UP_HOLD_MS && i < QUALITY_LEVELS.length - 1) next = QUALITY_LEVELS[i + 1]; }
+  else st.fastSince = null;
+  if (!next) return null;
+  st.level = next; st.times.length = 0; st.deltas.length = 0; st.since = now; st.fastSince = null; st.changes++; return next;
+}
+
 /** Strahl gegen achsparallelen Quader (Slab-Test). Liefert Abstand oder null. */
 export function rayBox(o, d, b) {
   let tmin = -Infinity, tmax = Infinity;
@@ -420,13 +474,14 @@ export function themeFor(mode, t) { return mode === 'day' || mode === 'night' ? 
  * Nachtbeleuchtung je Standort (nur Darstellung): Hofmasten mit Lichtkegel, Wandleuchten über den Docks, Hallenleuchten als Lichtflächen.
  * Liefert {masts:[{x,z,h}], heads:[{x,y,z}], pools:[{x,z,y,r,k,cone,h}]}; Anzahl begrenzt (keine Echtzeitlichter).
  */
-export function nightLights(site, L = yardLayout(site), docks = [], yards = []) {
+export function nightLights(site, L = yardLayout(site), docks = [], yards = [], opt = {}) {
   const W = L.W, H = L.H, masts = [], heads = [], pools = [];
   const mast = (x, z, r = 3.4) => { masts.push({ x, z, h: 4.4 }); heads.push({ x, y: 4.35, z }); pools.push({ x, z, y: .012, r, k: 1, cone: true, h: 4.3 }); };
   mast(-1, L.yardGateZ + .6, 3); mast(-14, H + .3); mast(-7.5, H + .3); mast(-10, L.roadInZ + 1.7, 3);
   mast(W + 1, H + .35); mast(W + 1.4 + FLEET_PARK * 1.9, H + .35); mast(W + 10.8, H * .3, 3); mast(W + 10.8, H * .7, 3);
   for (const x of (docks.length ? docks : L.bays).slice(0, 8)) { heads.push({ x, y: 2.35, z: H + .2 }); pools.push({ x, z: H + 2.2, y: .014, r: 2.2, k: .75, cone: false, h: 0 }); }
-  for (let x = 2; x < W; x += 4) for (let z = 2; z < H; z += 4) pools.push({ x, z, y: .085, r: 2.0, k: .42, cone: false, h: 0 });
+  // Hallenlichtflächen entfallen in Qualitätsstufe Niedrig (opt.hall === false).
+  if (opt.hall !== false) for (let x = 2; x < W; x += 4) for (let z = 2; z < H; z += 4) pools.push({ x, z, y: .085, r: 2.0, k: .42, cone: false, h: 0 });
   for (let x = 0; x <= W; x += 4) heads.push({ x, y: 2.32, z: -.1 }, { x, y: 2.32, z: H + .1 });
   // W3b: Containerhof mit eigener Lichtfläche (Leuchtmast im Modell).
   for (const y of yards.slice(0, 6)) pools.push({ x: y.x, z: y.z, y: .1, r: 2.6, k: .6, cone: false, h: 0 });
@@ -991,6 +1046,8 @@ export class Scene3D {
     this.quarter = 0; this.scale = 1; this.cam = { tx: 10, tz: 8, dist: 30, yaw: Math.PI / 4 }; this.goal = { tx: 10, tz: 8, dist: 30, yaw: Math.PI / 4 }; this.animating = false;
     this.clock = { base: null, at: 0, rate: 0, shown: null }; this.fleet = []; this.yardFleet = []; this.yardMap = null; this.boxes = []; this.infra = []; this.pins = []; this.transfers = []; this.trips = []; this.airTrips = []; this.airNode = null; this.plane = null; this.netLineKey = null;
     this.res = { ratio: Math.min(window.devicePixelRatio || 1, 1.5), max: Math.min(window.devicePixelRatio || 1, 1.5), min: .75, avg: 0, cond: null, since: null, lastDrop: null };
+    // Grafikqualität (0.15-S4): ohne setQuality wie bisher 'high'; app.js setzt prefs.quality (Standard 'auto').
+    this.qualityMode = 'high'; this.qualityLevel = 'high'; this.q = QUALITY.high; this.auto = autoQualityState(); this.lodKey = '';
     this.lastFrame = 0; this.renderedLast = false; this.layout = yardLayout(defaultSite(null));
     // Wiederverwendete Objekte für die Hot-Loop.
     this.tmp = { pose: { x: 0, z: 0, heading: 0 }, ndc: new THREE.Vector2(), hit: { x: 0, z: 0 }, ray: new THREE.Raycaster(), labelOut: [], cands: [], candPool: [] };
@@ -1102,7 +1159,25 @@ export class Scene3D {
   }
   /** Bildschirmpunkt der Zellmitte (Prüfhilfe). */
   cellToScreen(x, y) { _v.set(x + .5, .06, y + .5).project(this.camera()); return { x: (_v.x + 1) / 2 * this.width, y: (1 - _v.y) / 2 * this.height }; }
-  renderInfo() { const r = this.renderer.info.render; return { drawCalls: r.calls, triangles: r.triangles, pixelRatio: this.res.ratio, avgFrameMs: Math.round((this.res.avg || 0) * 100) / 100, cpuMs: Math.round((this.res.cpu || 0) * 100) / 100, renderer: 'webgl' }; }
+  renderInfo() { const r = this.renderer.info.render; return { drawCalls: r.calls, triangles: r.triangles, pixelRatio: this.res.ratio, avgFrameMs: Math.round((this.res.avg || 0) * 100) / 100, cpuMs: Math.round((this.res.cpu || 0) * 100) / 100, renderer: 'webgl', quality: this.qualityLevel, qualityMode: this.qualityMode }; }
+  /** Grafikqualität 'low'|'medium'|'high' fest oder 'auto' (nach gemessener Frame-Zeit). Rein darstellend. Liefert quality(). */
+  setQuality(mode) {
+    const m = QUALITY_MODES.includes(mode) ? mode : 'auto', was = this.qualityMode; this.qualityMode = m;
+    if (m === 'auto') { if (was !== 'auto') this.auto = autoQualityState('medium'); this.applyQuality(this.auto.level); }
+    else this.applyQuality(m);
+    return this.quality();
+  }
+  /** Aktuelle Qualität (Anzeige/Prüfhilfe): {mode, level, name, p95}. */
+  quality() { return { mode: this.qualityMode, level: this.qualityLevel, name: QUALITY_NAMES[this.qualityLevel], modeName: QUALITY_NAMES[this.qualityMode], p95: this.auto.p95 }; }
+  applyQuality(level) {
+    if (!QUALITY_LEVELS.includes(level)) return; const changed = level !== this.qualityLevel; this.qualityLevel = level; this.q = qualityConfig(level);
+    const r = qualityRatio(level, window.devicePixelRatio || 1), res = this.res; res.max = r.max; res.min = r.min; res.ratio = Math.max(r.min, Math.min(r.max, res.ratio));
+    this.renderer.setPixelRatio(res.ratio); this.renderer.setSize(this.width, this.height, false);
+    if (changed) { this.signature = ''; this.sigDirty = true; this.dynDirty = true; this.callbacks.onQuality?.(this.quality()); }
+    this.needs = true;
+  }
+  /** Kameraabstand eines Weltpunkts für LOD (Grundriss: Bodenabstand zum Blickziel plus Zoomabstand). */
+  lodDist(x, z, y = 0) { if (this.view === 'flat') return Math.hypot(x - this.cam.tx, z - this.cam.tz) + this.cam.dist * .8; const p = this.persp.position; return Math.hypot(p.x - x, p.y - y, p.z - z); }
   destroy() {
     this.dead = true; cancelAnimationFrame(this.frame); this.observer?.disconnect();
     for (const [t, type, fn, o] of this.listeners) t.removeEventListener(type, fn, o);
@@ -1130,9 +1205,9 @@ export class Scene3D {
   }
   /** Leuchtkörper und Lichtflächen der Nachtbeleuchtung (je 1 Draw Call). */
   rebuildLights(site, L, docks, yards = []) {
-    const lights = nightLights(site, L, docks, yards), H = new Parts();
+    const nq = this.q.night, lights = nightLights(site, L, docks, yards, { hall: nq.hall }), H = new Parts();
     for (const h of lights.heads) { if (h.y > 3) { H.box(h.x - .32, h.y - .1, h.z - .14, .64, .1, .28, '#fff1c8'); } else H.box(h.x - .22, h.y - .08, h.z - .08, .44, .08, .16, '#fff4d6'); }
-    const pos = [], colr = [], seg = 18, warm = [1, .86, .58];
+    const pos = [], colr = [], seg = nq.seg, warm = [1, .86, .58];
     const tri = (a, b, c, ca, cb, cc) => { pos.push(...a, ...b, ...c); colr.push(...ca, ...cb, ...cc); };
     for (const p of lights.pools) {
       // Lichtfläche mit weichem Abfall: Mitte → Innenring (45 % Stärke) → Rand (0).
@@ -1142,7 +1217,7 @@ export class Scene3D {
         const i0 = [p.x + c0 * ri, p.y, p.z + s0 * ri], i1 = [p.x + c1 * ri, p.y, p.z + s1 * ri], o0 = [p.x + c0 * p.r, p.y, p.z + s0 * p.r], o1 = [p.x + c1 * p.r, p.y, p.z + s1 * p.r];
         tri([p.x, p.y, p.z], i1, i0, center, ring, ring); tri(i0, i1, o1, ring, ring, zero); tri(i0, o1, o0, ring, zero, zero);
       }
-      if (p.cone) { const apex = warm.map(v => v * .26 * p.k), r = p.r * .8, top = [p.x, p.h - .1, p.z]; for (let i = 0; i < 12; i++) { const a0 = i / 12 * Math.PI * 2, a1 = (i + 1) / 12 * Math.PI * 2; tri(top, [p.x + Math.cos(a0) * r, .02, p.z + Math.sin(a0) * r], [p.x + Math.cos(a1) * r, .02, p.z + Math.sin(a1) * r], apex, zero, zero); } }
+      if (p.cone && nq.cones) { const apex = warm.map(v => v * .26 * p.k), r = p.r * .8, top = [p.x, p.h - .1, p.z]; for (let i = 0; i < 12; i++) { const a0 = i / 12 * Math.PI * 2, a1 = (i + 1) / 12 * Math.PI * 2; tri(top, [p.x + Math.cos(a0) * r, .02, p.z + Math.sin(a0) * r], [p.x + Math.cos(a1) * r, .02, p.z + Math.sin(a1) * r], apex, zero, zero); } }
     }
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(colr, 3)); g.computeBoundingSphere();
     const oh = this.heads.geometry, og = this.glow.geometry; this.heads.geometry = H.geometry(); this.glow.geometry = g; oh.dispose(); og.dispose();
@@ -1311,7 +1386,7 @@ export class Scene3D {
     const buildings = (this.state?.buildings || []).filter(b => b.site === s.id);
     for (const b of buildings) {
       const d = BUILDINGS[b.type] || { w: 2, h: 2, color: '#42a594' }, box = buildingBox(b), rot = (b.rotation || 0) % 360;
-      P.quad(box.x0 + .18, box.z0 + .2, box.w, box.h, .062, '#c6ccc2');
+      if (this.q.shadow) P.quad(box.x0 + .18, box.z0 + .2, box.w, box.h, .062, '#c6ccc2'); // Bodenschatten-Andeutung (ab Mittel)
       P.base.makeRotationY(-THREE.MathUtils.degToRad(rot)).setPosition((box.x0 + box.x1) / 2, .06, (box.z0 + box.z1) / 2);
       buildingModel(P, b.type, d); P.base.identity();
     }
@@ -1325,6 +1400,7 @@ export class Scene3D {
     // Bäume (deterministisch)
     const trees = []; for (let i = 0; i < 9; i++) trees.push([-8 + i * (W + 14) / 8, -5.5 - (i % 2) * 1.6]); for (let i = 0; i < 5; i++) trees.push([W + 13 + (i % 2) * 1.5, -1 + i * 4]); for (let i = 0; i < 4; i++) trees.push([-20 - (i % 2) * 2, 1 + i * 3.6]);
     for (let i = 0; i < 6; i++) trees.push([-14 + i * 6.5 + (i % 2) * 1.5, L.roadInZ + 3.2]);
+    trees.length = Math.min(trees.length, this.q.cap.trees);
     const tr = this.ensure('trunk', trees.length), cr = this.ensure('crown', trees.length);
     trees.forEach(([x, z], i) => { const k = .85 + ((i * 37) % 10) / 25; this.setInst(tr, i, x, 0, z, 0, k, k, k); this.setInst(cr, i, x, .4 * k, z, i, k, k, k, ['#7fa877', '#8db582', '#71996c'][i % 3]); });
     this.finish(tr, trees.length); this.finish(cr, trees.length);
@@ -1334,7 +1410,7 @@ export class Scene3D {
     const sites = this.state?.sites || [this.site()], air = this.netAir = airRelevant(this.state), { pins, nodes } = networkLayout(sites, undefined, air ? [AIRPORT] : []), P = new Parts(); this.pins = pins; this.netLineKey = null;
     this.airNode = air ? nodes[0] : null; if (this.airNode) P.cyl(this.airNode.x, -.01, this.airNode.z, 4.2, .02, '#c4d3df', true);
     P.quad(-90, -70, 180, 140, -.02, '#cfe0c8');
-    for (let i = 0; i < 26; i++) { const x = ((i * 53) % 150) - 75, z = ((i * 31) % 110) - 55; P.quad(x, z, 6 + (i % 4) * 2, 4 + (i % 3) * 2, -.015, i % 2 ? '#c3d8bb' : '#d7e5cf'); }
+    for (let i = 0; i < this.q.net.patches; i++) { const x = ((i * 53) % 150) - 75, z = ((i * 31) % 110) - 55; P.quad(x, z, 6 + (i % 4) * 2, 4 + (i % 3) * 2, -.015, i % 2 ? '#c3d8bb' : '#d7e5cf'); }
     for (const p of pins) P.cyl(p.x, -.01, p.z, 3.4, .02, '#bdd3b6', true);
     const og = this.netStatic.geometry; this.netStatic.geometry = P.geometry(); og.dispose();
     const pts = []; for (let i = 1; i < pins.length; i++) { let best = pins[0], bd = Infinity; for (let j = 0; j < i; j++) { const d = Math.hypot(pins[i].x - pins[j].x, pins[i].z - pins[j].z); if (d < bd) { bd = d; best = pins[j]; } } pts.push(best.x, .03, best.z, pins[i].x, .03, pins[i].z); }
@@ -1362,12 +1438,15 @@ export class Scene3D {
     }
     this.finish(lamp, n); this.finish(plate, n); this.finish(pal, np);
     // Beschäftigte
-    const spots = workerSpots(st, s, buildings), body = this.ensure('body', spots.length), head = this.ensure('head', spots.length);
+    // Qualität: Obergrenze Personen, jenseits LOD-Abstand ausgeblendet (nur Darstellung; ausgeblendete Figuren nicht anklickbar).
+    const q = this.q, lodP = q.lod.person, allSpots = workerSpots(st, s, buildings), spots = [];
+    for (const w of allSpots) { if (spots.length >= q.cap.people) break; if (this.lodDist(w.x, w.z) <= lodP) spots.push(w); }
+    const body = this.ensure('body', spots.length), head = this.ensure('head', spots.length);
     spots.forEach((w, i) => { this.setInst(body, i, w.x, .06, w.z, 0, 1, 1, 1, w.role === 'warehouse' ? '#eeb354' : w.role === 'technician' ? '#d07c6a' : w.role === 'driver' ? '#6f8fc9' : '#579ba1'); this.setInst(head, i, w.x, .06, w.z, 0, 1, 1, 1); });
     this.finish(body, spots.length); this.finish(head, spots.length);
     for (const w of spots) this.boxes.push({ id: w.id, box: { x0: w.x - .2, x1: w.x + .2, y0: 0, y1: .85, z0: w.z - .2, z1: w.z + .2 } });
     // Parkplatz: Autos nach Belegschaft (nur Ausstattung)
-    const cars = Math.min(16, spots.length), car = this.ensure('car', cars), L = this.layout;
+    const cars = Math.min(16, q.cap.cars, allSpots.length), car = this.ensure('car', cars), L = this.layout;
     for (let i = 0; i < cars; i++) this.setInst(car, i, L.W + 3.4 + (i % 2) * 5.2, 0, 2.1 + Math.floor(i / 2) * 1.8, 0, 1, 1, 1, ['#d9dfe2', '#7c96a8', '#c9b28a', '#a7b9a1', '#e6e2d7'][i % 5]);
     this.finish(car, cars);
     // Fahrzeugpläne; Positionen folgen pro Frame
@@ -1406,8 +1485,9 @@ export class Scene3D {
     this.ensure('fcab', yplans.length + dconts.length); this.ensure('cchassis', yplans.length + dconts.length);
     const cont = this.ensure('cont', cy.map.size + yplans.length + dconts.length), door = this.ensure('cdoor', cy.map.size), mark = this.ensure('cmark', cy.map.size + dconts.length);
     let nc = 0, nd = 0, nm = 0; const cpose = {}; this.contLabels = [];
+    let shownC = 0;
     for (const c of cy.containers) {
-      const slot = cy.map.get(c.id); if (!slot) continue; yardSlotPose(slot, cpose); const rot = cpose.rot;
+      const slot = cy.map.get(c.id); if (!slot || shownC >= q.cap.containers) continue; shownC++; yardSlotPose(slot, cpose); const rot = cpose.rot;
       this.setInst(cont, nc++, cpose.x, cpose.y, cpose.z, rot, 1, 1, 1, containerTint(c));
       const ox = Math.cos(rot), oz = -Math.sin(rot); // lokale +x-Achse in Welt (Drehung wie toWorld)
       if (containerEmpty(c)) this.setInst(door, nd++, cpose.x, cpose.y, cpose.z, rot, 1, 1, 1, containerTint(c));
@@ -1419,12 +1499,14 @@ export class Scene3D {
     for (const p of dconts) { p.chip = { id: p.id, x: p.x, y: 2.1, z: p.z, text: p.label, tone: p.demurrage ? 'bad' : p.status === 'toDock' ? 'move' : 'dock' }; this.contLabels.push(p.chip); }
     this.contBase = nc; this.markBase = nm; this.finish(door, nd);
     // Pakete (W1): Rollcontainer (inbound) auf den Docks, Kartonstapel (stock) am Sortierplatz-Ausgang bzw. an Regalen.
-    const loads = parcelLoads(st, s.id, buildings), cage = this.ensure('cage', loads.cages.length), stack = this.ensure('stack', loads.stacks.length);
-    loads.cages.forEach((c, i) => this.setInst(cage, i, c.x, .56, c.z, c.rot, 1, 1, 1)); this.finish(cage, loads.cages.length);
-    loads.stacks.forEach((c, i) => this.setInst(stack, i, c.x, .065, c.z, c.rot, 1, c.sy, 1)); this.finish(stack, loads.stacks.length);
+    // Qualität: Obergrenze je Art, jenseits LOD-Abstand nur jeder zweite Rollcontainer/Stapel (Andeutung der Menge bleibt).
+    const loads = parcelLoads(st, s.id, buildings), lodK = q.lod.parcel, thin = (list, cap) => { const out = []; list.forEach((c, i) => { if (out.length < cap && (i % 2 === 0 || this.lodDist(c.x, c.z) <= lodK)) out.push(c); }); return out; };
+    const cages = thin(loads.cages, q.cap.parcels), stacks = thin(loads.stacks, q.cap.parcels), cage = this.ensure('cage', cages.length), stack = this.ensure('stack', stacks.length);
+    cages.forEach((c, i) => this.setInst(cage, i, c.x, .56, c.z, c.rot, 1, 1, 1)); this.finish(cage, cages.length);
+    stacks.forEach((c, i) => this.setInst(stack, i, c.x, .065, c.z, c.rot, 1, c.sy, 1)); this.finish(stack, stacks.length);
     // Paletten (W2-S2): Palettenstapel im Lager (gedeckelt), Ladung der Palettenauflieger, Stapler mit Akkubalken.
-    const pl = palletLoads(st, s.id, buildings), ps = this.ensure('pstack', pl.pallets.length);
-    pl.pallets.forEach((c, i) => this.setInst(ps, i, c.x, .065 + c.level * .47, c.z, c.rot, 1, 1, 1)); this.finish(ps, pl.pallets.length);
+    const pl = palletLoads(st, s.id, buildings), plist = pl.pallets.slice(0, q.cap.pallets * PALLET_LEVELS), ps = this.ensure('pstack', plist.length);
+    plist.forEach((c, i) => this.setInst(ps, i, c.x, .065 + c.level * .47, c.z, c.rot, 1, 1, 1)); this.finish(ps, plist.length);
     this.ensure('fflat', yplans.length); this.ensure('tload', yplans.reduce((n, p) => n + p.pallets, 0));
     const forks = this.forks = forkliftPlans(st, s.id, buildings), bar = this.ensure('charge', forks.length); this.ensure('fork', forks.length); this.ensure('fload', forks.length);
     forks.forEach((f, i) => { const c = f.charger; this.setInst(bar, i, c.x + Math.sin(c.rot) * .14, .4, c.z + Math.cos(c.rot) * .14, c.rot, .18, .02 + .56 * f.charge / 100, .02, f.color); });
@@ -1503,13 +1585,18 @@ export class Scene3D {
   tick(now) {
     const dt = this.lastFrame ? Math.min(.1, (now - this.lastFrame) / 1000) : 0;
     if (this.renderedLast && this.lastFrame && adaptResolution(this.res, now - this.lastFrame, now)) { this.renderer.setPixelRatio(this.res.ratio); this.renderer.setSize(this.width, this.height, false); }
+    if (this.qualityMode === 'auto' && this.renderedLast && this.lastFrame) { const next = autoQuality(this.auto, now - this.lastFrame, now); if (next) this.applyQuality(next); }
     this.lastFrame = now;
     this.sync();
     // Kamera sanft zum Ziel (Drehen, Home, Fokus); Rundgang setzt die Pose direkt, Verfolgen setzt das Ziel.
     const tourMoving = this.camMode?.mode === 'tour' && this.stepTour(now);
     const c = this.cam, g = this.goal, k = 1 - Math.exp(-dt * 9); let moving = tourMoving;
     for (const key of CAM_KEYS) { const d = g[key] - c[key]; if (Math.abs(d) > (key === 'yaw' ? 1e-4 : 1e-3)) { c[key] += dt ? d * k : 0; moving = true; } else c[key] = g[key]; }
-    if (moving || this.needs) this.applyCamera();
+    if (moving || this.needs) {
+      this.applyCamera();
+      // LOD von Personen/Paketen hängt am Kameraabstand: bei Wechsel des 4-Einheiten-Rasters Instanzen neu setzen (nicht pro Frame).
+      const lk = `${this.view}:${Math.round(c.tx / 4)},${Math.round(c.tz / 4)},${Math.round(c.dist / 4)},${Math.round(c.yaw * 2)}`; if (lk !== this.lodKey) { this.lodKey = lk; this.dynDirty = true; }
+    }
     const net = this.view === 'network'; this.siteGroup.visible = !net; this.netGroup.visible = net;
     const clock = this.displayClock(now), animated = net ? this.placeTransfers(clock) : !!(this.placeVehicles(clock) | this.placeYard(clock) | this.placeForklifts(clock));
     if (this.camMode?.mode === 'follow') {
@@ -1538,21 +1625,23 @@ export class Scene3D {
     return true;
   }
   placeVehicles(clock) {
-    const st = this.state, f = this.fleet, box = this.inst.vbox, cab = this.inst.vcab, base = this.inst.vbase, pose = this.tmp.pose; let n = 0, animated = false;
+    const st = this.state, f = this.fleet, box = this.inst.vbox, cab = this.inst.vcab, base = this.inst.vbase, pose = this.tmp.pose, lodV = this.q.lod.vehicle; let n = 0, nc = 0, nb = 0, animated = false;
     for (const p of f) {
       const t = vehicleT(p.plan, p.v, clock, st?.t, 8);
       if (t == null) { p.shown = false; continue; }
       if (p.path) { pointOnPath(p.path, p.plan.mode === 'out' ? t : 1 - t, pose); p.x = pose.x; p.z = pose.z; p.heading = pose.heading; animated = true; p.tone = t < .3 ? 'gate' : 'move'; }
       else { p.tone = p.plan.tone; }
       p.shown = true; const sx = p.len / 4.2, rot = -p.heading, type = p.v.type;
-      this.setInst(box, n, p.x, 0, p.z, rot, sx, type === 'van' ? .82 : 1, 1, BOX_HEX[type] || '#eef0e8'); this.setInst(cab, n, p.x, 0, p.z, rot, sx, type === 'van' ? .9 : 1, 1, CAB_HEX[type] || '#ebac53'); this.setInst(base, n, p.x, 0, p.z, rot, sx, 1, 1, '#ffffff'); n++;
+      // LOD: jenseits des Stufenabstands nur der Aufbau als Box (in Kabinenfarbe), ohne Kabine und Fahrgestell.
+      if (this.lodDist(p.x, p.z) > lodV) { this.setInst(box, n++, p.x, 0, p.z, rot, sx * 1.4, type === 'van' ? .82 : 1, 1, CAB_HEX[type] || '#ebac53'); }
+      else { this.setInst(box, n++, p.x, 0, p.z, rot, sx, type === 'van' ? .82 : 1, 1, BOX_HEX[type] || '#eef0e8'); this.setInst(cab, nc++, p.x, 0, p.z, rot, sx, type === 'van' ? .9 : 1, 1, CAB_HEX[type] || '#ebac53'); this.setInst(base, nb++, p.x, 0, p.z, rot, sx, 1, 1, '#ffffff'); }
       const r = p.len / 2, hb = p.hit.box; hb.x0 = p.x - r; hb.x1 = p.x + r; hb.z0 = p.z - r; hb.z1 = p.z + r;
     }
-    this.finish(box, n); this.finish(cab, n); this.finish(base, n); return animated;
+    this.finish(box, n); this.finish(cab, nc); this.finish(base, nb); return animated;
   }
   placeYard(clock) {
     const tr = this.inst.ftrailer, cab = this.inst.fcab, flat = this.inst.fflat, load = this.inst.tload, chs = this.inst.cchassis, cont = this.inst.cont, mark = this.inst.cmark;
-    let n = 0, nt = 0, nf = 0, nl = 0, nch = 0, nc = this.contBase || 0, nm = this.markBase || 0, animated = false;
+    let n = 0, nt = 0, nf = 0, nl = 0, nch = 0, nc = this.contBase || 0, nm = this.markBase || 0, animated = false; const lodV = this.q.lod.vehicle;
     const onChassis = (p, rot, hex, demurrage) => {
       this.setInst(chs, nch++, p.x, 0, p.z, rot, 1, 1, 1, '#ffffff'); if (!hex) return;
       const x = p.x + CHASSIS_LX * Math.cos(p.heading), z = p.z + CHASSIS_LX * Math.sin(p.heading);
@@ -1560,12 +1649,12 @@ export class Scene3D {
     };
     for (const p of this.yardFleet) {
       arrivalPose(p, clock, p); if (arrivalMoving(p, clock)) animated = true;
-      const rot = -p.heading; this.setInst(cab, n, p.x, 0, p.z, rot, 1, 1, 1, p.color); n++;
+      const rot = -p.heading, far = this.lodDist(p.x, p.z) > lodV; this.setInst(cab, n, p.x, 0, p.z, rot, 1, 1, 1, p.color); n++;
       if (p.container) onChassis(p, rot, p.loaded ? p.ccolor : null, false);
       else if (p.pallet) {
         // Palettenauflieger: Ladung von vorn (Stirnwand) nach hinten, hintere Plätze leeren sich beim Entladen zuerst.
         this.setInst(flat, nf++, p.x, 0, p.z, rot, 1, 1, 1, '#e3e6ea'); const c = Math.cos(p.heading), sn = Math.sin(p.heading);
-        for (let i = 0; i < p.pallets; i++) { const lx = .4 - Math.floor(i / 2) * .85, lz = i % 2 ? .3 : -.3; this.setInst(load, nl++, p.x + lx * c - lz * sn, .62, p.z + lx * sn + lz * c, rot, .75, .9, .75); }
+        if (!far) for (let i = 0; i < p.pallets; i++) { const lx = .4 - Math.floor(i / 2) * .85, lz = i % 2 ? .3 : -.3; this.setInst(load, nl++, p.x + lx * c - lz * sn, .62, p.z + lx * sn + lz * c, rot, .75, .9, .75); }
       } else this.setInst(tr, nt++, p.x, 0, p.z, rot, 1, 1, 1, '#e3e6ea');
       const r = FOREIGN_LEN / 2, hb = p.hit.box; hb.x0 = p.x - r; hb.x1 = p.x + r; hb.z0 = p.z - r; hb.z1 = p.z + r;
     }
@@ -1653,7 +1742,7 @@ export class Scene3D {
       // W3b: Container-Label nur bei Auswahl.
       if (mode !== 'none' && this.selected != null) for (const c of this.contLabels || []) if (c.id === this.selected) this.candidate(c.id, c.x, c.y, c.z, c.text, c.tone, 0);
     }
-    const out = selectLabels(t.cands, this.width, this.height, MAX_LABELS, t.labelOut);
+    const out = selectLabels(t.cands, this.width, this.height, this.q.labels, t.labelOut);
     for (let i = 0; i < out.length; i++) {
       const c = out[i], el = this.chip(i);
       if (el._text !== c.text) { const t = splitLabel(c.text), [h, sp, r] = el._parts; h.textContent = t.head; sp.textContent = t.sep; r.textContent = t.rest; el._text = c.text; }
