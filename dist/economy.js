@@ -1,5 +1,6 @@
 import {committedQty} from './tours.js';
 import {ITEMS,BUILDINGS,RECIPES} from './catalog.js';
+import {assetInfo,accumulated} from './accounting.js';
 const suppliers={standard:{factor:1,lead:30,quality:88},express:{factor:1.3,lead:10,quality:86},quality:{factor:1.18,lead:45,quality:98}};
 const ledgerIndexes=new WeakMap();
 function keys(s){let index=ledgerIndexes.get(s);if(!index||index.rows!==s.ledger||index.length!==s.ledger.length){index={rows:s.ledger,length:s.ledger.length,keys:new Set(s.ledger.map(l=>l.key)),byKey:new Map(s.ledger.map(l=>[l.key,l]))};ledgerIndexes.set(s,index);}return index;}
@@ -15,6 +16,12 @@ export function book(s,key,amount,category,note,refs=[]){
  else {const entry={id:`ledger-${s.seq++}`,key:ledgerKey,t:s.t,amount,category,note,refs};s.ledger.push(entry);index.keys.add(ledgerKey);index.byKey.set(ledgerKey,entry);index.length=s.ledger.length;}
  if(match){s.accountingWatermarks??={};s.accountingWatermarks[match[1]]=watermark;}
  if(amount>0&&category==='Umsatz')s.stats.revenue=cents(s.stats.revenue+amount);else if(amount<0&&category!=='Tilgung')s.stats.costs=cents(s.stats.costs-amount);s.overdraft=Math.max(0,-s.money);return true;
+}
+/** 0.15 S1: Abgang einer Anlage (Abriss). Hält Restbuchwert zum Zeitpunkt s.t fest; keine Geldbuchung (Rückbauerlös bucht core). */
+export function recordDisposal(s,asset,kind){
+ const info=assetInfo(s,asset,kind);if(!info)return null;
+ const depreciation=accumulated(info,s.t),row={assetId:info.assetId,kind,type:info.type,name:info.name,acquiredAt:info.acquiredAt,cost:info.cost,disposedAt:s.t,depreciation,bookValue:cents(info.cost-depreciation),source:info.source};
+ (s.assetDisposals??=[]).push(row);return row;
 }
 /** Fertigungsanlage vorhanden: mindestens ein Gebäude mit Rezept (Montage, Prüfung, Verpackung) an irgendeinem Standort. */
 export const hasManufacturing=s=>s.buildings.some(b=>BUILDINGS[b.type]?.recipes?.length>0);
@@ -136,6 +143,18 @@ export function step(s,api){
 }
 export function validate(s){
  const bad=m=>{throw new Error('Spielstand ungültig: '+m);};
+ // 0.15 S1: Anlagenfelder optional (Altbestand), wenn vorhanden dann beide gültig; Mietfahrzeuge ohne Anschaffungswert.
+ const assetOk=a=>(a.acquiredAt===undefined&&a.cost===undefined)||(Number.isSafeInteger(a.acquiredAt)&&a.acquiredAt>=480&&a.acquiredAt<=s.t&&Number.isFinite(a.cost)&&a.cost>=0);
+ for(const b of s.buildings)if(!assetOk(b))bad('Anlagenwert Gebäude beschädigt.');
+ for(const v of s.vehicles){if(!assetOk(v))bad('Anlagenwert Fahrzeug beschädigt.');if(v.rentalId&&v.cost!==undefined)bad('Mietfahrzeug mit Anschaffungswert: Miete ist keine Anlage.');}
+ if(s.assetDisposals!==undefined){
+  if(!Array.isArray(s.assetDisposals)||s.assetDisposals.length>100000)bad('Anlagenabgänge beschädigt.');
+  const seen=new Set(),live=new Set([...s.buildings,...s.vehicles].map(x=>x.id));
+  for(const d of s.assetDisposals){
+   if(!d||typeof d.assetId!=='string'||seen.has(d.assetId)||live.has(d.assetId)||!['building','vehicle'].includes(d.kind)||!Number.isSafeInteger(d.acquiredAt)||!Number.isSafeInteger(d.disposedAt)||d.acquiredAt>d.disposedAt||d.disposedAt>s.t||!Number.isFinite(d.cost)||d.cost<0||!Number.isFinite(d.depreciation)||d.depreciation<0||d.depreciation>d.cost+0.005||!Number.isFinite(d.bookValue)||Math.abs(d.bookValue-cents(d.cost-d.depreciation))>0.005)bad('Anlagenabgang beschädigt.');
+   seen.add(d.assetId);
+  }
+ }
  if(s.loanBalance!==undefined&&(!Number.isFinite(s.loanBalance)||s.loanBalance<0||s.loanBalance>50000))bad('Kredit beschädigt.');
  for(const o of s.orders)if(o.kind==='vas'&&(!o.materials||typeof o.materials!=='object'||Array.isArray(o.materials)||!Object.keys(o.materials).length||Object.entries(o.materials).some(([k,n])=>!ITEMS[k]?.purchasable||!Number.isInteger(n)||n<1)))bad('Mehrwertdienstauftrag beschädigt.');
  for(const p of s.purchases){
