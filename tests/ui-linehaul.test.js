@@ -110,7 +110,7 @@ test('Linienfahrt: Ladeschluss, Fahrzeugleiste, Storno, verpasste Abfahrt, Verzu
  ui.click('select',remote);j=body(ui);assert.match(j,/Hauptlauf → Ziel-Hub Birkenau<\/b><strong>✓/);
  assert.match(j,/Sortierung · Ziel-Hub Birkenau<\/b><strong>(\d+|✓)/);assert.match(j,/\d+\/40 zugestellt/);
  // Versandformular: an A ausgegraut, an B zustellbar
- press(ui,{panel:'orders'});const at=body(ui).indexOf('Fernbezirk (Testversand)'),part=body(ui).slice(at,at+2500);
+ ui.run(`ordersUi.expanded.add('${remote}')`);press(ui,{panel:'orders'});const at=body(ui).indexOf('Fernbezirk (Testversand)'),part=body(ui).slice(at,at+2500);
  assert.match(part,/dispatch-off/);assert.match(part,/Zustellgebiet gehört zu Ziel-Hub Birkenau/);
  assert.match(ui.run('tourPanel(sim.state)'),new RegExp(`<option value="${remote}"[^>]*disabled`));
  ui.run(`send({type:'selectSite',id:'${B}'},true)`);press(ui,{panel:'orders'});const at2=body(ui).indexOf('Fernbezirk (Testversand)');assert.doesNotMatch(body(ui).slice(at2,at2+1500),/dispatch-off/);

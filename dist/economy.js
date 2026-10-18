@@ -5,7 +5,7 @@ import {abortJobs} from './production.js';
 import {activeBatches} from './inventory.js';
 import {gridDown} from './disruptions.js';
 import {powerBalance} from './special.js';
-const suppliers={standard:{factor:1,lead:30,quality:88},express:{factor:1.3,lead:10,quality:86},quality:{factor:1.18,lead:45,quality:98}};
+export const suppliers={standard:{factor:1,lead:30,quality:88},express:{factor:1.3,lead:10,quality:86},quality:{factor:1.18,lead:45,quality:98}};
 const ledgerIndexes=new WeakMap();
 function keys(s){let index=ledgerIndexes.get(s);if(!index||index.rows!==s.ledger||index.length!==s.ledger.length){index={rows:s.ledger,length:s.ledger.length,keys:new Set(s.ledger.map(l=>l.key)),byKey:new Map(s.ledger.map(l=>[l.key,l]))};ledgerIndexes.set(s,index);}return index;}
 const cents=n=>Math.round(n*100)/100;

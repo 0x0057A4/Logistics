@@ -571,6 +571,8 @@ body.replay #game::after{content:'';position:absolute;inset:0;border:3px solid v
  * folgt eine Tabelle auf eine Filterleiste, den Kopf mit --thead-top (Standard: --filter-h) darunter halten (Klasse .filter-scope am Container). */
 .panel-body .table-wrap{overflow:visible;border-radius:var(--r-md)}
 .panel-body thead th,.data-table thead th{position:sticky;top:var(--thead-top,0px);z-index:2;background:var(--c-surface-2);box-shadow:inset 0 -1px 0 var(--c-line-strong)}
+/* Tabellen mit eigenem sticky thead (Lager/Aufträge, .sv-/.ov-table inkl. Filterzeile) erhalten keine zweite Sticky-Ebene je Zelle */
+.panel-body .sv-table thead th,.panel-body .ov-table thead th,.panel-body thead.sticky th{position:static;top:auto}
 .panel-body .table-filter{position:sticky;top:0;z-index:3;display:flex;flex-wrap:wrap;gap:8px;align-items:center;min-height:var(--filter-h,48px);margin:-16px -18px 12px;padding:8px 18px;background:var(--c-surface);border-bottom:1px solid var(--c-line)}
 .panel-body .filter-scope{--thead-top:var(--filter-h,48px)}
 .data-table{width:100%}
@@ -720,3 +722,61 @@ body.replay #game::after{content:'';position:absolute;inset:0;border:3px solid v
 .bprio.prio-warn{background:var(--c-wait-bg);color:var(--c-wait-ink)}.bprio.prio-bad{background:var(--c-bad-bg);color:var(--c-bad-ink)}
 .bcard-detail{padding:0 6px 6px}
 .bcard-detail .card{margin:0;box-shadow:none}
+/* ---- 0.17 A05/A10-S: Lager- und Auftragstabelle, Auftrags-Tab der Betriebsleiste (Block am Dateiende) ---- */
+.sv-legend{margin:10px 0}
+.sv-wrap{border:1px solid var(--c-line);border-radius:var(--r-md);margin:8px 0 12px}
+.sv-table,.ov-table{width:100%;table-layout:fixed;border-collapse:separate;border-spacing:0;font-size:14px;line-height:1.35}
+.sv-table thead,.ov-table thead{position:sticky;top:0;z-index:2}
+.sv-table th,.ov-table th{font-size:12px;background:var(--c-surface-2);white-space:normal;vertical-align:bottom}
+.sv-table td,.ov-table td,.sv-table th,.ov-table th{padding:7px 6px;overflow-wrap:break-word;hyphens:auto;word-break:normal;vertical-align:top}
+.sv-table th,.ov-table th{text-transform:none;letter-spacing:0;font-size:12.5px;color:var(--c-ink-2)}
+.ov-table .chip{white-space:normal;display:inline-block;max-width:100%}
+.sv-table td button,.ov-table td button{font-size:13px}
+.sv-filters th{background:var(--c-surface);text-transform:none;letter-spacing:0;font-weight:400;color:var(--c-ink-2);padding:8px}
+.sv-bar{display:flex;flex-wrap:wrap;gap:6px;align-items:center}.sv-bar+.sv-bar{margin-top:6px}
+.sv-chip{font-size:13px;padding:4px 10px;border-radius:var(--r-pill);border:1px solid var(--c-line);background:var(--c-surface);color:var(--c-ink-2)}
+.sv-chip.on{background:var(--c-accent);border-color:var(--c-accent);color:var(--c-accent-ink)}
+.sv-chip.bad:not(.on){border-color:var(--c-bad);color:var(--c-bad-ink)}
+.sv-chip .sv-n{font-variant-numeric:tabular-nums;opacity:.85}
+.sv-count{margin-left:auto;font-size:13px;color:var(--c-muted)}
+.sv-basis-pick{display:inline-flex;gap:6px;flex-wrap:wrap}
+.sv-sort{background:transparent;border:0;padding:0;font:inherit;color:inherit;text-transform:inherit;letter-spacing:inherit;cursor:pointer;text-align:inherit}
+th.num .sv-sort{text-align:right}
+.sv-sort:hover,.sv-sort:focus-visible{color:var(--c-ink);text-decoration:underline}
+.sv-table .c-prod{width:26%}.sv-table .c-n{width:9%}.sv-table .c-loc{width:15%}.sv-table .c-res{width:32%}
+.sv-toggle{background:transparent;border:0;padding:0;font:inherit;color:var(--c-ink);text-align:left;cursor:pointer}
+.sv-toggle b{font-weight:var(--w-semi)}
+.sv-row.open>td{background:var(--c-surface-2)}
+.sv-sub>td{background:var(--c-surface-2);padding:4px 10px 12px}
+.sv-batches{font-size:13px;table-layout:auto;border:1px solid var(--c-line-2);border-radius:var(--r-md)}
+.sv-batches th{font-size:11px;position:static}
+.sv-incoming td{color:var(--c-muted);font-style:italic}
+.sv-extra{color:var(--c-wait-ink)}
+.sv-good{color:var(--c-ok-ink,var(--c-ok))}
+.sv-rescell small{display:block}
+.sv-basis{color:var(--c-muted);margin-bottom:4px}
+.sv-res{display:flex;flex-wrap:wrap;align-items:center;gap:2px 6px;padding:2px 0;font-size:13px}
+.sv-res-name{font-weight:var(--w-semi);color:var(--c-ink)}
+.sv-res-q{color:var(--c-ink-2)}
+.sv-res.warn .sv-res-q,.sv-warn-sym{color:var(--c-bad-ink)}
+.sv-plus{min-width:26px;height:24px;padding:0 6px;font-size:15px!important;line-height:1;font-weight:var(--w-bold);border-radius:var(--r-md);border:1px solid var(--c-accent-line);background:var(--c-accent-soft);color:var(--c-accent)}
+.sv-plus:hover,.sv-plus:focus-visible{background:var(--c-accent);color:var(--c-accent-ink)}
+.sv-link{background:transparent;border:0;padding:2px 0;font-size:13px;color:var(--c-accent);text-decoration:underline;cursor:pointer}
+.sv-quote{margin:4px 0;padding:8px 10px;background:var(--c-surface-2);border-radius:var(--r-md);color:var(--c-ink-2)}
+.ov-explain{margin:8px 0;font-size:14px}.ov-explain p{margin:6px 0}
+.ov-table .c-cust{width:18%}.ov-table .c-prod{width:11%}.ov-table .c-n{width:7%}.ov-table .c-due{width:13%}.ov-table .c-st{width:11%}.ov-table .c-act{width:11%}
+.ov-row.selected>td{box-shadow:inset 0 0 0 9999px var(--c-accent-soft)}
+.ov-row.open>td{background:var(--c-surface-2)}
+.ov-row.late>td:first-child{box-shadow:inset 3px 0 0 var(--c-bad)}
+.ov-sub>td{background:var(--c-surface-2);padding:6px 12px 12px}
+.ov-act{display:flex;flex-direction:column;align-items:flex-start;gap:4px}
+.ov-miss{color:var(--c-bad-ink)}.ov-wait{color:var(--c-wait-ink)}
+.ov-cover{margin:4px 0;font-size:14px}
+.ov-res ul{margin:4px 0 8px 18px;padding:0}.ov-res li{margin:2px 0}.ov-res li.warn{color:var(--c-bad-ink)}
+.ov-detail{margin-top:6px}
+.vbar-tabs{display:flex;gap:2px;align-items:center}
+.vbar-tab{display:flex;align-items:center;gap:7px;border:0;background:transparent;padding:6px 10px;border-radius:var(--r-md);color:var(--c-muted)}
+.vbar-tab b{font-size:var(--t-sm);font-weight:var(--w-semi);background:var(--c-surface-3);padding:1px 7px;border-radius:var(--r-pill);color:var(--c-ink)}
+.vbar-tab.on{background:var(--c-surface-2);color:var(--c-ink);box-shadow:inset 0 -2px 0 var(--c-accent)}
+.vbar-warn{font-size:var(--t-xs);font-weight:var(--w-semi);color:var(--c-bad-ink);background:var(--c-bad-bg);padding:1px 6px;border-radius:var(--r-pill)}
+.vrow.orow{grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) minmax(0,1.5fr) minmax(0,1fr) minmax(0,1fr)}
