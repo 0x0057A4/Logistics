@@ -11,6 +11,7 @@ import * as special from './special.js';
 import * as multimodal from './multimodal.js';
 import * as rental from './rental.js';
 import * as customerService from './customer-service.js';
+import * as disruptions from './disruptions.js';
 import * as contracts from './contracts.js';
 import * as yard from './yard.js';
 import * as sorting from './sorting.js';
@@ -21,7 +22,7 @@ import * as assistant from './assistant.js';
 import { BUILDINGS, ITEMS, RECIPES, VEHICLES, ROLES } from './catalog.js';
 import { reachable, footprint } from './world.js';
 // linehaul vor yard: Staplernutzung der Linienfahrt fließt wie bei transport/tours in denselben Akkutakt (yard.tickForklifts).
-const MODULES=[inventory,workforce,economy,transport,production,management,service,network,tours,special,multimodal,rental,customerService,contracts,linehaul,yard,sorting,containers,airexport,assistant];
+const MODULES=[inventory,workforce,economy,transport,production,management,service,network,tours,special,multimodal,rental,customerService,disruptions,contracts,linehaul,yard,sorting,containers,airexport,assistant];
 /** Ladegrenzen (A12, W1b). Text: 30 Mio. Zeichen. Listen: 100.000, `batches` 1.000.000 – Chargen wachsen im großen
  * Szenario um ≈ 650–1.770 je Spieltag und erreichten 100.000 nach ≈ 55 Tagen (PERF-SIM-0.9). Bei ≈ 210 Zeichen je Charge
  * greift für batches praktisch zuerst die Textgrenze (≈ 140.000 Chargen); die App warnt ab 60 % und speichert nichts,
