@@ -34,7 +34,7 @@ test('Fenster: Größe an Rändern/Ecken hält gegenüberliegende Kante, Mindest
 test('HUD 0.17: keine Inhaltsschrift unter 12 px, Leiste ohne Scrollbereich mit Gruppe „Mehr“, Panel-Kopf mit Maximieren',()=>{
  const css=fs.readFileSync(new URL('../dist/styles.css',import.meta.url),'utf8'),html=fs.readFileSync(new URL('../dist/index.html',import.meta.url),'utf8');
  // Geprüft wird der gemeinsame Grundstil; Blöcke anderer 0.17-Agenten am Dateiende verantworten diese selbst.
- const core=css.split(/\/\* ==== 0\.17 A0[4-8]/)[0];
+ const core=css.split(/\/\* [-=]{4} 0\.17 \(?A0[4-8]/)[0];
  const small=[...core.matchAll(/([^{}]+)\{[^}]*font-size:(\d+)px/g)].filter(m=>+m[2]<12).map(m=>m[1].trim());
  assert.deepEqual(small.filter(s=>!['.brand-sub','.bell-count','.checklist li>span'].includes(s)),[],'nur Logo-Untertitel, Zählerplakette und Häkchenkreis dürfen kleiner sein');
  assert.match(css,/--font:15px/);assert.doesNotMatch(css,/url\s*\(/,'portable CSS ohne externe Verweise');

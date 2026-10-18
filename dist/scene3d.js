@@ -4,6 +4,7 @@ import { footprint, reachable } from './world.js';
 import { Scene, vehicleActivity, vehicleAtSite, coldWarnings, disruptionView as dView, disruptionLabels as dLabels, workerVest as vest, WORKER_VEST as VEST } from './scene.js';
 import { AIRPORT } from './airexport.js';
 import { WEATHER_NAME } from './disruptions.js';
+import { displayName } from './ui-explain.js';
 
 // WebGL-Leitstand (S1). Liest nur den Spielzustand; Interpolation ändert ausschließlich Darstellung.
 // Weltmaß: 1 Rasterzelle = 1 Einheit. Zelle (x,y) liegt bei X=x..x+1, Z=y..y+1, Ursprung Hallenecke oben links.
@@ -1722,7 +1723,7 @@ export class Scene3D {
       this.boxes.push({ id: b.id, box });
       if (b.type === 'containeryard') { const u = cuse.get(b.id), full = u && u.used >= u.cap; this.infra.push({ id: b.id, x: cx, y: 2.45, z: cz, text: containerYardLabel(u), tone: full || tone === 'blocked' ? 'wait' : 'infra', prio: full || tone === 'blocked' ? 1 : 3 }); }
       else if (b.type === 'forklift') { const low = forkliftCharge(b) < FORK_MIN; this.infra.push({ id: b.id, x: cx, y: box.y1 + .75, z: cz, text: forkliftLabel(b), tone: low || tone === 'blocked' ? 'wait' : 'infra', prio: low || tone === 'blocked' ? 1 : 3 }); }
-      else this.infra.push({ id: b.id, x: cx, y: box.y1 + .75, z: cz, text: `${BUILDINGS[b.type]?.name || b.type} · ${this.buildingStatus(b)}`, tone: tone === 'blocked' || warn ? 'wait' : 'infra', prio: warn || tone === 'blocked' || (b.type === 'terminal' && b.freightTask) ? 1 : 3 });
+      else this.infra.push({ id: b.id, x: cx, y: box.y1 + .75, z: cz, text: `${displayName(st, b)} · ${this.buildingStatus(b)}`, tone: tone === 'blocked' || warn ? 'wait' : 'infra', prio: warn || tone === 'blocked' || (b.type === 'terminal' && b.freightTask) ? 1 : 3 });
       this.setInst(lamp, n, cx, box.y1 + .32, cz, 0, 1, 1, 1, warn ? TONE_HEX.blocked : TONE_HEX[tone]);
       this.setInst(plate, n, cx, .07, cz, 0, box.w + .12, 1, box.h + .12, tone === 'active' ? '#7fd9b4' : tone === 'blocked' || warn ? '#f3c674' : '#d7dfdb'); n++;
       if (/rack|shelf|regal/.test(b.type)) {
