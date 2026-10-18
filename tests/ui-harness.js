@@ -25,7 +25,15 @@ import {maxLoad,maintenanceCost,EXTERNAL_SERVICE,WEAR_WARN,deliverableAt} from '
 import {AIRPORT,AIR,handlingMinutes,tripCost,airportDistance,room as airRoom,nextFlight as airNextFlight} from '../dist/airexport.js';
 import {TICK as ASSIST_TICK,LOG_MAX as ASSIST_LOG_MAX} from '../dist/assistant.js';
 const html=fs.readFileSync(new URL('../dist/index.html',import.meta.url),'utf8');
-const code=fs.readFileSync(new URL('../dist/app.js',import.meta.url),'utf8').replace(/^import .*;$/gm,'');
+const source=fs.readFileSync(new URL('../dist/app.js',import.meta.url),'utf8');
+const code=source.replace(/^import .*;$/gm,'');
+// 0.17: Ansichtsmodule (ui-*.js, stock-view.js) automatisch mit ihren in app.js importierten Namen bereitstellen,
+// damit neue Module keine Änderung dieser Liste brauchen (paralleles Arbeiten ohne Konflikt an der Kontextzeile).
+const viewModules={};
+for(const [,names,file] of source.matchAll(/^import \{([^}]+)\} from '\.\/((?:ui-[\w-]+|stock-view)\.js)';$/gm)){
+ const mod=await import('../dist/'+file);
+ for(const part of names.split(',')){const [orig,alias]=part.trim().split(/\s+as\s+/);if(orig)viewModules[(alias||orig).trim()]=mod[orig.trim()];}
+}
 export async function boot(options={}){
  const downloads=[];
  const listeners={},nodes=new Map(),memory=options.memory||new Map();
@@ -41,7 +49,7 @@ export async function boot(options={}){
  // Spielstandspeicher: ohne options.indexedDB Rückfall localStorage (bisheriges Verhalten); mit Stub IndexedDB-Pfad.
  let context;
  const createSaveStore=opts=>realStore({...opts,storage:()=>context.localStorage,indexedDB:options.indexedDB??null,...(options.storeOptions||{})});
- context=vm.createContext({...catalog,injectPortableSave,portableTemplate,fetch:options.fetch,RENTAL_RATES,planTour:tours.planTour,committedQty:tours.committedQty,maxLoad,maintenanceCost,EXTERNAL_SERVICE,WEAR_WARN,createSaveGuard,createSaveStore,report,periods,assetInfo,accumulated,buildResearchMissing,sortSummary,CROSSBELT,MISSORT_EVERY,forkItem,BULKY_BASE,wareOf,shipperScore,shipperOf,SATISFACTION,disruptionsActive,weatherAt,WEATHER_NAME,WEATHER_FACTOR,TICKET_KIND_TEXT,TICKET_RESPONSE_MINUTES,coolingCapacity,coolingFree,SPECIALIST_FACTOR,Simulation,onShift,describeAssignment,workRate,UNLOAD_BASE,gateKey,unloadKey,forkliftKey,sitePowered,FORKLIFT,PALLET_BASE,YARD_WAIT,unitOf,itemOf,containersUnlocked,teuCapacity,teuUsed,TEU,TERMS,deliverySiteOf,laneSite,siteDistance,nextDeparture,MAX_DEPARTURES,LINE_WAIT,LINE_CUTOFF,deliverableAt,createReplayBuffer,REPLAY,maxOffset,parseSnapshot,AIRPORT,AIR,handlingMinutes,tripCost,airportDistance,airRoom,airNextFlight,ASSIST_TICK,ASSIST_LOG_MAX,Scene,document,window:{addEventListener(){}},localStorage:storage,matchMedia:()=>({matches:false}),performance:{now:()=>1000},setTimeout(){},clearTimeout(){},setInterval(){},Blob,URL,FormData:class{constructor(f){return Object.entries(f.values);}}});
+ context=vm.createContext({...catalog,...viewModules,injectPortableSave,portableTemplate,fetch:options.fetch,RENTAL_RATES,planTour:tours.planTour,committedQty:tours.committedQty,maxLoad,maintenanceCost,EXTERNAL_SERVICE,WEAR_WARN,createSaveGuard,createSaveStore,report,periods,assetInfo,accumulated,buildResearchMissing,sortSummary,CROSSBELT,MISSORT_EVERY,forkItem,BULKY_BASE,wareOf,shipperScore,shipperOf,SATISFACTION,disruptionsActive,weatherAt,WEATHER_NAME,WEATHER_FACTOR,TICKET_KIND_TEXT,TICKET_RESPONSE_MINUTES,coolingCapacity,coolingFree,SPECIALIST_FACTOR,Simulation,onShift,describeAssignment,workRate,UNLOAD_BASE,gateKey,unloadKey,forkliftKey,sitePowered,FORKLIFT,PALLET_BASE,YARD_WAIT,unitOf,itemOf,containersUnlocked,teuCapacity,teuUsed,TEU,TERMS,deliverySiteOf,laneSite,siteDistance,nextDeparture,MAX_DEPARTURES,LINE_WAIT,LINE_CUTOFF,deliverableAt,createReplayBuffer,REPLAY,maxOffset,parseSnapshot,AIRPORT,AIR,handlingMinutes,tripCost,airportDistance,airRoom,airNextFlight,ASSIST_TICK,ASSIST_LOG_MAX,Scene,document,window:{addEventListener(){}},localStorage:storage,matchMedia:()=>({matches:false}),performance:{now:()=>1000},setTimeout(){},clearTimeout(){},setInterval(){},Blob,URL,FormData:class{constructor(f){return Object.entries(f.values);}}});
  if(options.storageGetterError)Object.defineProperty(context,'localStorage',{get(){throw new DOMException('Access denied','SecurityError');}});
  vm.runInContext(code,context);await vm.runInContext('ready',context);
  const run=source=>vm.runInContext(source,context);
