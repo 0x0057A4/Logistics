@@ -12,7 +12,7 @@ Stand 18.10.2026. Grundlage: Nutzerauftrag vom 18.10.2026 („Nach Abschluss der
 
 ## Architekturentscheidungen (A01)
 
-- **Ein Fensterobjekt bleibt** (`#panel`), wird aber ein frei schwebendes Fenster: verschieben (Titelleiste), Größe ändern (Ränder/Ecken), maximieren/wiederherstellen, Mindestgröße, Klemmen in den sichtbaren Bereich bei Größenänderung. Geometrie je Fensterart in den vorhandenen Einstellungen (`prefs`, localStorage) unter `prefs.windows[panel]={x,y,w,h,max}`. Pointer-Ereignisse am Fenster werden nicht an die Szene durchgereicht.
+- **Ein Fensterobjekt bleibt** (`#panel`), wird aber ein frei schwebendes Fenster: verschieben (Titelleiste), Größe ändern (Ränder/Ecken), maximieren/wiederherstellen, Mindestgröße, Klemmen in den sichtbaren Bereich bei Größenänderung. Geometrie je Fensterart in den vorhandenen Einstellungen (`prefs`, localStorage) unter `prefs.windows[panel]={rx,ry,rw,rh,max}` (Anteile der Spielfläche, Referenz 1920 × 1080). Pointer-Ereignisse am Fenster werden nicht an die Szene durchgereicht.
 - **Neue Ansichtslogik in eigene Module**, damit parallele Arbeit wenig in `app.js` kollidiert. `app.js` erhält nur kurze Einhängepunkte.
   - `dist/ui-window.js` – Fenstersystem.
   - `dist/stock-view.js` – **gemeinsame, reine Bestandsberechnung** (keine DOM-Zugriffe) für Lager, Aufträge, Ressourcen und Auftragsleiste.
