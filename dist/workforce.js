@@ -6,10 +6,28 @@ export function onShift(w,t){const hour=(t%1440)/60;return w.shift==='all'||(w.s
 // Standardkraft (skill 1, Müdigkeit ≤ 50) liefert genau base.
 export const FATIGUE_SLOW=50;
 export const UNLOAD_BASE=20;   // Pakete je Minute einer Standard-Lagerkraft beim Entladen (yard.js)
-export const GATE_ROLE='warehouse'; // Torkontrolle: Wareneingang = Lagerkraft, keine eigene Rolle
+export const GATE_ROLE='warehouse'; // Rückfallrolle der Torkontrolle (Altbezeichner; seit 0.16 GATE_ROLES)
+// Personalrollen 0.16 (S2, A06): Spezialisten zuerst, Lagerkraft bleibt universeller Ersatz. Gleiche Aufgabenschlüssel
+// wie bisher (`${id}:warehouse`, `${id}:gate`), daher bleiben Vorrangregeln (sorting.js) und Anzeige gültig.
+export const FORK_ROLES=['forklift','warehouse']; // Staplerumschlag (Paletten, Sperrgut, Palettencontainer)
+export const GATE_ROLES=['gate','warehouse'];     // Torkontrolle Wareneingang
+export const SPECIALIST_FACTOR=1.25;
 export function workFactor(w){const skill=Math.min(1.5,Math.max(0,w?.skill??1)),f=Math.min(80,Math.max(0,w?.fatigue??0));return skill*(1-Math.max(0,f-FATIGUE_SLOW)/150);}
-export function workRate(w,base){return Math.max(1,Math.round(base*workFactor(w)));}
-export function createAPI(s,api){return {acquire(role,site,task){let w=s.workers.find(w=>w.task===task);if(w&&(!onShift(w,s.t)||w.training||w.relocation||w.breakRemaining>0||w.fatigue>=80||w.role!==role||w.site!==site)){w.task=null;w=null;}if(w)return w;w=s.workers.find(w=>w.role===role&&w.site===site&&!w.task&&!w.training&&!w.relocation&&!(w.breakRemaining>0)&&onShift(w,s.t)&&w.fatigue<80);if(w){w.task=task;w.activity='Unterwegs';}return w||null;},release(task){for(const w of s.workers)if(w.task===task){w.task=null;w.activity='Bereit';}}};}
+/** Leistung je Minute. Ohne passende Spezialrolle (role fehlt oder w.role≠role) unverändert round(base·Faktor).
+ * Spezialist (w.role===role): Faktor zusätzlich ×1,25. Mit Minute t ganzzahlig und zustandslos verteilt
+ * (floor(r·(t+1))−floor(r·t), mindestens 1) → Mengen exakt, Mittel r, Speichern/Laden bitgleich; ohne t der Mittelwert
+ * (nur Prognose/Anzeige). */
+export function workRate(w,base,role,t){
+ if(!role||w?.role!==role)return Math.max(1,Math.round(base*workFactor(w)));
+ const r=base*workFactor(w)*SPECIALIST_FACTOR;
+ if(t==null)return Math.max(1,r);
+ return Math.max(1,Math.floor(r*(t+1))-Math.floor(r*t));
+}
+/** Gleiche Gültigkeit wie acquire: Standort, Schicht, keine Fortbildung/Versetzung/Pause, Müdigkeit < 80 (ohne Bindung). */
+export function available(s,w,site){return w.site===site&&!w.training&&!w.relocation&&!(w.breakRemaining>0)&&onShift(w,s.t)&&w.fatigue<80;}
+/** Anzahl freier, einsatzbereiter Personen einer Rolle am Standort (lesend). */
+export function freeCount(s,role,site){let n=0;for(const w of s.workers)if(w.role===role&&!w.task&&available(s,w,site))n++;return n;}
+export function createAPI(s,api){return {acquire(role,site,task){let w=s.workers.find(w=>w.task===task);if(w&&(!onShift(w,s.t)||w.training||w.relocation||w.breakRemaining>0||w.fatigue>=80||w.role!==role||w.site!==site)){w.task=null;w=null;}if(w)return w;w=s.workers.find(w=>w.role===role&&w.site===site&&!w.task&&!w.training&&!w.relocation&&!(w.breakRemaining>0)&&onShift(w,s.t)&&w.fatigue<80);if(w){w.task=task;w.activity='Unterwegs';}return w||null;},acquireAny(roles,site,task){let w=s.workers.find(w=>w.task===task);if(w&&(!available(s,w,site)||!roles.includes(w.role))){w.task=null;w=null;}if(w)return w;for(const role of roles){w=s.workers.find(w=>w.role===role&&!w.task&&available(s,w,site));if(w){w.task=task;w.activity='Unterwegs';return w;}}return null;},release(task){for(const w of s.workers)if(w.task===task){w.task=null;w.activity='Bereit';}}};}
 export function handle(s,c,api){
  if(c.type==='hire'){if(!ROLES[c.role]||!s.sites.some(x=>x.id===(c.site||s.selectedSite)))return {ok:false,message:'Beruf oder Standort unbekannt.'};const id=api.id('worker'),r=ROLES[c.role];if(!api.book(`hire:${id}`,-r.hireCost,'personal','Einstellung '+r.name))return {ok:false,message:'Kapital reicht nicht.'};const names=['Mira','Jona','Lina','Emil','Nora','Timo','Ada','Levi'];s.workers.push({id,name:names[s.workers.length%names.length]+' '+id.split('-').at(-1),role:c.role,site:c.site||s.selectedSite,task:null,shift:'day',skill:1,fatigue:0,wage:r.wage,activity:'Bereit'});return {ok:true,id};}
  if(!['fire','train','setShift','moveWorker'].includes(c.type))return null;const w=s.workers.find(x=>x.id===c.id);if(!w)return {ok:false,message:'Person nicht gefunden.'};

@@ -17,7 +17,7 @@
 // Ausfall vor Abfahrt (Storno cancelLinehaul, Wartung über transport.maintainVehicle/serviceVehicleExternal):
 // Reservierung, Dock, Personal und Stapler frei, Pakete bleiben am Standort; nächste Abfahrt nimmt sie mit.
 import {ITEMS,VEHICLES} from './catalog.js';
-import {UNLOAD_BASE} from './workforce.js';
+import {UNLOAD_BASE,FORK_ROLES} from './workforce.js';
 import {acquireForklift,releaseForklift,useForklift,forkliftKey,PALLET,PALLET_BASE,BULKY,BULKY_BASE,forkItem,coldWait} from './yard.js';
 import {coolingCapacity,coolingFree} from './special.js';
 // 0.15 S2: lh.pallet = Staplerumschlag (Palette oder Sperrgut, yard.forkItem); Sperrgut wie Paletten direkt nach stock.
@@ -141,7 +141,7 @@ function handling(s,api,lh,site){
  if(!holdDock(s,lh,site)){lh.blocked=WAIT.dock;api.workforce.release(key(lh,'warehouse'));lh.worker=null;if(lh.pallet)releaseForklift(s,forkliftKey(lh.id));return false;}
  let fork=null;
  if(lh.pallet){const f=acquireForklift(s,site,forkliftKey(lh.id));if(!f.forklift){api.workforce.release(key(lh,'warehouse'));lh.worker=null;lh.blocked=f.reason;return false;}fork=f.forklift;}
- const w=api.workforce.acquire('warehouse',site,key(lh,'warehouse'));
+ const w=lh.pallet?api.workforce.acquireAny(FORK_ROLES,site,key(lh,'warehouse')):api.workforce.acquire('warehouse',site,key(lh,'warehouse')); // S2: Staplerumschlag
  if(!w){lh.worker=null;lh.blocked=WAIT.staff;if(fork)releaseForklift(s,forkliftKey(lh.id));return false;}
  w.activity=lh.status==='loading'?'Belädt Linien-Lkw':'Entlädt Linien-Lkw';lh.worker=w.id;lh.blocked=null;if(fork)useForklift(s,fork);
  return true;

@@ -10,7 +10,7 @@
 // damit Spielstände ohne Hub-Betrieb bitgleich bleiben).
 import {BUILDINGS, ITEMS} from './catalog.js';
 import {siteItemBatches} from './inventory.js';
-import {onShift, workRate} from './workforce.js';
+import {onShift, workRate, freeCount} from './workforce.js';
 import {forkliftAvailable, forkliftKey, COLD, forkItem} from './yard.js';
 import {coolingCapacity, coolingFree} from './special.js';
 import {staffNeed as containerNeed} from './containers.js';
@@ -55,20 +55,20 @@ function resortList(s, site) {
 // `${arrival.id}:warehouse`). So viele freie Lagerkräfte bleiben fürs Entladen reserviert; reicht das nicht, geben
 // Sortierbindungen ihre Person ab (zuerst Handsortierung, dann Sortierplätze von hinten). yard.step läuft vor
 // sorting.step und bindet die freigegebene Person in der nächsten Minute.
-function unloadNeed(s, site) {
+function unloadNeed(s, site, out) {
   if (!s.yard?.length) return 0;
   let n = 0;
   for (const a of s.yard) {
     if (a.site !== site) continue;
     // Torkontrolle (A06 W1b, yard-Schlüssel `${arrival.id}:gate`) hat denselben Vorrang wie das Entladen.
-    if (a.phase === 'gate') { if (!s.workers.some(w => w.task === `${a.id}:gate`)) n++; continue; }
+    if (a.phase === 'gate') { if (!s.workers.some(w => w.task === `${a.id}:gate`)) { n++; if (out) out.gate++; } continue; }
     if ((a.phase !== 'docking' && a.phase !== 'unloading') || a.unloaded >= a.parcels) continue;
     // Paletten (W2-S2) gehen nicht durchs Sortieren; ohne einsatzbereiten Stapler braucht die Entladung keine Lagerkraft.
     if (forkItem(a.item) && !forkliftAvailable(s, site, forkliftKey(a.id))) continue;
     // Kühlpakete ohne freien Kühlplatz warten ohne Lagerkraft (yard.js) → kein Vorrang.
     if (a.item === COLD && coolingFree(s, site) < 1) continue;
     const key = `${a.id}:warehouse`;
-    if (!s.workers.some(w => w.task === key) && s.buildings.some(b => b.id === a.dock && b.enabled && b.condition > 0)) n++;
+    if (!s.workers.some(w => w.task === key) && s.buildings.some(b => b.id === a.dock && b.enabled && b.condition > 0)) { n++; if (out && forkItem(a.item)) out.fork++; }
   }
   return n;
 }
@@ -78,15 +78,15 @@ function unloadNeed(s, site) {
 // sorting.step und binden die freigegebene Person in der nächsten Minute. So wartet kein Fahrzeug dauerhaft aufs Sortieren.
 let loadPriority = true; // nur für Gegenprobe-Tests abschaltbar
 export function setLoadPriority(on) { loadPriority = !!on; }
-function loadNeed(s, site) {
+function loadNeed(s, site, out) {
   if (!loadPriority) return 0;
   let n = 0;
   const waits = (id, at) => !s.workers.some(w => w.task === `${id}:warehouse`) && s.workers.some(w => w.task === `${id}:driver`)
     && s.buildings.some(b => b.task === id && b.type === 'dock' && b.site === at && b.enabled && b.condition > 0);
   // Palettenbeladung (W2-S2) ohne einsatzbereiten Stapler bindet keine Lagerkraft → kein Vorrang.
   const noFork = (id, pallet) => pallet && !forkliftAvailable(s, site, forkliftKey(id));
-  for (const sh of s.shipments || []) if (sh.status === 'loading' && sh.site === site && waits(sh.id, site) && !noFork(sh.id, palletOrder(s, sh.orderId))) n++;
-  for (const t of s.tours || []) if ((t.status === 'loading' || t.status === 'returnUnloading') && t.site === site && waits(t.id, site) && !(t.status === 'loading' && noFork(t.id, t.stops.some(x => forkItem(x.item))))) n++;
+  for (const sh of s.shipments || []) if (sh.status === 'loading' && sh.site === site && waits(sh.id, site) && !noFork(sh.id, palletOrder(s, sh.orderId))) { n++; if (out && palletOrder(s, sh.orderId)) out.fork++; }
+  for (const t of s.tours || []) if ((t.status === 'loading' || t.status === 'returnUnloading') && t.site === site && waits(t.id, site) && !(t.status === 'loading' && noFork(t.id, t.stops.some(x => forkItem(x.item))))) { n++; if (out && t.status === 'loading' && t.stops.some(x => forkItem(x.item))) out.fork++; }
   for (const tr of s.transfers || []) {
     const at = tr.status === 'loading' ? tr.site : tr.status === 'unloading' ? tr.toSite : null;
     if (at === site && waits(tr.id, site)) n++;
@@ -94,7 +94,7 @@ function loadNeed(s, site) {
   // Linienfahrt (W3-S2): Beladen am Start vor Ladeende, Entladen am Ziel; Fahrpersonal ist dem Startstandort gebunden.
   for (const lh of s.linehauls || []) {
     const at = lh.status === 'loading' && !lh.loadDone ? lh.from : lh.status === 'unloading' && lh.remaining > 0 ? lh.to : null;
-    if (at === site && waits(lh.id, site) && !noFork(lh.id, lh.pallet)) n++;
+    if (at === site && waits(lh.id, site) && !noFork(lh.id, lh.pallet)) { n++; if (out && lh.pallet) out.fork++; }
   }
   return n;
 }
@@ -148,7 +148,14 @@ export function step(s, api) {
     };
     // Personalvergabe mit Vorrang fürs Entladen und Beladen (s. unloadNeed, loadNeed).
     // Containerumschlag (W3b-S2) hat denselben Vorrang wie das Entladen von Hof-Lkw.
-    const need = unloadNeed(s, id) + loadNeed(s, id) + containerNeed(s, id), yielded = new Set();
+    // 0.16 S2: Stapler- bzw. Torbedarf, den freie Staplerfahrer/Torposten decken (acquireAny bindet sie zuerst),
+    // zieht keine Sortierkraft ab. Spezialisten selbst sortieren nie (ready: nur Lagerkraft). Ohne Spezialisten
+    // ist cover 0 und der Ablauf bitgleich.
+    const out = {fork:0, gate:0};
+    let need = unloadNeed(s, id, out) + loadNeed(s, id, out) + containerNeed(s, id, out);
+    const yielded = new Set();
+    if (out.fork) need -= Math.min(out.fork, freeCount(s, 'forklift', id));
+    if (out.gate) need -= Math.min(out.gate, freeCount(s, 'gate', id));
     let spare = Infinity;
     if (need) {
       spare = freeWarehouse(s, id) - need;

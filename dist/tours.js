@@ -2,6 +2,7 @@ import {ITEMS,VEHICLES} from './catalog.js';
 import {returnSources} from './service.js';
 import {onShift} from './workforce.js';
 import {acquireForklift,releaseForklift,useForklift,forkliftKey,forkItem} from './yard.js';
+import {FORK_ROLES} from './workforce.js';
 const active=t=>!['complete','cancelled'].includes(t.status);
 // Mehrwertdienst (vas, 0.15 S3): Fertigware gehört dem Auftrag wie bei Fremdlogistik.
 const owner=o=>o.kind==='logistics'||o.kind==='vas'?o.id:'company';
@@ -91,7 +92,7 @@ export function step(s,api){for(const t of s.tours||[]){
   // QS-W2-01: Ladezeit erfüllt → Abfahrt ohne Stapler/Lagerkraft prüfen, kein Akkuverbrauch beim Warten.
   if(t.loadDone){if(pallet)releaseForklift(s,forkliftKey(t.id));api.workforce.release(`${t.id}:warehouse`);t.worker=null;}else{
   let fork=null;if(pallet){const f=acquireForklift(s,t.site,forkliftKey(t.id));if(!f.forklift){api.workforce.release(`${t.id}:warehouse`);t.worker=null;t.blocked=f.reason;continue;}fork=f.forklift;}
-  const worker=api.workforce.acquire('warehouse',t.site,`${t.id}:warehouse`);if(!worker){t.blocked='Lagerpersonal fehlt';if(fork)releaseForklift(s,forkliftKey(t.id));continue;}t.worker=worker.id;t.blocked=null;if(fork)useForklift(s,fork);if(--t.remaining>0)continue;t.loadDone=true;}
+  const worker=pallet?api.workforce.acquireAny(FORK_ROLES,t.site,`${t.id}:warehouse`):api.workforce.acquire('warehouse',t.site,`${t.id}:warehouse`);if(!worker){t.blocked='Lagerpersonal fehlt';if(fork)releaseForklift(s,forkliftKey(t.id));continue;}t.worker=worker.id;t.blocked=null;if(fork)useForklift(s,fork);if(--t.remaining>0)continue;t.loadDone=true;}
   const allValid=t.stops.every(stop=>{const rs=s.reservations.filter(r=>r.job===stop.reservationKey);return rs.reduce((n,r)=>n+r.qty,0)===stop.qty&&rs.every(r=>{const b=s.batches.find(b=>b.id===r.batchId);return b&&!b.blocked&&!b.locked&&b.qty>=r.qty&&b.reserved>=r.qty&&b.owner===stop.owner&&b.item===stop.item;});});if(!allValid){t.blocked='Reservierte Gesamtladung gesperrt oder unvollständig';t.remaining=1;/* QS-W2-01 */if(pallet)releaseForklift(s,forkliftKey(t.id));api.workforce.release(`${t.id}:warehouse`);continue;}
   const cost=cents((t.stops.reduce((n,x)=>n+x.distance,0)+t.returnDistance)*VEHICLES[v.type].runningCost);if(s.money<cost){t.blocked='Fahrtkosten nicht gedeckt';t.remaining=1;/* QS-W2-01 */if(pallet)releaseForklift(s,forkliftKey(t.id));api.workforce.release(`${t.id}:warehouse`);continue;}
   // Alle Reservierungen vorab geprüft; synchrone Fahrzeugtransfers benötigen keinen Lagerplatz.
