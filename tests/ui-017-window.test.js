@@ -19,6 +19,7 @@ test('Fenster: Startgröße wie bisher (rechts, volle Höhe; breite Fensterarten
  assert.deepEqual(defaultGeom(a),{x:1366-60-460,y:12,w:460,h:682-12-8});
  const wide=defaultGeom(a,{wide:true});assert.equal(wide.w,686);assert.equal(wide.x+wide.w,1366-60);
  assert.equal(defaultGeom({w:1920,h:1000},{wide:true}).w,860);
+ const tab=defaultGeom(a,{table:true});assert.equal(tab.w,1366-60-360,'Tabellenfenster rechts neben dem Standortfluss');assert.equal(tab.x,360);assert.equal(defaultGeom({w:1920,h:1000},{table:true}).w,1100);
  assert.deepEqual(maxGeom(a,{left:86}),{x:86,y:8,w:1366-86-8,h:682-16});
 });
 

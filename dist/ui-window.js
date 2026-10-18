@@ -19,9 +19,10 @@ export function clampGeom(g, area, min = WIN_MIN) {
 }
 
 /** Startgröße wie bisher: rechts neben der Werkzeugleiste, volle Höhe; breite Fensterarten (Tabellen) breiter. */
-export function defaultGeom(area, { wide = false, right = 60, top = 12 } = {}) {
+export function defaultGeom(area, { wide = false, table = false, right = 60, top = 12 } = {}) {
   const aw = num(area?.w, 1280), ah = num(area?.h, 700);
-  const w = wide ? Math.max(440, Math.min(860, aw - 680)) : Math.max(380, Math.min(460, aw - 420));
+  // table: große Tabellen (Lager, Aufträge, Board) starten rechts neben dem Standortfluss (bis 1100 px), liegen also über den Kennzahlen.
+  const w = table ? Math.max(440, Math.min(1100, aw - right - 360)) : wide ? Math.max(440, Math.min(860, aw - 680)) : Math.max(380, Math.min(460, aw - 420));
   return clampGeom({ x: aw - right - w, y: top, w, h: ah - top - WIN_GAP }, area);
 }
 
@@ -64,7 +65,7 @@ export function createPanelWindow({ panel, game, load = () => null, save = () =>
   if (!panel?.querySelector || !panel.appendChild || !game?.getBoundingClientRect || !doc?.createElement) return null;
   const head = panel.querySelector('.panel-head'), maxBtn = panel.querySelector('#panelMax');
   for (const d of DIRS) { const h = doc.createElement('div'); h.className = 'win-rs win-rs-' + d; h.dataset.dir = d; h.setAttribute('aria-hidden', 'true'); panel.appendChild(h); }
-  let key = '', wide = false, geom = null, max = false;
+  let key = '', wide = false, table = false, geom = null, max = false;
   const area = () => {
     const sb = doc.querySelector('.statusbar')?.offsetHeight || 28;
     return { w: game.clientWidth, h: Math.max(1, game.clientHeight - sb) };
@@ -100,9 +101,9 @@ export function createPanelWindow({ panel, game, load = () => null, save = () =>
   }
   const persist = () => { if (key && geom) save(key, { ...clampGeom(geom, area()), max }); };
   function open(k, opts = {}) {
-    key = String(k || ''); wide = !!opts.wide;
+    key = String(k || ''); wide = !!opts.wide; table = !!opts.table;
     const stored = readGeom(load(key));
-    geom = stored ? clampGeom(stored, area()) : defaultGeom(area(), { wide });
+    geom = stored ? clampGeom(stored, area()) : defaultGeom(area(), { wide, table });
     max = !!stored?.max; apply();
   }
   function close() { panel.classList.remove('maximized'); doc.body?.style?.removeProperty?.('--pw-open'); }
