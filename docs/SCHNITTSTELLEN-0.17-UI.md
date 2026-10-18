@@ -7,7 +7,7 @@ Stand 18.10.2026. Grundlage: Nutzerauftrag vom 18.10.2026 („Nach Abschluss der
 - Bestehende Mechaniken, Speicherfunktionen und Spielstände bleiben erhalten. Kein Frameworkwechsel, kein Neuaufbau.
 - Nur echte Simulationsdaten. Keine erfundenen Bestände, Prognosen oder Platzhalter.
 - Deutsch. **Assistent bleibt unverändert.** **Keine Zeitsprünge/Daily Jumps.** Keine neue Forschungsgestaltung.
-- Prüfauflösungen 1366 × 768 und 1920 × 1080 (Skalierung 100 %).
+- **Referenzauflösung 1920 × 1080** (Nutzer, 18.10.2026: „Fenster sollen mitskalieren“). Fenstergeometrie relativ zur Spielfläche; zusätzlich geprüft bei 1366 × 768 (Skalierung 100 %).
 - Darstellung bucht weder Ware noch Geld; Änderungen nur über vorhandene oder neue geprüfte Befehle.
 
 ## Architekturentscheidungen (A01)
