@@ -282,7 +282,7 @@ body.flow-collapsed .flow-toggle .ic{transform:rotate(-90deg)}
 .metric b{display:block;margin-top:4px;font-size:1.5em;font-weight:var(--w-semi);letter-spacing:-.02em;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .metric .unit{font-size:.52em;font-weight:var(--w-med);color:var(--c-muted);letter-spacing:0;margin-left:4px}
 .metric.tone-wait b{color:var(--c-wait-ink)}.metric.tone-bad b{color:var(--c-bad-ink)}.metric.tone-move b{color:var(--c-accent)}
-.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.form-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}
 .field{display:flex;flex-direction:column;gap:6px;font-size:10px;color:var(--c-muted);font-weight:var(--w-med)}
 .field.full{grid-column:1/-1}
 .field select,.field input{font-size:12px;color:var(--c-ink)}
@@ -524,3 +524,12 @@ body.replay #game::after{content:'';position:absolute;inset:0;border:3px solid v
 .ware-chip{font-size:.86em}
 .vas-materials{margin-top:10px;padding-top:8px;border-top:1px solid var(--c-line)}
 .vas-materials h4{font-size:var(--t-sm,12px);margin:0}
+/* 0.16 (A10): Wetter & Störungen, Versenderzufriedenheit, Rollenhinweise */
+.site-weather{display:inline-flex;align-items:center;gap:3px;margin-right:6px;font-weight:var(--w-semi);vertical-align:bottom}
+.site-weather .ic{width:12px;height:12px}
+.site-weather.bad-weather{color:var(--c-wait-ink)}
+.wx-cell{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}.wx-cell .ic{width:16px;height:16px}
+.disruption-row>div{min-width:0}.disruption-row .num{flex:none;text-align:right;white-space:nowrap}
+.progress.sat{margin:4px 0 2px}.progress.sat.low>span{background:var(--c-bad)}.progress.sat.high>span{background:var(--c-ok)}
+.sat-line{font-weight:400}.sat-cell{min-width:110px}
+.role-hints{margin:10px 0 0}.role-hints .fine{margin:4px 0}

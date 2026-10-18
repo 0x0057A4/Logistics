@@ -1,8 +1,9 @@
 import * as THREE from './vendor/three.module.min.js';
 import { BUILDINGS, VEHICLES } from './catalog.js';
 import { footprint, reachable } from './world.js';
-import { Scene, vehicleActivity, vehicleAtSite, coldWarnings } from './scene.js';
+import { Scene, vehicleActivity, vehicleAtSite, coldWarnings, disruptionView as dView, disruptionLabels as dLabels, workerVest as vest, WORKER_VEST as VEST } from './scene.js';
 import { AIRPORT } from './airexport.js';
+import { WEATHER_NAME } from './disruptions.js';
 
 // WebGL-Leitstand (S1). Liest nur den Spielzustand; Interpolation ändert ausschließlich Darstellung.
 // Weltmaß: 1 Rasterzelle = 1 Einheit. Zelle (x,y) liegt bei X=x..x+1, Z=y..y+1, Ursprung Hallenecke oben links.
@@ -191,9 +192,11 @@ export function rackPallets(state, rack) {
 }
 /** Figurenposition wie scene.js (Anlage der aktuellen Tätigkeit, sonst Aufenthaltsfläche). */
 export function workerSpots(state, site, buildings) {
-  const out = []; let i = 0;
+  const out = []; let i = 0, g = 0, gz = null;
   for (const w of state?.workers || []) {
     if (w.site !== site.id) continue;
+    // 0.16: gebundene Torkontrolle (Aufgabe „…:gate“) steht am Pförtnerhaus der Hofeinfahrt.
+    if (typeof w.task === 'string' && w.task.endsWith(':gate')) { gz ??= yardLayout(site).yardGateZ; out.push({ id: w.id, role: w.role, x: -3.95 + (g % 2) * .3, z: gz + 1.0 + Math.floor(g / 2) * .4 }); g++; continue; }
     const job = state.jobs?.find(j => j.id === w.task || j.worker === w.id) || state.research?.find(j => j.id === w.task || j.worker === w.id);
     const plain = w.task?.replace?.(/:(warehouse|driver|technician|service)$/, '');
     const b = buildings.find(b => b.id === job?.building || b.id === w.task || (w.task && b.task === plain) || (w.task && b.maintenanceTask === w.task) || (w.task && b.serviceJob === plain));
@@ -308,12 +311,12 @@ export const NET_PIN_R = 2.2, NET_OFFSET = .55, NET_WIDTH = .32;
 export const NET_TONE = { active: '#3f8f78', inactive: '#a9b3ae' };
 /** Linien der Netzansicht: Verbindung Start → Ziel zwischen den Pins, um den Pinradius gekürzt und quer versetzt (Gegenrichtung liegt daneben). */
 export function networkLines(state, pins) {
-  const out = [];
+  const out = [], seen = new Map(), jams = site => { if (!seen.has(site)) seen.set(site, state?.disruptions ? disruptionView(state, site).lineJams : {}); return seen.get(site); };
   for (const l of state?.lines || []) {
     const a = pins.find(p => p.id === l.from), b = pins.find(p => p.id === l.to); if (!a || !b) continue;
     const dx = b.x - a.x, dz = b.z - a.z, len = Math.hypot(dx, dz); if (len < 1e-6) continue;
     const ux = dx / len, uz = dz / len, nx = -uz * NET_OFFSET, nz = ux * NET_OFFSET, cut = Math.min(NET_PIN_R, len * .3);
-    out.push({ id: l.id, from: l.from, to: l.to, active: l.active !== false, x0: a.x + ux * cut + nx, z0: a.z + uz * cut + nz, x1: b.x - ux * cut + nx, z1: b.z - uz * cut + nz, heading: Math.atan2(dz, dx) });
+    out.push({ id: l.id, from: l.from, to: l.to, active: l.active !== false, jam: jams(l.from)[l.id] || 0, x0: a.x + ux * cut + nx, z0: a.z + uz * cut + nz, x1: b.x - ux * cut + nx, z1: b.z - uz * cut + nz, heading: Math.atan2(dz, dx) });
   }
   return out;
 }
@@ -324,7 +327,7 @@ export function networkLineMesh(lines) {
   const pos = [], colr = [], y = .05, ya = .055;
   const rgb = h => { const n = parseInt(h.slice(1), 16); return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255]; };
   for (const l of lines) {
-    const c = rgb(l.active ? NET_TONE.active : NET_TONE.inactive), dx = l.x1 - l.x0, dz = l.z1 - l.z0, len = Math.hypot(dx, dz); if (len < 1e-6) continue;
+    const c = rgb(l.jam > 0 ? jamTone(l.jam) : l.active ? NET_TONE.active : NET_TONE.inactive), dx = l.x1 - l.x0, dz = l.z1 - l.z0, len = Math.hypot(dx, dz); if (len < 1e-6) continue;
     const ux = dx / len, uz = dz / len, w = NET_WIDTH / 2, nx = -uz * w, nz = ux * w;
     const quad = [[l.x0 + nx, l.z0 + nz], [l.x1 + nx, l.z1 + nz], [l.x1 - nx, l.z1 - nz], [l.x0 - nx, l.z0 - nz]];
     for (const i of [0, 1, 2, 0, 2, 3]) { pos.push(quad[i][0], y, quad[i][1]); colr.push(...c); }
@@ -487,6 +490,65 @@ export function nightLights(site, L = yardLayout(site), docks = [], yards = [], 
   for (const y of yards.slice(0, 6)) pools.push({ x: y.x, z: y.z, y: .1, r: 2.6, k: .6, cone: false, h: 0 });
   return { masts, heads, pools };
 }
+
+// ---------- Wetter und Störungen (0.16, A09): nur Darstellung aus disruptions.weatherAt/active, kein Spielzustand ----------
+
+/** Gemeinsame Lesesicht und Westenfarben aus scene.js (2D-Rückfall nutzt dieselben). */
+export const disruptionView = dView;
+export const disruptionLabels = dLabels;
+export const WORKER_VEST = VEST;
+export const workerVest = vest;
+/**
+ * Erscheinung je Wetterlage. sky/skyMix: Himmel-/Nebelfarbe (Anteil), light: Faktor Licht, fog: 0…1 Nebelzug (1 = dichter Nebel),
+ * ground/groundA: Bodentönung außerhalb der Halle (Farbe, Deckkraft), precip: 'rain'|'snow'|null, slant: Schräglage (Welteinheiten je Fallhöhe),
+ * speed: Fallgeschwindigkeit (Welteinheiten je Sekunde Echtzeit bei laufender Uhr), len: Strichlänge Regen.
+ */
+export const WEATHER_LOOK = {
+  clear: { sky: null, skyMix: 0, light: 1, fog: 0, ground: null, groundA: 0, precip: null, slant: 0, speed: 0, len: 0 },
+  rain: { sky: '#7f8d93', skyMix: .32, light: .86, fog: .25, ground: '#4a5a60', groundA: .14, precip: 'rain', slant: .12, speed: 15, len: .55 },
+  storm: { sky: '#4c5760', skyMix: .55, light: .68, fog: .4, ground: '#3c4a50', groundA: .2, precip: 'rain', slant: .6, speed: 21, len: .8 },
+  snow: { sky: '#e8ecef', skyMix: .3, light: .95, fog: .35, ground: '#ffffff', groundA: .4, precip: 'snow', slant: .06, speed: 1.2, len: 0 },
+  fog: { sky: '#cfd5d5', skyMix: .58, light: .88, fog: 1, ground: null, groundA: 0, precip: null, slant: 0, speed: 0, len: 0 }
+};
+/** Regenstriche je Qualitätsstufe (Schnee 70 %). Niedrig: keine Partikel, nur Tönung (Himmel, Licht, Nebel, Boden). */
+export const WEATHER_PARTICLES = { low: 0, medium: 700, high: 1600 };
+/** Partikelvolumen um das Blickziel: halbe Kantenlänge und Höhe (Welteinheiten). */
+export const WEATHER_VOLUME = { r: 34, h: 12 };
+/** Weicher Übergang: Spielminuten je vollem Ein-/Ausblenden, mindestens WEATHER_FADE_S Sekunden Echtzeit (hohes Spieltempo). */
+export const WEATHER_FADE_MIN = 20, WEATHER_FADE_S = .6;
+/** Partikelzahl je Stufe, Wetter und Bewegungseinstellung (reduzierte Bewegung → 0, nur Tönung). */
+export function weatherParticles(level, kind, reduced = false) {
+  const p = WEATHER_LOOK[kind]?.precip; if (!p || reduced) return 0;
+  const n = WEATHER_PARTICLES[level] ?? WEATHER_PARTICLES.high; return p === 'snow' ? Math.round(n * .7) : n;
+}
+/** Fallphase: rückt nur bei laufender Anzeigeuhr (dClock > 0) mit der Frame-Zeit vor; Pause/Rücksprung friert ein. Bereich [0, period). */
+export function weatherAdvance(phase, dClock, dt, speed, period = WEATHER_VOLUME.h) {
+  if (!(dClock > 0) || !(dt > 0) || !(speed > 0) || !(period > 0)) return phase;
+  return (phase + speed * Math.min(dt, .1)) % period;
+}
+/**
+ * Übergang zur Zielwetterlage: altes Wetter blendet aus, danach das neue ein. wx={kind, amount 0…1} wird verändert.
+ * Fortschritt aus Spielminuten der Anzeigeuhr (gedeckelt durch Echtzeit); snap setzt sofort. Liefert true bei Änderung.
+ */
+export function weatherStep(wx, target, dClock, dt, snap = false) {
+  const k0 = wx.kind, a0 = wx.amount; if (!WEATHER_LOOK[target]) target = 'clear';
+  if (snap) { wx.kind = target; wx.amount = target === 'clear' ? 0 : 1; return wx.kind !== k0 || wx.amount !== a0; }
+  const step = Math.min(Math.max(0, dClock || 0) / WEATHER_FADE_MIN, Math.max(0, dt || 0) / WEATHER_FADE_S);
+  if (!(step > 0)) return false;
+  if (wx.kind !== target) { wx.amount -= step; if (wx.amount <= 0) { wx.kind = target; wx.amount = 0; } }
+  else if (target !== 'clear') wx.amount = Math.min(1, wx.amount + step);
+  return wx.kind !== k0 || wx.amount !== a0;
+}
+export const FOG_BASE = { near: 70, far: 150 };
+/** Nebelgrenzen (linear) aus Wetter, Stärke und Kameraabstand D zum Blickziel; klar → FOG_BASE. */
+export function weatherFog(kind, amount, D) {
+  const f = (WEATHER_LOOK[kind]?.fog || 0) * Math.max(0, Math.min(1, amount || 0)); if (!(f > 0)) return { ...FOG_BASE };
+  const d = Math.max(8, D || 40), tn = Math.min(FOG_BASE.near, d * .42), tf = Math.min(FOG_BASE.far, Math.max(tn + 12, d * 1.75));
+  return { near: FOG_BASE.near + (tn - FOG_BASE.near) * f, far: FOG_BASE.far + (tf - FOG_BASE.far) * f };
+}
+/** Netzlinien-Ton bei Stau: ab 40 % Zusatzfahrtzeit rot, sonst orange. */
+export const JAM_TONE = { light: '#e08a2c', heavy: '#cf4a3c' };
+export function jamTone(pct) { return pct >= 40 ? JAM_TONE.heavy : JAM_TONE.light; }
 
 // ---------- Kamerarundgang und Verfolgen (W2c), nur Darstellung ----------
 
@@ -1014,6 +1076,15 @@ class Parts {
   }
 }
 
+let SIGN = null;
+/** Warndreieck (gelbes Prisma, dunkles Ausrufezeichen beidseitig), Mitte (x,y,z), Größe s, Drehung rot um y. */
+function warnSign(P, x, y, z, s = 1, rot = 0) {
+  const tri = SIGN ||= new THREE.CylinderGeometry(.5, .5, 1, 3).rotateX(-Math.PI / 2);
+  P.base.compose(_p.set(x, y, z), _q.setFromAxisAngle(_up, rot), _s.set(1, 1, 1));
+  _m.makeScale(1.25 * s, 1.25 * s, .06); P.add(tri, _m, '#f2c230');
+  P.box(-.045 * s, -.06 * s, -.05, .09 * s, .34 * s, .1, '#2b2b2b'); P.box(-.045 * s, -.22 * s, -.05, .09 * s, .09 * s, .1, '#2b2b2b');
+  P.base.identity();
+}
 /** Low-Poly-Modell einer Anlage im unrotierten Grundriss d.w × d.h, Ursprung Mitte. */
 function buildingModel(P, type, d) {
   const hw = d.w / 2, hh = d.h / 2, tint = d.color || '#42a594';
@@ -1191,10 +1262,17 @@ export class Scene3D {
     const hemi = this.hemi = new THREE.HemisphereLight(0xf6f9ff, 0xb5c2a2, 2.1); scene.add(hemi);
     const sun = this.sun = new THREE.DirectionalLight(0xfff4e2, 2.0); sun.position.set(-18, 34, 22); scene.add(sun);
     this.themeMode = 'auto'; this.themeKey = null; this.themeNow = null; this.camMode = null;
+    // 0.16 Wetter/Störungen (nur Darstellung): Übergangszustand, Fallphase, Lesesicht disruptionView, Störungs-Chips.
+    this.wx = { kind: 'clear', amount: 0 }; this.wxTarget = 'clear'; this.wxSnap = true; this.wxPhase = 0; this.wxClock = null; this.wxKey = ''; this.wxPrecipKey = ''; this.wxSite = null;
+    this.dv = disruptionView(null, null); this.hallDark = false; this.dLabels = []; this.lightArgs = null;
     this.persp = new THREE.PerspectiveCamera(40, 1, .5, 400); this.ortho = new THREE.OrthographicCamera(-10, 10, 10, -10, .5, 400);
     this.mat = { solid: new THREE.MeshLambertMaterial({ vertexColors: true }), inst: new THREE.MeshLambertMaterial({ vertexColors: true }), lamp: new THREE.MeshBasicMaterial({ color: 0xffffff }), plate: new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: .55, depthWrite: false }), ghost: new THREE.MeshLambertMaterial({ color: 0x55caad, transparent: true, opacity: .55, depthWrite: false }), grid: new THREE.LineBasicMaterial({ color: 0x6f858b, transparent: true, opacity: .22 }), select: new THREE.LineBasicMaterial({ color: 0x199b83 }), route: new THREE.LineDashedMaterial({ color: 0x4f9a85, dashSize: .8, gapSize: .6 }), air: new THREE.LineDashedMaterial({ color: 0x3f6fa8, dashSize: 1.1, gapSize: .7 }), net: new THREE.LineBasicMaterial({ color: 0xa9b8ae }), netline: new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide }),
       // Nachtbeleuchtung ohne Echtzeitlichter: Leuchtkörper (unbeleuchtet) und additive Lichtkegel/-flächen mit Verlauf in der Vertexfarbe.
-      head: new THREE.MeshBasicMaterial({ vertexColors: true, color: 0x9aa39f }), glow: new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }) };
+      head: new THREE.MeshBasicMaterial({ vertexColors: true, color: 0x9aa39f }), glow: new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }),
+      // 0.16 Wetter: Regenstriche (Linien), Schneeflocken (Punkte, feste Pixelgröße), Bodentönung; Störungsmarker unbeleuchtet (auch nachts lesbar).
+      rain: new THREE.LineBasicMaterial({ color: 0xd5dee4, transparent: true, opacity: .55, depthWrite: false }), snow: new THREE.PointsMaterial({ color: 0xffffff, size: 2.6, sizeAttenuation: false, transparent: true, opacity: .92, depthWrite: false }),
+      wground: new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthWrite: false }), warn: new THREE.MeshBasicMaterial({ vertexColors: true }), beacon: new THREE.MeshBasicMaterial({ color: 0xff3b30 }),
+      dim: new THREE.MeshBasicMaterial({ color: 0x1b2730, transparent: true, opacity: .24, depthWrite: false }) };
     this.siteGroup = new THREE.Group(); this.netGroup = new THREE.Group(); scene.add(this.siteGroup, this.netGroup);
     this.createDynamic();
 
@@ -1262,7 +1340,7 @@ export class Scene3D {
   setLabels(mode) { if (LABEL_MODES.includes(mode)) { this.labelMode = mode; this.needs = true; } }
   setClock(t) {
     if (!Number.isFinite(t)) return; const c = this.clock, now = performance.now(); this.updateTheme(t);
-    if (c.base == null || t < c.base - 1.5 || t > c.base + 60) { c.base = t; c.at = now; c.rate = 0; c.shown = t; return; }
+    if (c.base == null || t < c.base - 1.5 || t > c.base + 60) { c.base = t; c.at = now; c.rate = 0; c.shown = t; this.wxSnap = true; return; }
     const dt = (now - c.at) / 1000; if (dt > .02) { const r = Math.max(0, (t - c.base) / dt); c.rate = c.rate * .5 + r * .5; }
     c.base = t; c.at = now;
   }
@@ -1323,18 +1401,64 @@ export class Scene3D {
     this.themeKey = key; this.applyTheme(themeFor(this.themeMode, t));
   }
   applyTheme(th) {
-    this.themeNow = th; const sc = this.scene;
-    sc.background.set(th.sky); sc.fog.color.set(th.sky); this.renderer.setClearColor(sc.background, 1);
-    this.hemi.color.set(th.hemiSky); this.hemi.groundColor.set(th.hemiGround); this.hemi.intensity = th.hemiI;
-    this.sun.color.set(th.sun); this.sun.intensity = th.sunI; this.sun.position.set(th.sunX, th.sunY, th.sunZ);
+    this.themeNow = th;
+    this.hemi.color.set(th.hemiSky); this.hemi.groundColor.set(th.hemiGround);
+    this.sun.color.set(th.sun); this.sun.position.set(th.sunX, th.sunY, th.sunZ);
     this.mat.solid.color.set(th.tint); this.mat.inst.color.set(th.tint);
     const n = th.night; this.mat.glow.opacity = Math.min(1, n * 1.1); if (this.glow) this.glow.visible = n > .02;
     this.mat.head.color.set(mixHex('#9aa39f', '#ffffff', Math.min(1, n * 1.4)));
-    this.labelRoot?.classList.toggle('night', n >= .5); this.needs = true;
+    this.labelRoot?.classList.toggle('night', n >= .5); this.applyAtmosphere(); this.needs = true;
+  }
+  /** Himmel, Nebelfarbe, Lichtstärke, Bodentönung und Partikelfarbe aus Tageszeit × Wetter (Übergangsstärke wx.amount). Netzansicht ohne Wetter. */
+  applyAtmosphere() {
+    const th = this.themeNow; if (!th) return; const sc = this.scene, wx = this.wx, a = this.view === 'network' ? 0 : wx.amount, look = WEATHER_LOOK[wx.kind] || WEATHER_LOOK.clear, m = this.mat;
+    const sky = look.sky && a > 0 ? mixHex(th.sky, look.sky, look.skyMix * a * (1 - th.night * .6)) : th.sky;
+    sc.background.set(sky); sc.fog.color.set(sky); this.renderer.setClearColor(sc.background, 1);
+    const lf = 1 + (look.light - 1) * a; this.hemi.intensity = th.hemiI * lf; this.sun.intensity = th.sunI * lf;
+    const ga = look.ground ? look.groundA * a : 0; if (this.wground) this.wground.visible = ga > .005; if (ga > .005) { m.wground.color.set(look.ground).multiply(col(th.tint)); m.wground.opacity = ga; }
+    m.rain.color.set('#d5dee4').multiply(col(th.tint)); m.rain.opacity = .55 * a; m.snow.color.set(th.tint); m.snow.opacity = .92 * a;
+    m.dim.opacity = .24 + .22 * th.night; this.needs = true;
+  }
+  /** Partikelgeometrie (Regen: 2 Kopien je Strich übereinander, Schnee: 2 Punkte je Flocke) für nahtlose Fallschleife; deterministisch. */
+  rebuildPrecip(kind, n) {
+    const look = WEATHER_LOOK[kind] || WEATHER_LOOK.rain, V = WEATHER_VOLUME, rain = look.precip === 'rain', pos = new Float32Array(Math.max(1, n) * (rain ? 12 : 6)), dx = -look.slant * V.h;
+    let seed = rain ? 0x2545f491 : 0x9e3779b9, k = 0; const r = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 4294967296; };
+    for (let i = 0; i < n; i++) {
+      const x = (r() * 2 - 1) * V.r - look.slant * V.h / 2, y = r() * V.h, z = (r() * 2 - 1) * V.r;
+      for (let c = 0; c < 2; c++) { const ox = c ? dx : 0, oy = c ? V.h : 0; if (rain) { pos.set([x + ox, y + oy, z, x + ox - look.slant * look.len, y + oy + look.len, z], k); k += 6; } else { pos.set([x + ox, y + oy, z], k); k += 3; } }
+    }
+    const obj = rain ? this.rain : this.snow, old = obj.geometry, g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setDrawRange(0, 0); obj.geometry = g; old.dispose();
+  }
+  /**
+   * Wetter je Frame: Übergang (weatherStep), Atmosphäre bei Änderung, Nebelgrenzen nach Kameraabstand, Fallphase nur bei laufender Uhr
+   * und ohne reduzierte Bewegung. Rein darstellend; liefert true, wenn neu gezeichnet werden muss.
+   */
+  placeWeather(clock, dt, net, now) {
+    const wx = this.wx, dClock = this.wxClock == null ? 0 : clock - this.wxClock; this.wxClock = clock;
+    const changed = weatherStep(wx, this.wxTarget, dClock, dt, this.wxSnap); this.wxSnap = false;
+    if (!(now - (this.wxRmAt ?? -1e9) < 1000)) { this.wxRmAt = now; this.wxReduced = this.reducedMotion(); }
+    const look = WEATHER_LOOK[wx.kind] || WEATHER_LOOK.clear, a = net ? 0 : wx.amount, n = a > 0 ? weatherParticles(this.qualityLevel, wx.kind, this.wxReduced) : 0;
+    const type = n > 0 ? look.precip : null, obj = type === 'snow' ? this.snow : type === 'rain' ? this.rain : null;
+    const key = `${net ? 'n' : wx.kind}:${a.toFixed(3)}:${this.qualityLevel}:${n}`;
+    if (key !== this.wxKey) {
+      this.wxKey = key; this.applyAtmosphere();
+      if (obj) { const pk = `${wx.kind}:${n}`; if (pk !== this.wxPrecipKey) { this.wxPrecipKey = pk; this.rebuildPrecip(wx.kind, n); } obj.geometry.setDrawRange(0, Math.round(n * a) * (type === 'rain' ? 4 : 2)); }
+    }
+    this.rain.visible = obj === this.rain; this.snow.visible = obj === this.snow;
+    const D = this.view === 'flat' ? 80 : this.cam.dist, f = weatherFog(wx.kind, a, D); this.scene.fog.near = f.near; this.scene.fog.far = f.far;
+    let anim = changed && !net;
+    if (obj) {
+      const p1 = weatherAdvance(this.wxPhase, dClock, dt, look.speed); if (p1 !== this.wxPhase) { this.wxPhase = p1; anim = true; }
+      const ph = this.wxPhase, sway = type === 'snow' ? Math.sin(ph / WEATHER_VOLUME.h * Math.PI * 6) * .35 : 0;
+      obj.position.set(this.cam.tx + look.slant * ph + sway, -ph, this.cam.tz);
+    }
+    // Torstörung: Warnleuchte blinkt nur bei laufender Uhr und ohne reduzierte Bewegung (sonst Dauerlicht); neu zeichnen nur beim Umschalten.
+    if (this.dv.gate && !net) { if (dClock > 0 && !this.wxReduced) this.beaconT = ((this.beaconT || 0) + Math.min(dt, .1)) % 1.2; const on = this.wxReduced || (this.beaconT || 0) < .7; if (this.dbeacon.visible !== on) { this.dbeacon.visible = on; anim = true; } }
+    return anim;
   }
   /** Leuchtkörper und Lichtflächen der Nachtbeleuchtung (je 1 Draw Call). */
   rebuildLights(site, L, docks, yards = []) {
-    const nq = this.q.night, lights = nightLights(site, L, docks, yards, { hall: nq.hall }), H = new Parts();
+    this.lightArgs = [site, L, docks, yards]; const nq = this.q.night, lights = nightLights(site, L, docks, yards, { hall: nq.hall && !this.hallDark }), H = new Parts();
     for (const h of lights.heads) { if (h.y > 3) { H.box(h.x - .32, h.y - .1, h.z - .14, .64, .1, .28, '#fff1c8'); } else H.box(h.x - .22, h.y - .08, h.z - .08, .44, .08, .16, '#fff4d6'); }
     const pos = [], colr = [], seg = nq.seg, warm = [1, .86, .58];
     const tri = (a, b, c, ca, cb, cc) => { pos.push(...a, ...b, ...c); colr.push(...ca, ...cb, ...cc); };
@@ -1402,6 +1526,13 @@ export class Scene3D {
     this.static = new THREE.Mesh(new THREE.BufferGeometry(), this.mat.solid); this.grid = new THREE.LineSegments(new THREE.BufferGeometry(), this.mat.grid);
     this.heads = new THREE.Mesh(new THREE.BufferGeometry(), this.mat.head); this.glow = new THREE.Mesh(new THREE.BufferGeometry(), this.mat.glow); this.glow.renderOrder = 2; this.glow.visible = false;
     g.add(this.static, this.grid, this.heads, this.glow);
+    // 0.16 Wetter (je 1 Draw Call, nur sichtbar bei Bedarf) und Störungsmarker (Tor: Schranke/Schild, Warnleuchte; Netz: Schild, Hallenabdunklung).
+    this.rain = new THREE.LineSegments(new THREE.BufferGeometry(), this.mat.rain); this.snow = new THREE.Points(new THREE.BufferGeometry(), this.mat.snow);
+    this.wground = new THREE.Mesh(prims().plane, this.mat.wground); this.dim = new THREE.Mesh(prims().plane, this.mat.dim);
+    this.dgate = new THREE.Mesh(new THREE.BufferGeometry(), this.mat.warn); this.dbeacon = new THREE.Mesh(new THREE.BufferGeometry(), this.mat.beacon); this.dgrid = new THREE.Mesh(new THREE.BufferGeometry(), this.mat.warn);
+    for (const o of [this.rain, this.snow, this.wground, this.dim, this.dgate, this.dbeacon, this.dgrid]) { o.visible = false; o.frustumCulled = false; }
+    this.rain.renderOrder = this.snow.renderOrder = 3; this.wground.renderOrder = 1; this.dim.renderOrder = 1;
+    g.add(this.rain, this.snow, this.wground, this.dim, this.dgate, this.dbeacon, this.dgrid);
     const pallet = mergedGeo(P => { P.box(-.4, 0, -.4, .8, .1, .8, '#c9a26a'); P.box(-.36, .1, -.36, .72, .36, .72, '#e8cf9f'); P.box(-.36, .3, -.37, .72, .03, .74, '#b9965f'); });
     const truckBox = mergedGeo(P => { P.box(-2.1, .45, -.63, 3.0, 1.35, 1.26, '#ffffff'); P.box(-2.12, .5, -.64, .04, 1.25, 1.28, '#d8dcd4'); });
     const truckCab = mergedGeo(P => { P.box(.98, .4, -.62, 1.1, 1.1, 1.24, '#ffffff'); P.box(1.9, .95, -.55, .2, .42, 1.1, '#355862'); P.box(.98, 1.5, -.5, .7, .12, 1.0, '#ffffff'); });
@@ -1532,6 +1663,7 @@ export class Scene3D {
     const lights = this.rebuildLights(s, L, [...slots.values()], yards);
     for (const m of lights.masts) { P.cyl(m.x, 0, m.z, .07, m.h, '#7d8c8f'); P.box(m.x - .35, m.h - .12, m.z - .04, .7, .06, .08, '#7d8c8f'); }
     const old = this.static.geometry; this.static.geometry = P.geometry(); old.dispose();
+    this.rebuildMarkers(W, H, L);
     const pts = []; for (let x = 0; x <= W; x++) pts.push(x, .065, 0, x, .065, H); for (let y = 0; y <= H; y++) pts.push(0, .065, y, W, .065, y);
     const og = this.grid.geometry; this.grid.geometry = new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(pts, 3)); og.dispose();
     // Bäume (deterministisch)
@@ -1542,6 +1674,19 @@ export class Scene3D {
     trees.forEach(([x, z], i) => { const k = .85 + ((i * 37) % 10) / 25; this.setInst(tr, i, x, 0, z, 0, k, k, k); this.setInst(cr, i, x, .4 * k, z, i, k, k, k, ['#7fa877', '#8db582', '#71996c'][i % 3]); });
     this.finish(tr, trees.length); this.finish(cr, trees.length);
     this.buildNetwork();
+  }
+  /** 0.16 Störungsmarker (Geometrie je Standort): Torstörung an der Hofeinfahrt, Netzstörung über der Hallenfront, Abdunklung und Bodentönung. */
+  rebuildMarkers(W, H, L) {
+    const gz = L.yardGateZ, G = new Parts(), B = new Parts(), N = new Parts();
+    G.box(-3.42, .84, gz - .08, 2.12, .16, .16, '#d8352a'); G.box(-1.36, 0, gz - .1, .12, 1.0, .2, '#5d6d70');
+    G.box(-1.04, 0, gz + .31, .08, 1.3, .08, '#5d6d70'); warnSign(G, -1.0, 1.65, gz + .35, .95, 0); warnSign(G, -1.0, 1.65, gz + .35, .95, Math.PI / 2);
+    G.box(-3.99, 1.6, gz + .06, .08, .42, .08, '#3c4a4d');
+    B.ball(-3.95, 2.12, gz + .1, .24, '#ffffff'); B.ball(-3.42, 1.14, gz, .14, '#ffffff');
+    N.box(W / 2 - .05, 0, -.75, .1, 2.75, .1, '#5d6d70'); warnSign(N, W / 2, 3.25, -.7, 1.3, 0); warnSign(N, W / 2, 3.25, -.7, 1.3, Math.PI / 2);
+    for (const [o, P] of [[this.dgate, G], [this.dbeacon, B], [this.dgrid, N]]) { const og = o.geometry; o.geometry = P.geometry(); og.dispose(); }
+    this.dim.scale.set(W, 1, H); this.dim.position.set(W / 2, .078, H / 2);
+    this.wground.scale.set(400, 1, 400); this.wground.position.set(W / 2, .008, H / 2);
+    this.dAnchor = { gate: { x: -2.4, y: 2.5, z: gz }, grid: { x: W / 2, y: 4.3, z: -.7 }, jam: { x: -9, y: 1.2, z: L.roadOutZ } };
   }
   buildNetwork() {
     const sites = this.state?.sites || [this.site()], air = this.netAir = airRelevant(this.state), { pins, nodes } = networkLayout(sites, undefined, air ? [AIRPORT] : []), P = new Parts(); this.pins = pins; this.netLineKey = null;
@@ -1579,7 +1724,7 @@ export class Scene3D {
     const q = this.q, lodP = q.lod.person, allSpots = workerSpots(st, s, buildings), spots = [];
     for (const w of allSpots) { if (spots.length >= q.cap.people) break; if (this.lodDist(w.x, w.z) <= lodP) spots.push(w); }
     const body = this.ensure('body', spots.length), head = this.ensure('head', spots.length);
-    spots.forEach((w, i) => { this.setInst(body, i, w.x, .06, w.z, 0, 1, 1, 1, w.role === 'warehouse' ? '#eeb354' : w.role === 'technician' ? '#d07c6a' : w.role === 'driver' ? '#6f8fc9' : '#579ba1'); this.setInst(head, i, w.x, .06, w.z, 0, 1, 1, 1); });
+    spots.forEach((w, i) => { this.setInst(body, i, w.x, .06, w.z, 0, 1, 1, 1, workerVest(w.role)); this.setInst(head, i, w.x, .06, w.z, 0, 1, 1, 1); });
     this.finish(body, spots.length); this.finish(head, spots.length);
     for (const w of spots) this.boxes.push({ id: w.id, box: { x0: w.x - .2, x1: w.x + .2, y0: 0, y1: .85, z0: w.z - .2, z1: w.z + .2 } });
     // Parkplatz: Autos nach Belegschaft (nur Ausstattung)
@@ -1677,20 +1822,31 @@ export class Scene3D {
       this.mat.ghost.color.set(valid ? 0x55caad : 0xdf7d73); this.ghost.scale.set(f.w, (HEIGHT[this.build] || 1) * .8, f.h); this.ghost.position.set(b.x + f.w / 2, .07, b.y + f.h / 2); this.ghost.visible = true;
       this.ghostInfo = { x: b.x + f.w / 2, z: b.y + f.h / 2, y: (HEIGHT[this.build] || 1) + .3, text: valid ? `${BUILDINGS[this.build].name} · ${b.x + 1}, ${b.y + 1}` : reason, tone: valid ? 'dock' : 'bad' };
     } else this.ghost.visible = false;
+    this.updateDisruptions(st, s);
     // Netz: Pins und Transfers
     if (this.view === 'network') this.updateNetwork();
+  }
+  /** 0.16: Lesesicht Wetter/Störungen übernehmen (Zielwetter, Marker, Hallenlicht, Chips). Spielzustand bleibt unberührt. */
+  updateDisruptions(st, s) {
+    const dv = this.dv = disruptionView(st, s.id); this.wxTarget = dv.weather;
+    if (s.id !== this.wxSite) { if (this.wxSite != null) this.wxSnap = true; this.wxSite = s.id; }
+    const dark = !!dv.grid && !dv.gridCovered;
+    this.dgate.visible = !!dv.gate; if (!dv.gate) this.dbeacon.visible = false; else if (this.wxReduced) this.dbeacon.visible = true;
+    this.dgrid.visible = dark; this.dim.visible = dark;
+    if (dark !== this.hallDark) { this.hallDark = dark; if (this.lightArgs) this.rebuildLights(...this.lightArgs); }
+    const A = this.dAnchor; this.dLabels = A ? disruptionLabels(dv).map(l => ({ id: `disruption-${l.kind}`, ...A[l.kind], text: l.text, tone: 'bad', prio: 1 })) : [];
   }
   updateNetwork() {
     if (airRelevant(this.state) !== !!this.netAir) this.buildNetwork();
     const st = this.state, pin = this.ensure('pin', this.pins.length);
-    this.pins.forEach((p, i) => this.setInst(pin, i, p.x, 0, p.z, 0, 1, 1, 1, p.id === st?.selectedSite ? '#4f9a85' : '#9cc3b4'));
+    this.pins.forEach((p, i) => { const jam = st?.disruptions && disruptionView(st, p.id).jams.length; this.setInst(pin, i, p.x, 0, p.z, 0, 1, 1, 1, jam ? (p.id === st?.selectedSite ? '#d0803a' : '#e6a45c') : p.id === st?.selectedSite ? '#4f9a85' : '#9cc3b4'); });
     this.finish(pin, this.pins.length);
     const active = (st?.transfers || []).filter(t => !['complete', 'cancelled'].includes(t.status)); this.transfers = [];
     const pts = [];
     for (const t of active) { const a = this.pins.find(p => p.id === (t.fromSite || t.site)), b = this.pins.find(p => p.id === t.toSite); if (!a || !b) continue; pts.push(a.x, .05, a.z, b.x, .05, b.z); this.transfers.push({ id: t.id, t, a, b, x: a.x, z: a.z, heading: Math.atan2(b.z - a.z, b.x - a.x), label: `${t.qty} Stk. · ${this.statusLabel(t.status)}`, blocked: !!t.blocked }); }
     const og = this.netRoutes.geometry; this.netRoutes.geometry = new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(pts.length ? pts : [0, 0, 0, 0, 0, 0], 3)); this.netRoutes.computeLineDistances(); og.dispose();
     // Linien (W3-S2): Band mit Richtungspfeilen, Geometrie nur bei Änderung von Linien/Pins neu.
-    const lines = networkLines(st, this.pins), key = lines.map(l => `${l.id}:${l.from}>${l.to}:${l.active ? 1 : 0}`).join(',') + '|' + this.pins.map(p => `${p.id}@${p.x},${p.z}`).join(',');
+    const lines = networkLines(st, this.pins), key = lines.map(l => `${l.id}:${l.from}>${l.to}:${l.active ? 1 : 0}:${l.jam}`).join(',') + '|' + this.pins.map(p => `${p.id}@${p.x},${p.z}`).join(',');
     if (key !== this.netLineKey) {
       this.netLineKey = key; const { pos, colr } = networkLineMesh(lines), g = new THREE.BufferGeometry();
       g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(colr, 3)); if (pos.length) g.computeBoundingSphere();
@@ -1747,7 +1903,7 @@ export class Scene3D {
       const lk = `${this.view}:${Math.round(c.tx / 4)},${Math.round(c.tz / 4)},${Math.round(c.dist / 4)},${Math.round(c.yaw * 2)}`; if (lk !== this.lodKey) { this.lodKey = lk; this.dynDirty = true; }
     }
     const net = this.view === 'network'; this.siteGroup.visible = !net; this.netGroup.visible = net;
-    const clock = this.displayClock(now), animated = net ? this.placeTransfers(clock) : !!(this.placeVehicles(clock) | this.placeYard(clock) | this.placeForklifts(clock) | this.placeBelts(clock, dt));
+    const clock = this.displayClock(now), animated = !!((net ? this.placeTransfers(clock) : this.placeVehicles(clock) | this.placeYard(clock) | this.placeForklifts(clock) | this.placeBelts(clock, dt)) | this.placeWeather(clock, dt, net, now));
     if (this.camMode?.mode === 'follow') {
       const f = net ? netFollowTarget(this.trips, this.camMode.id, this.airTrips) : followTarget(this.fleet, this.yardFleet, this.camMode.id);
       if (!f) this.stopCamera('lost'); else if (Math.abs(f.x - g.tx) > 1e-3 || Math.abs(f.z - g.tz) > 1e-3) { g.tx = f.x; g.tz = f.z; this.needs = true; }
@@ -1907,7 +2063,8 @@ export class Scene3D {
   updateLabels() {
     if (!this.labelRoot) return; const t = this.tmp, mode = this.labelMode, fleet = mode === 'fleet' || mode === 'all', infra = mode === 'infra' || mode === 'all'; t.cands.length = 0;
     if (this.view === 'network') {
-      if (mode !== 'none') { const st = this.state; for (const p of this.pins) { const s = st?.sites?.find(x => x.id === p.id); this.candidate(p.id, p.x, 3, p.z, `${s?.name || 'Standort'} · ${(st?.buildings || []).filter(b => b.site === p.id).length} Anlagen`, p.id === st?.selectedSite ? 'dock' : 'infra', 1); } }
+      if (mode !== 'none') { const st = this.state; for (const p of this.pins) { const s = st?.sites?.find(x => x.id === p.id), dv = st?.disruptions ? disruptionView(st, p.id) : null, extra = dv ? [dv.weather !== 'clear' ? WEATHER_NAME[dv.weather] : '', dv.jams.length ? 'Stau' : ''].filter(Boolean).join(' · ') : ''; this.candidate(p.id, p.x, 3, p.z, `${s?.name || 'Standort'} · ${(st?.buildings || []).filter(b => b.site === p.id).length} Anlagen${extra ? ' · ' + extra : ''}`, dv?.jams.length ? 'wait' : p.id === st?.selectedSite ? 'dock' : 'infra', 1); } }
+      if (mode !== 'none') for (const l of this.netLineList || []) if (l.jam > 0) this.candidate(`jam-${l.id}`, (l.x0 + l.x1) / 2, 1.2, (l.z0 + l.z1) / 2, `Stau · +${l.jam} %`, 'bad', 1);
       if (fleet) for (const tr of this.transfers) this.candidate(tr.id, tr.x, 1.4, tr.z, tr.label, tr.blocked ? 'wait' : 'move', 2);
       if (fleet) for (const tr of this.trips) this.candidate(tr.vehicleId, tr.x, 1.4, tr.z, tr.label, tr.blocked ? 'wait' : tr.lh.status === 'transit' || tr.lh.status === 'returning' ? 'move' : 'dock', 2);
       if (mode !== 'none' && this.airNode) this.candidate(AIRPORT.id, this.airNode.x, 3, this.airNode.z, this.airLabel, 'infra', 1);
@@ -1917,6 +2074,7 @@ export class Scene3D {
       if (fleet) for (const p of this.fleet) if (p.shown) this.candidate(p.v.id, p.x, 2.3, p.z, p.label, p.tone, 2);
       if (fleet) for (const p of this.yardFleet) this.candidate(p.id, p.x, 2.6, p.z, p.label, p.tone, 2);
       if (mode !== 'none') for (const b of this.infra) { const sel = b.id === this.selected; if (infra || sel) this.candidate(b.id, b.x, b.y, b.z, b.text, b.tone, sel ? 0 : b.prio); }
+      if (mode !== 'none') for (const d of this.dLabels) this.candidate(d.id, d.x, d.y, d.z, d.text, d.tone, d.prio);
       // W3b: Container-Label nur bei Auswahl.
       if (mode !== 'none' && this.selected != null) for (const c of this.contLabels || []) if (c.id === this.selected) this.candidate(c.id, c.x, c.y, c.z, c.text, c.tone, 0);
     }
