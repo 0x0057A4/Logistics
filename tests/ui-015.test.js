@@ -124,7 +124,7 @@ test('Quergurtsorter: Baumenü gesperrt bis Forschung Mega-Hub, Akte mit Besetzu
  press(ui,{action:'research',id:'megahub'});
  ui.run(`(()=>{for(let i=0;i<400&&!sim.state.research.some(r=>r.key==='megahub'&&r.status==='completed');i++)sim.step(1);})()`);
  ui.run('startBuild()');items=ui.nodes.get('#buildItems').innerHTML;
- assert.doesNotMatch(items,/data-build="crossbelt" class="[^"]*locked/);assert.match(items,/Quergurtsorter<\/b><small>120\.000 €/);ui.run('endBuild()');
+ assert.doesNotMatch(items,/data-build="crossbelt" class="[^"]*locked/);assert.match(items,/Quergurtsorter<\/b><small>60\.000 €/);ui.run('endBuild()');
  // Bauen über regulären Befehl, eine Lagerkraft (halbe Leistung), 240 Pakete im Eingang.
  const cb=ui.run(`sim.command({type:'build',buildingType:'crossbelt',x:8,y:2,rotation:0}).id`);assert.ok(cb);
  ui.run(`(()=>{const r=sim.command({type:'hire',role:'warehouse'});sim.command({type:'setShift',id:r.id,shift:'all'});sim.state.sites[0].energy=60;
