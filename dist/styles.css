@@ -117,7 +117,7 @@ kbd{font:var(--w-semi) 11px/1.1 var(--f-mono);background:var(--c-kbd);color:var(
 .brand{display:flex;gap:9px;align-items:center;text-decoration:none;color:var(--c-ink);font-weight:var(--w-bold);letter-spacing:.12em;font-size:12px;line-height:1.4;flex:none;border-radius:var(--r-md);margin-right:var(--s-2)}
 .brandmark{font-size:19px;letter-spacing:-.06em;line-height:30px;height:30px;min-width:34px;text-align:center;background:var(--c-accent);color:var(--c-accent-ink);padding:0 7px;border-radius:var(--r-md);font-weight:var(--w-bold)}
 .brandmark span{font-size:13px;vertical-align:top;letter-spacing:0;opacity:.8}
-.brand-sub{display:block;font-weight:var(--w-med);letter-spacing:.18em;font-size:10px;color:var(--c-muted)}
+.brand-sub{display:block;font-weight:var(--w-med);letter-spacing:.18em;font-size:11px;color:var(--c-muted)}
 .cmd{position:relative;flex:1 1 320px;min-width:170px;max-width:440px}
 .cmd input{width:100%;height:36px;padding:0 38px 0 36px;border:1px solid var(--c-line);border-radius:var(--r-md);background:var(--c-surface-2);font-size:var(--t-md)}
 .cmd input::placeholder{color:var(--c-faint)}
@@ -649,7 +649,7 @@ body.replay #game::after{content:'';position:absolute;inset:0;border:3px solid v
 .sched-gaps{font-size:12px;margin:6px 0 8px}
 .sched-table{border:1px solid var(--c-line-2);border-radius:var(--r-md);overflow:hidden}
 .sched-axis,.sched-row{display:grid;grid-template-columns:minmax(150px,32%) minmax(0,1fr) 58px;align-items:stretch}
-.sched-axis{background:var(--c-surface-2);border-bottom:1px solid var(--c-line-2);font-size:11px;color:var(--c-muted)}
+.sched-axis{background:var(--c-surface-2);border-bottom:1px solid var(--c-line-2);font-size:12px;color:var(--c-muted)}
 .sched-axis-label{padding:6px 8px;font-size:12px}
 .sched-track{position:relative;min-height:34px;margin:0 4px}
 .sched-scale{min-height:26px}
@@ -668,7 +668,7 @@ body.replay #game::after{content:'';position:absolute;inset:0;border:3px solid v
 .sched-bar{position:absolute;top:9px;height:16px;border-radius:4px;background:var(--c-accent-soft);border:1px solid var(--c-accent-line);box-sizing:border-box;overflow:hidden}
 .sched-bar.from-prev{border-left-style:dashed;border-top-left-radius:0;border-bottom-left-radius:0}
 .sched-bar.to-next{border-right-style:dashed;border-top-right-radius:0;border-bottom-right-radius:0}
-.sched-bar i{position:absolute;left:2px;top:-1px;font-style:normal;font-size:11px;color:var(--c-accent)}
+.sched-bar i{position:absolute;left:2px;top:-1px;font-style:normal;font-size:12px;color:var(--c-accent)}
 .sched-bar i.r{left:auto;right:2px}
 .sched-legend .lg.shift-day{background:var(--c-accent-soft);border:1px solid var(--c-accent-line)}
 .sched-mark{position:absolute;top:12px;height:10px;border-radius:3px;z-index:1}
@@ -719,7 +719,7 @@ body.replay #game::after{content:'';position:absolute;inset:0;border:3px solid v
 .bcard-line,.bcard-sub,.bcard-next{display:block;overflow-wrap:anywhere;line-height:1.4}
 .bcard-sub{color:var(--c-ink-2);font-weight:var(--w-semi)}
 .bcard-next{color:var(--c-accent)}
-.bprio{display:inline-block;padding:0 6px;border-radius:var(--r-pill);font-size:11px;font-weight:var(--w-semi)}
+.bprio{display:inline-block;padding:0 6px;border-radius:var(--r-pill);font-size:12px;font-weight:var(--w-semi)}
 .bprio.prio-warn{background:var(--c-wait-bg);color:var(--c-wait-ink)}.bprio.prio-bad{background:var(--c-bad-bg);color:var(--c-bad-ink)}
 .bcard-detail{padding:0 6px 6px}
 .bcard-detail .card{margin:0;box-shadow:none}
@@ -750,7 +750,7 @@ th.num .sv-sort{text-align:right}
 .sv-row.open>td{background:var(--c-surface-2)}
 .sv-sub>td{background:var(--c-surface-2);padding:4px 10px 12px}
 .sv-batches{font-size:13px;table-layout:auto;border:1px solid var(--c-line-2);border-radius:var(--r-md)}
-.sv-batches th{font-size:11px;position:static}
+.sv-batches th{font-size:12px;position:static}
 .sv-incoming td{color:var(--c-muted);font-style:italic}
 .sv-extra{color:var(--c-wait-ink)}
 .sv-good{color:var(--c-ok-ink,var(--c-ok))}
@@ -781,3 +781,5 @@ th.num .sv-sort{text-align:right}
 .vbar-tab.on{background:var(--c-surface-2);color:var(--c-ink);box-shadow:inset 0 -2px 0 var(--c-accent)}
 .vbar-warn{font-size:var(--t-xs);font-weight:var(--w-semi);color:var(--c-bad-ink);background:var(--c-bad-bg);padding:1px 6px;border-radius:var(--r-pill)}
 .vrow.orow{grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) minmax(0,1.5fr) minmax(0,1fr) minmax(0,1fr)}
+/* A01 0.17-Integration: Spaltenköpfe in Lager-/Auftragstabellen dürfen umbrechen (.num-Regel setzte nowrap → Überlappung bei 1366 px) */
+.sv-table th.num,.ov-table th.num,.sv-table th,.ov-table th{white-space:normal}
