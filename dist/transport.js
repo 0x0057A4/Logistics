@@ -26,7 +26,7 @@ export function handle(s,c,api){
  if(c.type==='buyVehicle'){
   const spec=VEHICLES[c.vehicleType],site=c.site||s.selectedSite;if(!spec||!s.sites.some(x=>x.id===site))return {ok:false,message:'Fahrzeug oder Standort ungültig.'};
   const id=api.id('vehicle');if(!api.book(`vehicle:${id}`,-spec.cost,'Fuhrpark',spec.name,[id]))return {ok:false,message:'Kapital für Fahrzeug fehlt.'};
-  s.vehicles.push({id,name:spec.name,type:c.vehicleType,site,capacity:spec.capacity,condition:100,status:'idle',shipment:null});api.log('transport',`${spec.name} angeschafft.`,[id]);return {ok:true,id};
+  s.vehicles.push({id,name:spec.name,type:c.vehicleType,site,capacity:spec.capacity,condition:100,status:'idle',shipment:null,acquiredAt:s.t,cost:spec.cost});api.log('transport',`${spec.name} angeschafft.`,[id]);return {ok:true,id};
  }
  if(c.type==='dispatch'){
   const o=s.orders.find(x=>x.id===c.orderId),v=s.vehicles.find(x=>x.id===c.vehicleId),site=c.site||s.selectedSite;

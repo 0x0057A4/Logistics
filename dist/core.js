@@ -116,12 +116,12 @@ export class Simulation{
  if(old&&(s.research.some(r=>r.building===old.id&&r.status==='active')||old.serviceJob||old.maintenanceTask||old.freightTask||old.task||old.job||s.jobs.some(j=>j.building===old.id&&!['done','cancelled','completed'].includes(j.status))||s.batches.some(b=>b.qty>0&&(b.building===old.id||b.bin===old.id))))return {ok:false,message:'Anlage belegt. Vorgang zuerst abschließen.'};
  if(c.type==='demolish'){
  const d=BUILDINGS[old.type];const check=reachable(s,old.site,s.buildings.filter(b=>b!==old));if(!check.ok)return check;if(d.capacity){const used=api.inventory.used(old.site),capacity=api.inventory.capacity(old.site)-d.capacity;if(used>capacity)return {ok:false,message:'Lagerinhalt schützt Gebäude vor Abriss.'};}
- if(!api.book('demolish:'+old.id,Math.round(d.cost*.35),'construction','Rückbau '+d.name,[old.id]))return {ok:false,message:'Rückbau konnte nicht gebucht werden.'};s.buildings=s.buildings.filter(b=>b!==old);api.log('build','Gebäude zurückgebaut.',[old.id]);return {ok:true};}
+ if(!api.book('demolish:'+old.id,Math.round(d.cost*.35),'construction','Rückbau '+d.name,[old.id]))return {ok:false,message:'Rückbau konnte nicht gebucht werden.'};economy.recordDisposal(s,old,'building');s.buildings=s.buildings.filter(b=>b!==old);api.log('build','Gebäude zurückgebaut.',[old.id]);return {ok:true};}
  const type=c.type==='build'?c.buildingType:old.type,d=BUILDINGS[type];if(!d)return {ok:false,message:'Gebäudetyp unbekannt.'};
  const site=c.type==='build'?(c.site||s.selectedSite):old.site;const rotation=c.rotation??old?.rotation??0;if(![0,90,180,270].includes(rotation))return {ok:false,message:'Drehung ungültig.'};
  const candidate={...(old||{}),id:old?.id||'proposed',type,site,x:c.x,y:c.y,rotation,status:'idle',progress:0,job:null,condition:old?.condition??100,recipe:old?.recipe??null,enabled:old?.enabled??true};
  const list=[...s.buildings.filter(b=>b!==old),candidate];const check=reachable(s,site,list);if(!check.ok)return check;
- if(c.type==='build'){if(!api.book('build:'+s.seq,-d.cost,'construction',d.name))return {ok:false,message:'Kapital reicht nicht.'};candidate.id=api.id('building');s.buildings.push(candidate);}else Object.assign(old,candidate);
+ if(c.type==='build'){if(!api.book('build:'+s.seq,-d.cost,'construction',d.name))return {ok:false,message:'Kapital reicht nicht.'};candidate.id=api.id('building');candidate.acquiredAt=s.t;candidate.cost=d.cost;s.buildings.push(candidate);}else Object.assign(old,candidate);
  api.log('build',d.name+(c.type==='build'?' errichtet.':' versetzt.'),[candidate.id]);return {ok:true,id:candidate.id};
  }
  step(minutes=1){if(!Number.isInteger(minutes)||minutes<0||minutes>100000)throw new Error('Spielschritte müssen ganze Minuten sein.');for(let n=0;n<minutes;n++){this.state.t++;for(const mod of MODULES)mod.step?.(this.state,this.api);}return this.state;}

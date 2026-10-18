@@ -47,27 +47,30 @@ const SCENARIOS={
 // Luftexportangebot auf eigenem Angebotsplatz entsteht (eigener Zufall airRandom, api.random unberührt; nur api.id verschiebt
 // den ID-Zähler). Übrige Szenarien unverändert. Gegenprobe: airUnlocked=()=>false reproduziert alle vorherigen Hashes exakt
 // (4/4 grün). Node v22.22.0.
+// 0.15 (A08, S1): alle Hashes neu erzeugt, weil Gebäude (Bau) und gekaufte Fahrzeuge die Anlagenfelder acquiredAt/cost
+// tragen. Keine Änderung an Zufallszügen oder ID-Zähler. Gegenprobe: hub() zusätzlich ohne acquiredAt/cost/assetDisposals
+// reproduziert alle vorherigen Hashes exakt (4/4 grün). Node v22.22.0.
 const EXPECTED={
  klein:[
-  'f1dafd6deff70c2a198e658ed56ea5fe9c5b7da48aa8eea9943408da8382bd53',
-  '8e9d32faad7316d26e0ffcf43ee49d7a648feb6a429f75818904bd8aab173865',
-  '10e9fdfca33805ab57dd21f2ee36f9f6b008c2134cc5e7775ff5898ce3a9324d',
-  '098c29f1c22f0709f1fadcf977af950fcd87a894a52f1e84f3f20e3f8d993e98',
+  'a38da86a90a60303f37ba7e7c8242553bab04f5059ce1efa1ef989f03a083f4f',
+  'eaf0334143e6729d2da7ae094ffc6252cc0d62d06043eea5ec276c48a1e22428',
+  '303dba81651c0a2f2bc9acd9aaa10b626f5d1f39d48daaf7f828d07a4fed3479',
+  '38e587d24b73a7ccbfdba7bfae1ce5ea074895b279bba07c1d0368d2caf844ec',
  ],
  dienste:[
-  '07c12c6cb82dcc2feeb696abeeb7fce0f302cbfa592523f7d07dc990cdc85cba',
-  'acd75a05af49707854e2d42f6868768c9e09450cd43c1d449899c848a0b975c5',
-  '3bdb3004741946b05071468caeb54abfa5577e141fd5bc4315c9e89ab1ef1ae1',
-  '33431b1626e2cbf3fe6f7f680d4d4937a6e91441fd086f1b991ac58ca6e54778',
+  '075bd431d56ce4bf680d7fa5d229f529b21217bf22ee88b228b68527956d767f',
+  'cfa28df087e601758c1bb6249babd0692d851f760fa9ce0df2782524e061a60b',
+  '82c548a364bf55a00b4b078e5c4b317658c04b9c5238b7038ec485a119994b24',
+  '37df5b3fba4008373bfbe6bdafc3d2aded5036c9c9b978b01139f32fcaa85242',
  ],
  gross:[
-  'da11301f9367270bfbdbb1cc72ae46a086737b54d807714790a7c7be694165de',
-  '21f7a357a18ecb4f59cc74cb279774b29596d5ac1fec8a213b7f79b1e8ec4cfd',
-  '1a066501859b9be445607a6adb4901aa9e6cb259956391b111d061e6c0940d41',
-  '860aabb8a7743a980a90309a6c7f813b808598e385f85d4590a38cc65f0d1804',
+  '1909ecd745c70e58c39586bbe715d917380b14c67935a740e5424b8b3111ff79',
+  '45576a5d91834fd0c8ef61b36cb2190fdbd9cf68c068b4b65f73e2afcede6abd',
+  'ad4b3557a806d6a066aa7394250749fea59994de58b37ca82616e4e546d4c698',
+  'fe192079c1dcd80b31078c0ae072c1e613a1dd202600271eb6046722f9fea9f1',
  ],
  prognose:[
-  '22e58acdd84e107e8f501a215715b10e4af00ed773fc7537d269a2540f6cb4ab',
+  '618143a11fc33e5b8dc894269ca65186ff4488c6473d05637f1a2d12036db319',
  ],
 };
 
