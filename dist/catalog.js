@@ -19,7 +19,7 @@ export const BUILDINGS={
  coldstore:{name:'Kühllager',cost:9500,w:3,h:2,color:'#8ed6e1',role:'warehouse',recipes:[],power:8,capacity:100},
  terminal:{name:'Logistikterminal',cost:14000,w:3,h:2,color:'#bdadf0',role:'service',recipes:[],power:3}
 };
-export const ROLES={production:{name:'Fertigung',wage:19,hireCost:400},warehouse:{name:'Lager',wage:18,hireCost:350},driver:{name:'Fahrdienst',wage:21,hireCost:450},technician:{name:'Technik',wage:26,hireCost:650},service:{name:'Kundenservice',wage:22,hireCost:450},forklift:{name:'Staplerfahrer',wage:20,hireCost:400},gate:{name:'Torposten',wage:17,hireCost:300},research:{name:'Entwicklung',wage:30,hireCost:800}};
+export const ROLES={production:{name:'Fertigung',wage:19,hireCost:400},warehouse:{name:'Lager',wage:18,hireCost:350},driver:{name:'Fahrdienst',wage:21,hireCost:450},technician:{name:'Technik',wage:26,hireCost:650},service:{name:'Kundenservice',wage:22,hireCost:450},forklift:{name:'Staplerfahrer',wage:20,hireCost:400},gate:{name:'Torposten',wage:15,hireCost:250},research:{name:'Entwicklung',wage:30,hireCost:800}};
 export const VEHICLES={van:{name:'Lieferwagen',cost:9000,capacity:20,speed:1,runningCost:0.18},truck:{name:'Lastkraftwagen',cost:28000,capacity:80,speed:0.85,runningCost:0.4},refrigerated:{name:'Kühlfahrzeug',cost:36000,capacity:50,speed:0.9,runningCost:0.5,cold:true}};
 export const RESEARCH={efficiency:{name:'Effiziente Fertigung',cost:5000,duration:120},quality:{name:'Qualitätssicherung',cost:6500,duration:180},network:{name:'Standortnetz',cost:12000,duration:240},coldchain:{name:'Kühlkettenlogistik',cost:9000,duration:180}};
 // Erweiterte Produktfamilien; Basisrezepte bleiben spielstandstabil.
@@ -50,7 +50,8 @@ ITEMS.cold_module={name:'Temperaturempfindliches Modul',price:80,weight:2,volume
 
 // Hub-Betrieb Welle 1: Fremdpakete der Vertragskunden; Werte vorläufig, Balancing A02.
 Object.assign(ITEMS,{parcel:{name:'Paket',price:0,volume:0.05,weight:0.5}});
-Object.assign(BUILDINGS,{sorter:{name:'Sortierplatz',cost:8500,w:3,h:2,color:'#7fb7e6',role:'warehouse',recipes:[],power:3,throughput:240}});
+// A02 0.16 (docs/BALANCING-0.16.md): Sortierplatz 300/h (vorher 240), 10.000 € (vorher 8.500); Torposten 15 €/h, Einstellung 250 € (vorher 17/300).
+Object.assign(BUILDINGS,{sorter:{name:'Sortierplatz',cost:10000,w:3,h:2,color:'#7fb7e6',role:'warehouse',recipes:[],power:3,throughput:300}});
 // Welle 2a: Paletten und Stapler (A01-Gerüst, Werte vorläufig).
 Object.assign(ITEMS,{pallet:{name:'Palette',price:0,volume:1,weight:300}});
 Object.assign(BUILDINGS,{forklift:{name:'Staplerplatz',cost:6500,w:1,h:1,color:'#f0b84a',role:'warehouse',recipes:[],power:2}});

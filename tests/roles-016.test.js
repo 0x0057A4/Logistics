@@ -154,9 +154,9 @@ test('Speichern/Laden mitten in Staplerentladung und Torkontrolle bitgleich',()=
 test('Personalbefehle für neue Rollen: Einstellung kostet ROLES-Betrag, Lohn, Fortbildung, Versetzung, Entlassung',()=>{
  const {sim,s,ids,w}=setup({warehouse:0});
  const m0=s.money;const r1=sim.command({type:'hire',role:'forklift'}),r2=sim.command({type:'hire',role:'gate'});
- assert.ok(r1.ok&&r2.ok);assert.equal(Math.round((m0-s.money)*100)/100,700);
- const f=w(r1.id),g=w(r2.id);assert.equal(f.wage,20);assert.equal(g.wage,17);
- const m1=s.money;sim.step(60);assert.ok(m1-s.money>=37-0.05,'Löhne laufen'); // (20+17) je Stunde im Dienst
+ assert.ok(r1.ok&&r2.ok);assert.equal(Math.round((m0-s.money)*100)/100,650); // A02 0.16: 400 + 250
+ const f=w(r1.id),g=w(r2.id);assert.equal(f.wage,20);assert.equal(g.wage,15);
+ const m1=s.money;sim.step(60);assert.ok(m1-s.money>=35-0.05,'Löhne laufen'); // (20+15) je Stunde im Dienst (A02 0.16)
  assert.equal(sim.command({type:'train',id:f.id}).ok,true);assert.ok(f.training);
  assert.equal(sim.command({type:'fire',id:f.id}).ok,false); // lernt
  sim.step(90);assert.equal(f.skill,1.25);

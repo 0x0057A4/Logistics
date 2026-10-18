@@ -18,7 +18,7 @@ import {staffNeed as containerNeed} from './containers.js';
 
 export const ITEM = 'parcel';
 // 3 Pakete/min Grundleistung vor workRate (A01 W1c, vorher 2): eine Lagerkraft sortiert eine Startanlieferung
-// (100–130 Pakete) in 35–45 statt 50–65 Minuten; der Sortierplatz (4/min) bleibt schneller und damit ein Ausbau.
+// (100–130 Pakete) in 35–45 statt 50–65 Minuten; der Sortierplatz (5/min seit A02 0.16, vorher 4/min) bleibt schneller und damit ein Ausbau.
 export const HAND_RATE = 3;
 const HAND_STATES = new Set(['idle', 'working', 'staff', 'storage', 'off']);
 export const handKey = site => `${site}:handsort`;

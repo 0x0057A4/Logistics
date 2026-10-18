@@ -5,6 +5,8 @@ import {createHash} from 'node:crypto';
 import {Simulation, validateState} from '../dist/core.js';
 import {BUILDINGS} from '../dist/catalog.js';
 import {summary, HAND_RATE, setLoadPriority} from '../dist/sorting.js';
+// Testaufbau (A02 0.16): Mechanik und Mengen dieser Datei sind auf 4 Pakete/min geschrieben; Spielwert seit BALANCING-0.16 300/h.
+BUILDINGS.sorter.throughput = 240;
 import * as yard from '../dist/yard.js';
 
 const SITE = 'site-1';

@@ -15,7 +15,8 @@ export const WEATHER=['clear','rain','fog','snow','storm'];
 export const EVENT_KINDS=['jam','gate','grid'];
 export const WEATHER_NAME={clear:'klar',rain:'Regen',fog:'Nebel',snow:'Schnee',storm:'Sturm'};
 // Vorläufig: Anteil je Tag (Summe 1) · Fahrtzeitfaktor · Verspätung fremder Lkw in Minuten (Basis, +0…50 % je Vertrag).
-export const WEATHER_SHARE={clear:0.55,rain:0.2,fog:0.1,snow:0.08,storm:0.07};
+// A02 0.16 (docs/BALANCING-0.16.md): Schnee/Sturm je 5 % statt 8/7 % – Häufungen schwerer Tage kosteten einzelne Läufe bis 41 %.
+export const WEATHER_SHARE={clear:0.6,rain:0.2,fog:0.1,snow:0.05,storm:0.05};
 export const WEATHER_FACTOR={clear:1,rain:1.1,fog:1.15,snow:1.35,storm:1.25};
 export const WEATHER_DELAY={clear:0,rain:5,fog:15,snow:30,storm:20};
 /** Wahrscheinlichkeit eines Wetterwechsels im Tagesverlauf (Wechselminute 06:00–18:00). */
@@ -25,7 +26,7 @@ export const WEATHER_CHANGE=0.25;
 export const EVENTS={
  jam:{p:0.2,duration:[60,240],pct:[20,60]},
  gate:{p:0.2,duration:[20,90]},
- grid:{p:0.2,duration:[15,60]},
+ grid:{p:0.2,duration:[30,120]}, // A02 0.16: vorher 15–60 Min. (wirkungslos); ab ≈ 90 Min. ohne Energiegebäude Kühlschaden
 };
 const LOG_KEEP=30;
 

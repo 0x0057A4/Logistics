@@ -78,7 +78,7 @@ Object.assign(TERMS.penalty,{parcel_cold:{late:4.5,open:15},bulky:{late:9,open:3
  *  Wahrscheinlichkeit avoid × (neutral − score)/neutral, dann bietet ein nicht unzufriedener Versender an; sonst übernimmt der
  *  zufriedenste Versender (score > neutral) mit Wahrscheinlichkeit prefer × (score − neutral)/neutral. Preis je Einheit
  *  × (1 + priceSpan × (score − neutral)/neutral), auf 0,1 % gerundet und als k.priceAdjust ausgewiesen. */
-export const SATISFACTION={start:50,neutral:50,onTime:2,late:-4,penalty:-1,open:-8,ignored:-6,answered:1,goodwill:3,effectFrom:2280,priceSpan:0.08,avoid:0.6,prefer:0.3};
+export const SATISFACTION={start:50,neutral:50,onTime:2,late:-4,penalty:-1,open:-8,ignored:-6,answered:1,goodwill:3,effectFrom:2280,priceSpan:0.12,avoid:0.6,prefer:0.3};
 const SHIPPER_COUNTERS=['onTime','late','penalties','ignored'];
 const MOOD_SALT=0x27d4eb2f;
 /** Versendername eines Vertragsauftrags oder null (Aufträge ohne Vertrag). */
