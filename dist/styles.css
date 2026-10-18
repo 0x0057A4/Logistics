@@ -315,6 +315,7 @@ th{font-size:.8rem;letter-spacing:.05em;text-transform:uppercase;color:var(--c-i
 th,td{padding:8px 9px;border-bottom:1px solid var(--c-line-2)}
 tbody tr:hover td{background:var(--c-surface-2)}
 td button{font-size:.867rem;padding:3px 8px;min-height:28px;max-width:100%;overflow-wrap:anywhere}
+th button{max-width:100%;min-height:0;white-space:normal;overflow-wrap:break-word;text-align:inherit}
 tr:last-child td{border-bottom:0}
 td.num,th.num{text-align:right}
 .empty{text-align:center;padding:28px 16px;background:var(--c-surface-2);border:1px dashed var(--c-line-strong);border-radius:var(--r-lg);color:var(--c-muted);line-height:1.7;font-size:.934rem}
