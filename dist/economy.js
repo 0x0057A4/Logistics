@@ -3,6 +3,8 @@ import {ITEMS,BUILDINGS,RECIPES} from './catalog.js';
 import {assetInfo,accumulated} from './accounting.js';
 import {abortJobs} from './production.js';
 import {activeBatches} from './inventory.js';
+import {gridDown} from './disruptions.js';
+import {powerBalance} from './special.js';
 const suppliers={standard:{factor:1,lead:30,quality:88},express:{factor:1.3,lead:10,quality:86},quality:{factor:1.18,lead:45,quality:98}};
 const ledgerIndexes=new WeakMap();
 function keys(s){let index=ledgerIndexes.get(s);if(!index||index.rows!==s.ledger||index.length!==s.ledger.length){index={rows:s.ledger,length:s.ledger.length,keys:new Set(s.ledger.map(l=>l.key)),byKey:new Map(s.ledger.map(l=>[l.key,l]))};ledgerIndexes.set(s,index);}return index;}
@@ -122,7 +124,8 @@ export function handle(s,c,api){
 }
 export function step(s,api){
  if(s.t%60===0){
-  const power=s.buildings.filter(b=>b.enabled&&b.condition>0).reduce((n,b)=>n+(BUILDINGS[b.type]?.power||0),0);
+  // QS-016-02: Bei Netzstörung nur den Teil abrechnen, den eigene Energiegebäude decken (powerBalance ohne Netzanteil).
+  let power=0;for(const site of s.sites){const d=s.buildings.filter(b=>b.site===site.id&&b.enabled&&b.condition>0).reduce((n,b)=>n+(BUILDINGS[b.type]?.power||0),0);power+=gridDown(s,site.id)?Math.min(d,powerBalance(s,site.id).supply):d;}
   api.book(`energy:${s.t}`,-cents(power*.32),'Energie',`Strom ${power} kWh`);
   api.book(`rent:${s.t}`,-cents(s.sites.reduce((n,site)=>n+site.width*site.height*.0025,0)),'Miete','Hallenmiete pro Stunde');
   const interest=cents(((s.loanBalance||0)*.08+Math.max(0,-s.money)*.15)/8760);

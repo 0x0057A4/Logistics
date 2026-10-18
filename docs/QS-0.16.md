@@ -176,3 +176,9 @@ Vorher auf 200dcf7 ohne `qa-016`: 729/729 bestanden.
 - Störungen bei Containern und Standorttransfers (nur über `travelMinutes` ohne Gebiet, Code gelesen).
 - Mehrere Standorte gleichzeitig mit Netzstörung und Linie; Kühlpakete auf der Linie während einer Störung.
 - Langzeitwirkung der Zufriedenheit (Versenderwechsel `avoid`/`prefer`) über mehr als 4 Tage.
+
+## Nachtrag A01 (18.10.2026)
+
+- **QS-016-01 behoben:** Sammeltour übergibt Gebiet/Vertrag des Stopp-Auftrags an `travelMinutes` (tours.js `stopCtx`). Befundtest aktiviert, grün.
+- **QS-016-02 behoben:** Stromabrechnung je Standort; bei Netzstörung nur der durch eigene Energiegebäude gedeckte Anteil (economy.js). Befundtest aktiviert, grün.
+- **QS-016-03 behoben:** Antwortfrist zeigt „in Bearbeitung · noch …“ bis zum Abschluss; „eingehalten“ erst bei `completedAt ≤ respondBy` (app.js `ticketDeadline`).

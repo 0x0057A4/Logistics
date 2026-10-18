@@ -93,7 +93,7 @@ test('Sammeltour: Wetter und Stau verlängern jede Etappe beim Start; Ware und G
 });
 
 // Befund QS-016-01: Gebietsstau (Ziel lane/contract) trifft die Einzellieferung, aber nicht die Sammeltour zum selben Gebiet.
-test('QS-016-01 Gebietsstau wirkt auf Einzellieferung und Sammeltour zum selben Zustellgebiet gleich', {todo:'QS-016-01: tours.js ruft travelMinutes ohne {lane,contract} auf'}, ()=>{
+test('QS-016-01 Gebietsstau wirkt auf Einzellieferung und Sammeltour zum selben Zustellgebiet gleich', ()=>{
  const jam=env=>[ev('jam',SITE,T-5,T+600,{pct:60,target:{contract:env.k.id,lane:'lane-1',name:'Nordbezirk'}})];
  // Einzellieferung
  const e1=hub();const o=order(e1,{qty:10,lane:'lane-1'});lage(e1.sim,T,{events:jam(e1)});
@@ -246,7 +246,7 @@ test('Netzstörung: Sortierplatz und Staplerentladung stehen ohne Energiegebäud
 });
 
 // Befund QS-016-02 (niedrig): Netzstörung – Stromkosten werden in voller Höhe weiter berechnet, obwohl das Netz nichts liefert.
-test('QS-016-02 Netzstörung ohne Energiegebäude: keine Netzstromkosten für die Ausfallstunde', {todo:'QS-016-02: economy.step bucht power aller eingeschalteten Anlagen auch bei gridDown'}, ()=>{
+test('QS-016-02 Netzstörung ohne Energiegebäude: keine Netzstromkosten für die Ausfallstunde', ()=>{
  const sim=new Simulation({mode:'sandbox',seed:3}),s=sim.state;
  cmd(sim,{type:'build',buildingType:'assembly',x:2,y:2,rotation:0});cmd(sim,{type:'build',buildingType:'sorter',x:6,y:2,rotation:0});cmd(sim,{type:'build',buildingType:'coldstore',x:10,y:2,rotation:0});
  lage(sim,2*1440+600,{events:[ev('grid',SITE,2*1440+590,2*1440+800)]});

@@ -744,7 +744,10 @@ const roleNote=w=>ROLE_HINT[w.role]?` · Spezialist +${specialistPct()} %`:'';
 /** Kundendienst: Antwortfrist (respondBy) mit Restzeit bzw. „abgelaufen“. */
 function ticketDeadline(s,t){if(t.respondBy==null)return '';
  if(t.status==='open')return kv('Antwortfrist',s.t>t.respondBy||t.expired?`<span class="money-minus">abgelaufen seit ${time(t.respondBy)}</span> <small class="muted">Zufriedenheit gesunken, Antwort weiter möglich</small>`:`${time(t.respondBy)} · <span class="${t.respondBy-s.t<=60?'money-minus':''}">noch ${restMin(t.respondBy-s.t)}</span>`);
- return kv('Antwortfrist',time(t.respondBy)+(t.expired?' · <span class="money-minus">nicht fristgerecht</span>':' · eingehalten'));}
+ // QS-016-03: „eingehalten“ erst nach Abschluss (completedAt ≤ respondBy); in Bearbeitung zählt die Restzeit.
+ if(t.expired)return kv('Antwortfrist',time(t.respondBy)+' · <span class="money-minus">nicht fristgerecht</span>');
+ if(t.completedAt==null)return kv('Antwortfrist',`${time(t.respondBy)} · in Bearbeitung · <span class="${t.respondBy-s.t<=60?'money-minus':''}">noch ${restMin(Math.max(0,t.respondBy-s.t))}</span>`);
+ return kv('Antwortfrist',time(t.respondBy)+(t.completedAt<=t.respondBy?' · eingehalten':' · <span class="money-minus">nicht fristgerecht</span>'));}
 function ticketTrigger(t){return kv('Auslöser',t.source==='automatic'?esc(TICKET_TRIGGER[t.trigger]||(t.kind==='complaint'?TICKET_TRIGGER.late:'Automatisch')):'Manuell angelegt');}
 /** Versenderzufriedenheit 0–100 als Balken (contracts.shipperScore). */
 function satisfactionBar(s,name){const v=Math.max(0,Math.min(100,Number(shipperScore(s,name))||0)),S=SATISFACTION||{neutral:50},mood=v>=S.neutral+10?'zufrieden':v<=S.neutral-10?'unzufrieden':'neutral';

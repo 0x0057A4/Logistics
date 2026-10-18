@@ -80,7 +80,9 @@ export function handle(s,c,api){
 }
 function release(s,t,api){const v=s.vehicles.find(v=>v.id===t.vehicleId);if(v){v.status='idle';v.tour=null;v.shipment=null;}for(const b of s.buildings)if(b.task===t.id)b.task=null;api.workforce.release(`${t.id}:warehouse`);api.workforce.release(`${t.id}:driver`);releaseForklift(s,forkliftKey(t.id));t.worker=null;t.driver=null;}
 function setPhase(t,status,minutes){t.status=status;t.remaining=minutes;t.duration=minutes;}
-function nextStop(t,v,s){t.stopIndex++;if(t.stopIndex<t.stops.length)setPhase(t,'transit',travelMinutes(s,t.site,Math.ceil(t.stops[t.stopIndex].distance/VEHICLES[v.type].speed)));else setPhase(t,'returning',travelMinutes(s,t.site,Math.ceil(t.returnDistance/VEHICLES[v.type].speed)));}
+// QS-016-01: Gebietsstau des Stopp-Auftrags wirkt wie bei der Einzellieferung (transport.js).
+const stopCtx=(s,stop)=>{const o=s.orders.find(o=>o.id===stop.orderId);return o?{lane:o.lane,contract:o.contractId}:undefined;};
+function nextStop(t,v,s){t.stopIndex++;if(t.stopIndex<t.stops.length)setPhase(t,'transit',travelMinutes(s,t.site,Math.ceil(t.stops[t.stopIndex].distance/VEHICLES[v.type].speed),stopCtx(s,t.stops[t.stopIndex])));else setPhase(t,'returning',travelMinutes(s,t.site,Math.ceil(t.returnDistance/VEHICLES[v.type].speed)));}
 function cargoValid(s,stop){const batches=stop.cargo.map(id=>s.batches.find(b=>b.id===id));return batches.length>0&&batches.every(b=>b&&b.location==='vehicle'&&!b.blocked&&!b.locked&&b.owner===stop.owner&&b.item===stop.item)&&batches.reduce((n,b)=>n+b.qty,0)===stop.qty;}
 export function step(s,api){for(const t of s.tours||[]){
  for(const [i,stop] of t.stops.entries())if(stop.paymentAt!=null&&s.t>=stop.paymentAt&&!stop.paid){const o=s.orders.find(o=>o.id===stop.orderId);if(api.book(`tour-payment:${t.id}:${i}`,stop.invoiceAmount,'Umsatz',`Sammeltour: ${o.customer}`,[t.id,o.id])){stop.paid=true;o.paid=cents(o.paid+stop.invoiceAmount);}}
@@ -98,7 +100,7 @@ export function step(s,api){for(const t of s.tours||[]){
   const cost=cents((t.stops.reduce((n,x)=>n+x.distance,0)+t.returnDistance)*VEHICLES[v.type].runningCost);if(s.money<cost){t.blocked='Fahrtkosten nicht gedeckt';t.remaining=1;/* QS-W2-01 */if(pallet)releaseForklift(s,forkliftKey(t.id));api.workforce.release(`${t.id}:warehouse`);continue;}
   // Alle Reservierungen vorab geprüft; synchrone Fahrzeugtransfers benötigen keinen Lagerplatz.
   for(const stop of t.stops){const cargo=api.inventory.transfer(stop.reservationKey,'vehicle',t.site);stop.cargo=cargo.map(b=>b.id);stop.materialCost=stop.owner==='company'?cents(cargo.reduce((n,b)=>n+b.qty*b.unitCost,0)):0;}
-  delete t.loadDone;api.book(`tour-trip:${t.id}`,-cost,'Transport','Mehrstoppige Sammeltour',[t.id,v.id]);t.transportCost=cost;t.departedAt=s.t;{const k=dock.task;for(const b of s.buildings)if(b.task===k)b.task=null;};api.workforce.release(`${t.id}:warehouse`);if(pallet)releaseForklift(s,forkliftKey(t.id));t.worker=null;setPhase(t,'transit',travelMinutes(s,t.site,Math.ceil(t.stops[0].distance/VEHICLES[v.type].speed)));continue;
+  delete t.loadDone;api.book(`tour-trip:${t.id}`,-cost,'Transport','Mehrstoppige Sammeltour',[t.id,v.id]);t.transportCost=cost;t.departedAt=s.t;{const k=dock.task;for(const b of s.buildings)if(b.task===k)b.task=null;};api.workforce.release(`${t.id}:warehouse`);if(pallet)releaseForklift(s,forkliftKey(t.id));t.worker=null;setPhase(t,'transit',travelMinutes(s,t.site,Math.ceil(t.stops[0].distance/VEHICLES[v.type].speed),stopCtx(s,t.stops[0])));continue;
  }
  if(t.status==='returnUnloading'){
   const returns=(s.returns||[]).filter(r=>r.tourId===t.id&&r.status==='onTour');
