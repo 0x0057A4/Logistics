@@ -130,7 +130,7 @@ test('Kühlpakete werden ohne Kühllager nicht sortiert; Temperaturschaden auße
  const {sim,s}=hub({cold:1});const store=s.buildings.find(b=>b.type==='coldstore');
  const a=arrive(sim,[40],'parcel_cold');runUntil(sim,()=>a.phase==='docking');
  // Kühllager ausschalten, bevor entladen wird: Lkw wartet.
- cmd(sim,{type:'toggleBuilding',id:store.id});sim.step(3);assert.equal(a.waitReason,'Kühllager fehlt');assert.equal(a.unloaded,0);
+ cmd(sim,{type:'toggleBuilding',id:store.id});sim.step(3);assert.equal(a.waitReason,'Kühllager außer Betrieb');assert.equal(a.unloaded,0);
  cmd(sim,{type:'toggleBuilding',id:store.id});runUntil(sim,()=>a.phase==='exit');
  const before=qty(s,b=>b.item==='parcel_cold'&&b.location==='inbound');
  // Ausfall nach Entladen (vor Sortierung): keine Sortierung, Temperatur steigt, Qualität sinkt, Sperre.

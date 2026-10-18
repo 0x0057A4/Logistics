@@ -196,3 +196,10 @@ Vorher auf e37eb37 ohne `qa-015`: 655/655 bestanden.
 - „Lager voll“-Variante von B-0.15-1 mit Paletten/Sperrgut. Abgedeckt nur durch `tests/yard-dockrelease.test.js`.
 - Linienfahrt mit Kühlpaketen zwischen zwei Standorten mit Kühllager (nur Entwicklertest `ware-own`).
 - Mehrere Standorte mit Quergurt, Quergurt-Wartung über Werkstatt.
+
+## Nachtrag A01 (18.10.2026)
+
+- **QS-015-02 behoben:** Abriss gibt alle Personalbindungen `${gebäude}:*` frei (core.js). Befundtest aktiviert und grün.
+- **QS-015-04 behoben:** Neuer Wartegrund „Kühllager außer Betrieb“ bei vorhandenem, aber abgeschaltetem/stromlosem/defektem Kühllager (yard.js, Hinweis im Torbuch). Gibt wie die anderen Platzgründe das Dock frei.
+- **QS-015-01 (niedrig) und QS-015-03 (mittel):** auf 0.16 verschoben (Lastpriorität Energie; Rückgabe Fremdmaterial bei Storno Lohnfertigung). Testfälle bleiben als todo.
+- A02-Kühlwerte in BALANCING-0.15 stammen von vor dem Fix B-0.15-1; Neumessung in 0.16.

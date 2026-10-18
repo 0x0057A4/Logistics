@@ -374,7 +374,7 @@ test('BEFUND QS-015-01: Quergurt im Status „power“ zählt weiter als Last �
  assert.equal(coolingCapacity(s,SITE),200,`Kühlkapazität ${coolingCapacity(s,SITE)} statt 200`);
 });
 
-test('BEFUND QS-015-02: Abriss eines arbeitenden Quergurts lässt beide Lagerkräfte an der abgerissenen Anlage gebunden', {todo:'A04/A05: sorting.step gibt Bindungen nicht vorhandener Sortieranlagen frei'}, ()=>{
+test('QS-015-02 behoben: Abriss eines arbeitenden Quergurts gibt beide Lagerkräfte frei', ()=>{
  const sim=megaBase(),s=sim.state;staff(sim,'warehouse',3);const o=injectOrder(sim,3000);sim.step(3);
  const b=beltOf(s);assert.equal(b.crew,2);
  cmd(sim,{type:'demolish',id:b.id});sim.step(5);

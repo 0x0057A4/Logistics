@@ -32,9 +32,10 @@ export const COLD='parcel_cold',BULKY='bulky',BULKY_BASE=2;
 export const forkItem=item=>item===PALLET||item===BULKY;
 /** Sonderware im Hof (a.item gesetzt); Paketankünfte tragen kein Feld (Altstände/Hashes unverändert). */
 export const ARRIVAL_ITEMS=[PALLET,COLD,BULKY];
-WAIT.coldMissing='Kühllager fehlt';WAIT.coldFull='Kühllager voll';
+WAIT.coldMissing='Kühllager fehlt';WAIT.coldFull='Kühllager voll';WAIT.coldOff='Kühllager außer Betrieb';
 /** Wartegrund für Kühlware ohne freien Kühlplatz am Standort. */
-export const coldWait=(s,site)=>coolingCapacity(s,site)>0?WAIT.coldFull:WAIT.coldMissing;
+// QS-015-04: vorhandenes, aber abgeschaltetes/stromloses/defektes Kühllager eigens benennen.
+export const coldWait=(s,site)=>coolingCapacity(s,site)>0?WAIT.coldFull:s.buildings.some(b=>b.type==='coldstore'&&b.site===site)?WAIT.coldOff:WAIT.coldMissing;
 // B-0.15-1 (A01): Dockfreigabe bei Platzmangel. Ein Fremd-Lkw in unloading, der ohne Fortschritt auf Platz wartet
 // (SPACE_WAIT, nicht Personal/Stapler/Dock), gibt sein Dock nach DOCK_YIELD Minuten frei, sobald ein eigenes Fahrzeug
 // an diesem Standort auf ein Dock wartet (ownDockWaiting). Er kehrt mit Teilstand (unloaded/split bleiben) in die
@@ -43,7 +44,7 @@ export const coldWait=(s,site)=>coolingCapacity(s,site)>0?WAIT.coldFull:WAIT.col
 // im Minutentakt vor yard). In der Warteschlange erhält eine Ankunft ohne Platz kein Dock, solange ein eigenes
 // Fahrzeug am Standort auf ein Dock wartet; mit Platz oder ohne wartende eigene Fahrzeuge gilt FIFO wie bisher.
 // Kein neues gespeichertes Feld; Mengen, Vertragsfrist und Strafen laufen über die bestehenden Pfade.
-export const SPACE_WAIT=new Set([WAIT.full,WAIT.coldFull,WAIT.coldMissing]);
+export const SPACE_WAIT=new Set([WAIT.full,WAIT.coldFull,WAIT.coldMissing,WAIT.coldOff]);
 export const DOCK_YIELD=5;
 // Wartetexte eigener Abläufe, wenn kein Dock frei ist (transport.js, tours.js, service.js, linehaul.js, airexport.js).
 const OWN_DOCK_WAIT=[

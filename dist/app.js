@@ -877,6 +877,7 @@ function forkliftOf(s,a){const key=forkliftKey(a.id),b=s.buildings.find(x=>x.typ
 function waitHint(s,a){const r=a.waitReason;
  if(r===YARD_WAIT.noYard)return `<br><small class="muted">Abstellen am Dock nicht erlaubt</small> ${button('Containerhof bauen','build','containeryard')}`;
  if(r===YARD_WAIT.yardFull){const y=yardSummary(s,a.site);return `<br><small class="muted">${esc(teuText(y))} · entladen lassen oder weiteren Containerhof bauen</small> ${button('Containerhof','panel-containers')}`;}
+ if(r===YARD_WAIT.coldOff)return '<br><small class="muted">Kühllager einschalten bzw. Strom und Zustand prüfen</small>';
  if(r===YARD_WAIT.coldMissing)return `<br><small class="muted">Kühlpakete nur ins Kühllager</small> ${button('Kühllager bauen','build','coldstore')}`;
  if(r===YARD_WAIT.coldFull)return `<br><small class="muted">Kühlplätze belegt · Kühlpakete ausliefern oder weiteres Kühllager bauen</small> ${button('Kühllager bauen','build','coldstore')}`;
  if(!r||!/Stapler/.test(r))return '';
