@@ -51,10 +51,17 @@ function vehicleCooling(s,b,index){
 export function handle(s,c,api){
  if(c.type!=='disposeBatch')return null;
  const b=findBatch(s,c.batchId);
- if(!b||!b.coldDamaged||b.owner!=='company'||b.reserved||!['stock','quarantine'].includes(b.location)||b.qty<=0)return {ok:false,message:'Nur eigene, unreservierte temperaturgeschädigte Lagerware kann entsorgt werden.'};
+ // B-0.16-2 (A05): auch gesperrte Fremdware eines aktiven Auftrags (owner = Auftrags-ID, z. B. Kühlpakete) ist entsorgbar.
+ // Die Menge gilt dann als nicht zustellbar (o.disposedQty, nur Protokoll): o.delivered bleibt, die offene Menge wird wie
+ // bisher über die Vertragsabrechnung (contracts.settleOrder, penalty-open) bestraft; keine Erstattung, keine zweite Buchung.
+ // Fremdware auch im Wareneingang (inbound), weil gesperrte Pakete nicht sortiert werden. Kühlplatz wird sofort frei.
+ const order=b&&b.owner!=='company'?s.orders.find(o=>o.id===b.owner&&o.status==='active'):null;
+ if(!b||!b.coldDamaged||!(b.owner==='company'||order)||b.reserved||!['stock','quarantine',...(order?['inbound']:[])].includes(b.location)||b.qty<=0)return {ok:false,message:'Nur unreservierte temperaturgeschädigte Lagerware (eigene oder eines aktiven Auftrags) kann entsorgt werden.'};
  if(!api.workforce.acquire('warehouse',b.site,'dispose:'+b.id))return {ok:false,message:'Lagerpersonal für Entsorgung fehlt.'};
  const qty=b.qty;if(!api.book('dispose:'+b.id,-qty*2,'Entsorgung','Temperaturgeschädigte Ware',[b.id])){api.workforce.release('dispose:'+b.id);return {ok:false,message:'Kapital für Entsorgung fehlt.'};}
- api.inventory.remove(b.id,qty);api.workforce.release('dispose:'+b.id);api.log('coldchain',`${qty} temperaturgeschädigte Einheiten entsorgt.`,[b.id]);return {ok:true};
+ api.inventory.remove(b.id,qty);api.workforce.release('dispose:'+b.id);
+ if(order){order.disposedQty=(order.disposedQty||0)+qty;api.log('coldchain',`${qty} temperaturgeschädigte Einheiten von ${order.customer} entsorgt; gelten als nicht zustellbar (Vertragsstrafe bei Abrechnung).`,[b.id,order.id]);}
+ else api.log('coldchain',`${qty} temperaturgeschädigte Einheiten entsorgt.`,[b.id]);return {ok:true};
 }
 export function step(s,api){
  const space=new Map(s.sites.map(site=>[site.id,coolingCapacity(s,site.id)]));

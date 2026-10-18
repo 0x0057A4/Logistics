@@ -11,8 +11,10 @@ const RESPONSES={status:['inform'],deadline:['approve','reject'],complaint:['goo
 /** Manuell anlegbare Arten; Teillieferung entsteht nur automatisch. */
 const MANUAL=['status','deadline','complaint'];
 /** 0.16 S3 Antwortfrist in Spielminuten ab Anlage (A08-Vorschlag, Balancing A02 offen). Gilt für alle neu angelegten Anliegen
- *  (Feld respondBy; Altstände ohne Feld haben keine Frist). Unbeantwortet abgelaufen → einmalig Versenderzufriedenheit
- *  SATISFACTION.ignored; bei Aufträgen ohne Versender sinkt der Ruf um 1. Das Anliegen bleibt danach beantwortbar. */
+ *  (Feld respondBy; Altstände ohne Feld haben keine Frist). Eingehalten ist sie erst mit abgeschlossener Bearbeitung
+ *  (completedAt ≤ respondBy, B-0.16-1); eine Antwort ohne Kundendienstkraft (Status processing) zählt nicht. Abgelaufen →
+ *  einmalig Versenderzufriedenheit SATISFACTION.ignored; bei Aufträgen ohne Versender sinkt der Ruf um 1. Das Anliegen bleibt
+ *  danach beantwort- bzw. bearbeitbar. */
 export const RESPONSE_MINUTES={status:240,deadline:480,complaint:240,partial:360};
 /** 0.16 S3 Auslöser automatischer Anliegen (nur Vertragsaufträge, außer der bestehenden Beschwerde für alle Aufträge):
  *  risk: Frist in ≤ riskLead Min., nichts zugestellt und offene Menge nicht unterwegs (Statusanfrage, drohende Verspätung);
@@ -74,11 +76,12 @@ function automatic(s,api){
 export function step(s,api){
  automatic(s,api);
  for(const t of s.tickets){
-  if(t.status==='open'&&t.respondBy!==undefined&&!t.expired&&s.t>t.respondBy){
-   // Antwortfrist abgelaufen: genau einmal (Kennzeichen expired). Anliegen bleibt beantwortbar.
+  if(t.status!=='closed'&&t.respondBy!==undefined&&!t.expired&&s.t>t.respondBy){
+   // Antwortfrist abgelaufen ohne abgeschlossene Bearbeitung (offen oder noch in Bearbeitung, B-0.16-1): genau einmal
+   // (Kennzeichen expired). Anliegen bleibt beantwort- bzw. bearbeitbar.
    t.expired=true;const o=s.orders.find(o=>o.id===t.orderId),shipper=shipperOf(s,o);
    if(shipper)adjustShipper(s,shipper,SATISFACTION.ignored,'ignored');else s.reputation=Math.max(0,s.reputation-1);
-   api.log('warning',`Kundendienst: ${KIND_TEXT[t.kind]} zu ${o.customer} nicht fristgerecht beantwortet${shipper?`, Zufriedenheit ${shipper} sinkt`:', Ruf sinkt'}.`,[t.id,o.id]);
+   api.log('warning',`Kundendienst: ${KIND_TEXT[t.kind]} zu ${o.customer} nicht fristgerecht ${t.status==='open'?'beantwortet':'bearbeitet'}${shipper?`, Zufriedenheit ${shipper} sinkt`:', Ruf sinkt'}.`,[t.id,o.id]);
   }
   if(t.status!=='processing')continue;t.blocked=null;
   if(t.remaining>0){
@@ -115,7 +118,7 @@ export function validate(s){
   if(t.kind==='partial'&&t.trigger!=='partial'||t.kind==='status'&&t.source==='automatic'&&t.trigger===undefined)bad();
   if(t.respondBy!==undefined&&t.respondBy!==t.createdAt+RESPONSE_MINUTES[t.kind])bad();
   if(t.respondBy===undefined&&(t.kind==='partial'||t.trigger!==undefined))bad();
-  if(t.expired!==undefined&&(t.expired!==true||t.respondBy===undefined||s.t<=t.respondBy||t.startedAt!==null&&t.startedAt<=t.respondBy))bad();
+  if(t.expired!==undefined&&(t.expired!==true||t.respondBy===undefined||s.t<=t.respondBy||t.completedAt!==null&&t.completedAt<=t.respondBy))bad();
   if(t.status==='closed'?(typeof t.reply!=='string'||!t.reply.trim()||t.reply.length>1000):t.reply!==null)bad();
   if(!time(t.createdAt)||!number(t.originalDue)||!number(t.cost)||cents(t.cost)!==t.cost||!Number.isInteger(t.remaining)||t.remaining<0||t.remaining>DURATIONS[t.kind]||!(t.blocked===null||typeof t.blocked==='string'))bad();
   if(t.kind==='deadline'){const extension=t.requestedDue-t.originalDue;if(!number(t.requestedDue)||!Number.isInteger(extension)||extension<60||extension>1440)bad();}else if(t.requestedDue!==null)bad();

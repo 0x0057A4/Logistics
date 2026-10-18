@@ -137,6 +137,7 @@ Die nachher-Werte gelten mit den neuen Störungswerten. Diese erzeugen weniger S
 - Die Strafe −6 entfällt trotzdem.
 - Das ist im großen Betrieb 4.500 € mehr wert als eine echte Kraft.
 - Vorschlag: Frist erst bei Abschluss erfüllt, oder die Frist läuft auch im Zustand `processing` ohne Personal weiter.
+- **Behoben (0.16b, A08):** Frist gilt erst mit abgeschlossener Bearbeitung (`completedAt ≤ respondBy`); ein Anliegen in `processing` läuft wie unbeantwortet ab (einmalig `ignored`, Meldung „nicht fristgerecht bearbeitet“). Test `tests/fix-016b.test.js`.
 
 ## 5. Sortierstufen (`belt`, Teilsimulation, Kopfzahlsicht)
 
@@ -178,6 +179,7 @@ Die nachher-Werte gelten mit den neuen Störungswerten. Diese erzeugen weniger S
 - Folge: Nach einem langen Netzausfall ohne Energiegebäude sinkt die Kühlkapazität dauerhaft.
 - Bei p = 0,3 entstand so in Seed 4 ein Folgeschaden von −16.800 €. Deshalb bleibt p bei 0,2.
 - Vorschlag: Gesperrte Fremdpakete an den Versender zurückgeben (Strafe „nicht zugestellt“) oder entsorgen lassen.
+- **Behoben (0.16b, A05):** `disposeBatch` (special.js) entsorgt auch gesperrte, unreservierte Fremdware eines aktiven Auftrags (Lager, Quarantäne, Wareneingang) zu 2 €/Stk. Kühlplatz wird sofort frei. Protokoll `o.disposedQty`; `o.delivered` bleibt, daher bestraft die vorhandene Vertragsabrechnung (`penalty-open`) die Menge genau einmal als nicht zugestellt. Keine Erstattung. Oberfläche: Knopf „Entsorgen“ in der Kühlkette auch für diese Ware.
 
 ## 7. Angepasste Tests
 

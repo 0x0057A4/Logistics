@@ -17,7 +17,7 @@
 // Ausfall vor Abfahrt (Storno cancelLinehaul, Wartung über transport.maintainVehicle/serviceVehicleExternal):
 // Reservierung, Dock, Personal und Stapler frei, Pakete bleiben am Standort; nächste Abfahrt nimmt sie mit.
 import {ITEMS,VEHICLES} from './catalog.js';
-import {UNLOAD_BASE,FORK_ROLES} from './workforce.js';
+import {UNLOAD_BASE,FORK_ROLES,forkStep,afterStep} from './workforce.js';
 import {acquireForklift,releaseForklift,useForklift,forkliftKey,PALLET,PALLET_BASE,BULKY,BULKY_BASE,forkItem,coldWait} from './yard.js';
 import {coolingCapacity,coolingFree} from './special.js';
 import {travelMinutes} from './disruptions.js'; // 0.16 S1: Fahrtdauer beim Start inkl. Wetter/Stau
@@ -137,7 +137,8 @@ function holdDock(s,lh,site){
  if(dock){dock.task=lh.id;lh.dock=dock.id;}else lh.dock=null;
  return dock||null;
 }
-// Eine Minute Umschlag (Beladen am Start bzw. Entladen am Ziel). true = Arbeitsminute geleistet.
+// Eine Minute Umschlag (Beladen am Start bzw. Entladen am Ziel). Ergebnis: Restzeitabbau dieser Minute (0 = keine Arbeit;
+// Staplerfahrer beim Staplerumschlag workforce.forkStep, sonst 1).
 function handling(s,api,lh,site){
  if(!holdDock(s,lh,site)){lh.blocked=WAIT.dock;api.workforce.release(key(lh,'warehouse'));lh.worker=null;if(lh.pallet)releaseForklift(s,forkliftKey(lh.id));return false;}
  let fork=null;
@@ -145,7 +146,7 @@ function handling(s,api,lh,site){
  const w=lh.pallet?api.workforce.acquireAny(FORK_ROLES,site,key(lh,'warehouse')):api.workforce.acquire('warehouse',site,key(lh,'warehouse')); // S2: Staplerumschlag
  if(!w){lh.worker=null;lh.blocked=WAIT.staff;if(fork)releaseForklift(s,forkliftKey(lh.id));return false;}
  w.activity=lh.status==='loading'?'Belädt Linien-Lkw':'Entlädt Linien-Lkw';lh.worker=w.id;lh.blocked=null;if(fork)useForklift(s,fork);
- return true;
+ return lh.pallet?forkStep(w,s.t):1;
 }
 function endHandling(s,api,lh){api.workforce.release(key(lh,'warehouse'));lh.worker=null;if(lh.pallet)releaseForklift(s,forkliftKey(lh.id));}
 
@@ -157,7 +158,7 @@ function stepTrip(s,api,lh){
  if(!driver){lh.driver=null;lh.blocked=WAIT.driver;if(lh.status==='loading'||lh.status==='unloading')endHandling(s,api,lh);return;}
  lh.driver=driver.id;
  if(lh.status==='loading'){
-  if(!lh.loadDone){if(!handling(s,api,lh,lh.from)||--lh.remaining>0)return;lh.loadDone=true;endHandling(s,api,lh);}
+  if(!lh.loadDone){const d=handling(s,api,lh,lh.from);if(!d)return;lh.remaining=afterStep(lh.remaining,d);if(lh.remaining>0)return;lh.loadDone=true;endHandling(s,api,lh);}
   if(s.t<lh.departAt){lh.blocked=null;return;}
   if(s.money<lh.cost){lh.blocked=WAIT.cash;return;}
   const cargo=api.inventory.transfer(lh.id,'vehicle',lh.from);if(!cargo){lh.blocked=WAIT.cargo;return;}
@@ -168,7 +169,7 @@ function stepTrip(s,api,lh){
   return;
  }
  if(lh.status==='unloading'){
-  if(lh.remaining>0){if(!handling(s,api,lh,lh.to))return;lh.remaining--;}
+  if(lh.remaining>0){const d=handling(s,api,lh,lh.to);if(!d)return;lh.remaining=afterStep(lh.remaining,d);}
   if(lh.remaining>0)return;
   const cargo=lh.cargo.map(id=>s.batches.find(b=>b.id===id));
   if(cargo.some(b=>!b||b.location!=='vehicle')){lh.blocked=WAIT.cargo;endHandling(s,api,lh);return;}
