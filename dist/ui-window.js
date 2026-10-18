@@ -1,11 +1,18 @@
 // Fenstersystem 0.17 (A10-W): #panel als schwebendes Fenster und gruppierte Hauptnavigation.
-// Reine Darstellung: verändert keinen Spielstand. Geometrie je Fensterart liegt in prefs.windows[panel]={x,y,w,h,max}
-// (über load/save von app.js, also im vorhandenen Einstellungssystem). Koordinaten relativ zur Spielfläche #game.
+// Reine Darstellung: verändert keinen Spielstand. Koordinaten relativ zur Spielfläche #game (ohne Statuszeile).
+// Nutzervorgabe 18.10.2026: Referenz ist ein Bildschirm 1920 × 1080; Fenster skalieren mit der Spielfläche.
+// Geometrie je Fensterart liegt daher relativ in prefs.windows[panel]={rx,ry,rw,rh,max} (Anteile der Spielfläche, über
+// load/save von app.js). Ältere absolute Werte {x,y,w,h} werden beim Lesen einmalig umgerechnet (nur prefs, kein Spielstand).
 
 export const WIN_MIN = { w: 380, h: 260 };
 /** Abstand zum Rand der Spielfläche beim Maximieren und für die Startgröße. */
 export const WIN_GAP = 8;
+/** Referenzbildschirm 1920 × 1080: Spielfläche 1920 × 994 (Kopfzeile 56 px, Statuszeile 30 px). */
+export const REF = { w: 1920, h: 994 };
+/** Startbreiten als Anteil der Spielflächenbreite (bei 1920 px: 460 / 860 / 1400 px), rechts neben den Kamerawerkzeugen. */
+export const START = { normal: 460 / 1920, wide: 860 / 1920, table: 1400 / 1920, right: 60, top: 12, tableTop: 100 };
 const num = (v, d) => (Number.isFinite(Number(v)) && v !== null && v !== '' ? Number(v) : d);
+const r6 = v => Math.round(v * 1e6) / 1e6;
 
 /** Fenster vollständig in den sichtbaren Bereich {w,h} klemmen, Mindestgröße einhalten (höchstens Bereichsgröße). */
 export function clampGeom(g, area, min = WIN_MIN) {
@@ -18,12 +25,48 @@ export function clampGeom(g, area, min = WIN_MIN) {
   return { x, y, w, h };
 }
 
-/** Startgröße wie bisher: rechts neben der Werkzeugleiste, volle Höhe; breite Fensterarten (Tabellen) breiter. */
-export function defaultGeom(area, { wide = false, table = false, right = 60, top = 12 } = {}) {
-  const aw = num(area?.w, 1280), ah = num(area?.h, 700);
-  // table: große Tabellen (Lager, Aufträge, Board) starten rechts neben dem Standortfluss (bis 1100 px), liegen also über den Kennzahlen.
-  const w = table ? Math.max(440, Math.min(1100, aw - right - 360)) : wide ? Math.max(440, Math.min(860, aw - 680)) : Math.max(380, Math.min(460, aw - 420));
-  return clampGeom({ x: aw - right - w, y: top, w, h: ah - top - WIN_GAP }, area);
+/** Pixelgeometrie → Anteile der Spielfläche {rx,ry,rw,rh}. */
+export function toRel(g, area) {
+  const aw = Math.max(1, num(area?.w, 1)), ah = Math.max(1, num(area?.h, 1));
+  return { rx: r6(num(g?.x, 0) / aw), ry: r6(num(g?.y, 0) / ah), rw: r6(num(g?.w, 0) / aw), rh: r6(num(g?.h, 0) / ah) };
+}
+
+/** Anteile → Pixel in der aktuellen Spielfläche. Erzwingt die Mindestgröße ein Wachsen, bleibt die näher am Rand liegende
+ * Kante stehen (rechts liegende Fenster wachsen nach links, untere nach oben). Danach Klemmen in den sichtbaren Bereich. */
+export function fromRel(rel, area, min = WIN_MIN) {
+  const aw = Math.max(1, num(area?.w, 1)), ah = Math.max(1, num(area?.h, 1));
+  let x = num(rel?.rx, 0) * aw, y = num(rel?.ry, 0) * ah, w = num(rel?.rw, 0) * aw, h = num(rel?.rh, 0) * ah;
+  const minW = Math.min(min.w, aw), minH = Math.min(min.h, ah);
+  if (w < minW) { if (x + w / 2 > aw / 2) x -= minW - w; w = minW; }
+  if (h < minH) { if (y + h / 2 > ah / 2) y -= minH - h; h = minH; }
+  return clampGeom({ x, y, w, h }, area, min);
+}
+
+const overlaps = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+/** Startlage weicht HUD-Flächen (Kennzahlen, Ansichtsumschalter, Standortfluss, Leiste) aus: je Fläche nach unten oder nach
+ * rechts schieben, je nachdem, was mehr Fensterfläche erhält; Mindestgröße bleibt. */
+export function avoidRects(g, avoid = [], min = WIN_MIN) {
+  let r = { ...g };
+  for (let pass = 0; pass < 2; pass++) for (const a of avoid) {
+    if (!a || !(a.w > 0 && a.h > 0) || !overlaps(r, a)) continue;
+    const bottom = r.y + r.h, right = r.x + r.w;
+    const down = { x: r.x, y: Math.ceil(a.y + a.h + WIN_GAP), w: r.w, h: 0 }; down.h = bottom - down.y;
+    const side = { x: Math.ceil(a.x + a.w + WIN_GAP), y: r.y, w: 0, h: r.h }; side.w = right - side.x;
+    const okD = down.h >= min.h, okS = side.w >= min.w;
+    if (okD && (!okS || down.w * down.h >= side.w * side.h)) r = down; else if (okS) r = side;
+  }
+  return r;
+}
+
+/** Startlage auf 1920 × 1080 ausgelegt (Anteile der Breite): rechts neben den Kamerawerkzeugen, volle Höhe;
+ * breite Fensterarten breiter; Tabellen (Lager, Aufträge, Board) noch breiter, beginnen aber unterhalb der Kennzahlen.
+ * avoid: HUD-Flächen in Spielflächenkoordinaten, die die Startlage nicht verdecken darf. */
+export function defaultGeom(area, { wide = false, table = false } = {}, avoid = []) {
+  const aw = num(area?.w, REF.w), ah = num(area?.h, REF.h);
+  const frac = table ? START.table : wide ? START.wide : START.normal;
+  const w = Math.max(WIN_MIN.w, Math.round(aw * frac)), top = table ? START.tableTop : START.top;
+  const g = clampGeom({ x: aw - START.right - w, y: top, w, h: ah - top - WIN_GAP }, area);
+  return clampGeom(avoidRects(g, avoid), area);
 }
 
 /** Maximiert: gesamte Spielfläche ohne Bereichsleiste links (inset.left) mit kleinem Rand. */
@@ -43,12 +86,20 @@ export function resizeGeom(start, dir, dx, dy, area, min = WIN_MIN) {
   return clampGeom({ x, y, w, h }, area, min);
 }
 
-/** Geometrie aus den Einstellungen prüfen (beschädigte Werte → null, dann Startgröße). */
-export function readGeom(raw) {
+/** Geometrie aus den Einstellungen lesen → {rx,ry,rw,rh,max,migrated} oder null (beschädigt → Startlage).
+ * Relative Werte werden geprüft (Anteile 0…1, Breite/Höhe > 0). Alte absolute Werte {x,y,w,h} rechnet area einmalig
+ * in Anteile um (migrated:true, app.js speichert das Ergebnis); ohne area bleiben sie unlesbar. */
+export function readGeom(raw, area = null) {
   if (!raw || typeof raw !== 'object') return null;
+  const max = raw.max === true;
+  if ('rx' in raw || 'rw' in raw) {
+    const r = { rx: Number(raw.rx), ry: Number(raw.ry), rw: Number(raw.rw), rh: Number(raw.rh) };
+    if (!Object.values(r).every(Number.isFinite) || r.rw <= 0 || r.rh <= 0 || r.rw > 1.01 || r.rh > 1.01 || r.rx < -0.01 || r.ry < -0.01 || r.rx > 1 || r.ry > 1) return null;
+    return { ...r, max, migrated: false };
+  }
   const g = { x: Number(raw.x), y: Number(raw.y), w: Number(raw.w), h: Number(raw.h) };
-  if (!Object.values(g).every(Number.isFinite) || g.w <= 0 || g.h <= 0) return null;
-  return { ...g, max: raw.max === true };
+  if (!Object.values(g).every(Number.isFinite) || g.w <= 0 || g.h <= 0 || !area) return null;
+  return { ...toRel(clampGeom(g, area), area), max, migrated: true };
 }
 
 const DIRS = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'];
@@ -57,15 +108,19 @@ const ICON_RESTORE = '<rect x="4.5" y="8.5" width="11" height="11" rx="1.5"/><pa
 
 /**
  * Macht panel (#panel) zu einem schwebenden Fenster in game (#game).
- * load(key) → gespeicherte Geometrie oder null; save(key,{x,y,w,h,max}) speichert (prefs.windows).
- * Liefert {open(key,{wide}), close(), toggleMax(), state()}.
+ * load(key) → gespeicherte Geometrie oder null; save(key,{rx,ry,rw,rh,max}) speichert relativ (prefs.windows).
+ * Ohne gespeicherte Geometrie gilt die Startlage (defaultGeom), die bei jeder Größenänderung neu berechnet wird und den
+ * HUD-Flächen ausweicht. Vom Spieler verschobene/vergrößerte Fenster behalten ihre Anteile und skalieren proportional.
+ * Liefert {open(key,{wide,table}), close(), toggleMax(), refit(), state()}.
  */
+export const AVOID = ['.kpis', '.view-switch', '#flow', '.rail'];
 export function createPanelWindow({ panel, game, load = () => null, save = () => {}, doc = globalThis.document, win = globalThis.window }) {
   // Nur mit echtem DOM (Prüfumgebungen mit DOM-Ersatz behalten das feste Layout).
   if (!panel?.querySelector || !panel.appendChild || !game?.getBoundingClientRect || !doc?.createElement) return null;
   const head = panel.querySelector('.panel-head'), maxBtn = panel.querySelector('#panelMax');
   for (const d of DIRS) { const h = doc.createElement('div'); h.className = 'win-rs win-rs-' + d; h.dataset.dir = d; h.setAttribute('aria-hidden', 'true'); panel.appendChild(h); }
-  let key = '', wide = false, table = false, geom = null, max = false;
+  // rel: gespeicherte Anteile (null = Startlage); geom: Pixel der Wiederherstellungsgröße für die Fläche geomArea.
+  let key = '', opts = {}, rel = null, geom = null, geomArea = '', max = false;
   const area = () => {
     const sb = doc.querySelector('.statusbar')?.offsetHeight || 28;
     return { w: game.clientWidth, h: Math.max(1, game.clientHeight - sb) };
@@ -75,17 +130,36 @@ export function createPanelWindow({ panel, game, load = () => null, save = () =>
     if (!rail || rail.offsetParent === null) return { left: WIN_GAP };
     return { left: Math.round(rail.getBoundingClientRect().right - gr.left + WIN_GAP) };
   };
-  const shown = () => (max ? maxGeom(area(), inset()) : clampGeom(geom, area()));
+  const avoid = () => {
+    const gr = game.getBoundingClientRect(), out = [];
+    for (const sel of AVOID) {
+      const e = doc.querySelector(sel); if (!e || e.offsetParent === null || e.hidden) continue;
+      const r = e.getBoundingClientRect(); if (r.width > 0 && r.height > 0) out.push({ x: r.left - gr.left, y: r.top - gr.top, w: r.width, h: r.height });
+    }
+    return out;
+  };
+  /** Wiederherstellungsgröße für die aktuelle Fläche: Startlage stets neu, eigene Lage aus Anteilen (nur bei Flächenwechsel). */
+  function sync() {
+    const a = area(), ak = a.w + 'x' + a.h;
+    if (!rel) { geom = defaultGeom(a, opts, avoid()); geomArea = ak; }
+    else if (ak !== geomArea || !geom) { geom = fromRel(rel, a); geomArea = ak; }
+    return a;
+  }
+  const shown = () => { const a = sync(); return max ? maxGeom(a, inset()) : clampGeom(geom, a); };
   function reserve(r) {
     // Fahrzeugleiste/Hinweise rechts nur dann einrücken, wenn das Fenster rechts unten über ihnen liegt.
     const body = doc.body, a = area(); if (!body?.style?.setProperty) return;
-    if (panel.hidden || max) { body.style.removeProperty('--pw-open'); if (!panel.hidden) body.style.setProperty('--pw-open', '0px'); return; }
-    const vbar = parseFloat(getComputedStyle(body).getPropertyValue('--vbar-h')) || 176;
+    if (panel.hidden || max) { body.style.removeProperty('--pw-open'); body.classList?.remove('pw-over-mission'); if (!panel.hidden) body.style.setProperty('--pw-open', '0px'); return; }
+    const cs = getComputedStyle(body), px = n => parseFloat(cs.getPropertyValue(n));
+    const vbar = px('--vbar-h') || 176, left = px('--left') || 90, flowW = px('--flow-w') || 252, tools = px('--tools') || 60;
     const overBottom = r.y + r.h > a.h - vbar - 16, rightSide = r.x + r.w / 2 > a.w / 2;
-    body.style.setProperty('--pw-open', overBottom && rightSide ? Math.max(0, a.w - r.x - 60 + 10) + 'px' : '0px');
+    const open = overBottom && rightSide ? Math.max(0, a.w - r.x - tools + 10) : 0;
+    body.style.setProperty('--pw-open', open + 'px');
+    // Einstiegskarte (#mission) nur zeigen, wenn neben dem Fenster noch sinnvoll Platz bleibt (statt sie zu quetschen).
+    body.classList?.toggle('pw-over-mission', open > 0 && a.w - left - flowW - tools - open - 24 < 340);
   }
   function apply() {
-    if (!geom) return;
+    if (!key) return;
     const r = shown(), s = panel.style;
     s.left = r.x + 'px'; s.top = r.y + 'px'; s.width = r.w + 'px'; s.height = r.h + 'px'; s.right = 'auto'; s.bottom = 'auto';
     panel.classList.toggle('maximized', max);
@@ -99,21 +173,25 @@ export function createPanelWindow({ panel, game, load = () => null, save = () =>
     }
     reserve(r);
   }
-  const persist = () => { if (key && geom) save(key, { ...clampGeom(geom, area()), max }); };
-  function open(k, opts = {}) {
-    key = String(k || ''); wide = !!opts.wide; table = !!opts.table;
-    const stored = readGeom(load(key));
-    geom = stored ? clampGeom(stored, area()) : defaultGeom(area(), { wide, table });
-    max = !!stored?.max; apply();
+  /** Aktuelle Wiederherstellungsgröße als Anteile übernehmen und speichern. */
+  const persist = () => { if (!key || !geom) return; const a = area(); rel = toRel(clampGeom(geom, a), a); geomArea = a.w + 'x' + a.h; save(key, { ...rel, max }); };
+  function open(k, o = {}) {
+    key = String(k || ''); opts = { wide: !!o.wide, table: !!o.table };
+    const a = area(), stored = readGeom(load(key), a);
+    rel = stored ? { rx: stored.rx, ry: stored.ry, rw: stored.rw, rh: stored.rh } : null; geom = null; geomArea = '';
+    max = !!stored?.max;
+    // Einmalige Umrechnung alter absoluter Werte: sofort relativ speichern.
+    if (stored?.migrated) save(key, { ...rel, max });
+    apply();
   }
-  function close() { panel.classList.remove('maximized'); doc.body?.style?.removeProperty?.('--pw-open'); }
-  function toggleMax() { if (!geom) return; max = !max; apply(); persist(); }
+  function close() { panel.classList.remove('maximized'); doc.body?.style?.removeProperty?.('--pw-open'); doc.body?.classList?.remove('pw-over-mission'); }
+  function toggleMax() { if (!key) return; sync(); max = !max; persist(); apply(); }
 
   // Ziehen (Titelleiste) und Größe ändern (Ränder/Ecken) mit Zeigererfassung; die Szene erhält diese Ereignisse nicht.
   let op = null;
   const local = e => { const gr = game.getBoundingClientRect(); return { x: e.clientX - gr.left, y: e.clientY - gr.top }; };
   function begin(e, kind, dir = '') {
-    if (e.button !== 0 || !geom) return;
+    if (e.button !== 0 || !key) return;
     e.preventDefault(); e.stopPropagation();
     if (max && kind !== 'move') return;
     op = { kind, dir, p: local(e), start: { ...shown() }, id: e.pointerId, target: e.currentTarget, moved: false, fromMax: max };
@@ -127,10 +205,12 @@ export function createPanelWindow({ panel, game, load = () => null, save = () =>
       // Erst ab 4 px Bewegung ziehen: Klick und Doppelklick auf die Titelleiste verändern nichts.
       if (Math.hypot(p.x - op.p.x, p.y - op.p.y) < 4) return;
       op.moved = true; panel.classList.add(op.kind === 'move' ? 'win-moving' : 'win-resizing');
+      // Ab jetzt eigene Lage: Startlage nicht mehr neu berechnen (Anteile werden beim Loslassen gespeichert).
+      if (!rel) { const a = sync(); rel = toRel(geom, a); }
       if (op.fromMax) {
         // Ziehen aus dem maximierten Zustand: wiederherstellen, Fenster bleibt unter dem Zeiger.
         const fx = (op.p.x - op.start.x) / op.start.w;
-        max = false; geom = clampGeom({ ...geom, x: op.p.x - geom.w * fx, y: op.p.y - 16 }, area()); op.start = { ...geom }; apply();
+        max = false; sync(); geom = clampGeom({ ...geom, x: op.p.x - geom.w * fx, y: op.p.y - 16 }, area()); op.start = { ...geom }; apply();
       }
     }
     const dx = p.x - op.p.x, dy = p.y - op.p.y;
@@ -152,11 +232,11 @@ export function createPanelWindow({ panel, game, load = () => null, save = () =>
   maxBtn?.addEventListener('click', e => { e.preventDefault(); toggleMax(); });
   // Bedienung im Fenster nicht an Szene/Kamera weiterreichen (Mausrad, Ziehen, Doppelklick); Klicks erreichen app.js weiterhin.
   for (const type of ['wheel', 'pointerdown', 'pointermove', 'dblclick']) panel.addEventListener(type, e => e.stopPropagation(), type === 'wheel' ? { passive: true } : undefined);
-  // Nach Größenänderung der Ansicht sichtbar halten (nur Anzeige; gespeicherte Geometrie bleibt für größere Ansichten erhalten).
-  const refit = () => { if (!panel.hidden && geom) apply(); };
+  // Nach Größenänderung der Ansicht: Startlage neu, eigene Lage proportional aus den Anteilen; stets im sichtbaren Bereich.
+  const refit = () => { if (!panel.hidden && key) apply(); };
   win?.addEventListener?.('resize', refit);
   if (typeof ResizeObserver === 'function') new ResizeObserver(refit).observe(game);
-  return { open, close, toggleMax, refit, state: () => ({ key, max, geom: geom && { ...geom }, shown: geom && shown() }) };
+  return { open, close, toggleMax, refit, state: () => ({ key, max, rel: rel && { ...rel }, custom: !!rel, geom: geom && { ...geom }, shown: key ? shown() : null }) };
 }
 
 /**

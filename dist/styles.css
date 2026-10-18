@@ -42,6 +42,8 @@
  --ic-stroke:1.6;
  /* Layout (unverändert seit 0.9) */
  --hdr:56px;--sb:30px;--rail:66px;--left:90px;--tools:60px;--pw:0px;--pw-open:0px;--vbar-h:176px;--flow-w:252px;
+ /* Referenz 1920 × 1080 (Nutzervorgabe 18.10.2026): Kennzahlen, Ansichtsumschalter und Standortfluss stapeln sich überlappungsfrei */
+ --kpi-h:80px;--vs-h:40px;--vs-top:calc(12px + var(--kpi-h) + 8px);--flow-top:calc(var(--vs-top) + var(--vs-h) + 6px);
  /* Kompatibilität: ältere Bezeichner zeigen auf die Tokens */
  --ink:var(--c-ink);--muted:var(--c-muted);--line:var(--c-line);--paper:var(--c-surface-2);--glass:var(--c-glass);--glass-line:var(--c-line);--shadow:var(--sh-1);
  --wait:var(--c-wait);--wait-bg:var(--c-wait-bg);--wait-ink:var(--c-wait-ink);--move:var(--c-accent);--move-bg:var(--c-accent-soft);--move-ink:var(--c-accent-hover);
@@ -206,18 +208,18 @@ body.vbar-collapsed{--vbar-h:38px}
 
 /* Kennzahlen */
 .kpis{position:absolute;left:var(--left);top:12px;z-index:11;display:flex;gap:var(--s-2)}
-.kpi{width:176px;display:flex;flex-direction:column;align-items:flex-start;gap:1px;text-align:left;padding:9px 13px 10px;border-radius:var(--r-lg)}
+.kpi{width:176px;height:var(--kpi-h);overflow:hidden;display:flex;flex-direction:column;align-items:flex-start;gap:1px;text-align:left;padding:9px 13px 10px;border-radius:var(--r-lg)}
 .kpi:hover{background:var(--c-surface);border-color:var(--c-line-strong)}
 .kpi small{font-size:.8rem;letter-spacing:var(--track-caps);color:var(--c-muted);font-weight:var(--w-semi);white-space:nowrap}
 .kpi strong{font-size:var(--t-lg);font-weight:var(--w-semi);letter-spacing:-.02em;line-height:1.2;margin-top:2px}
 .kpi-sub{font-size:var(--t-xs);color:var(--c-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
-.view-switch{position:absolute;left:var(--left);top:88px;z-index:11;display:flex;gap:2px;padding:3px;border-radius:var(--r-md)}
+.view-switch{position:absolute;left:var(--left);top:var(--vs-top);height:var(--vs-h);align-items:center;z-index:11;display:flex;gap:2px;padding:3px;border-radius:var(--r-md)}
 .view-switch button{background:transparent;border:0;font-size:var(--t-sm);font-weight:var(--w-med);padding:5px 10px;border-radius:var(--r-sm);color:var(--c-muted)}
 .view-switch button:hover{color:var(--c-ink);background:var(--c-surface-2)}
 .view-switch button.active{background:var(--c-accent-soft);color:var(--c-accent);font-weight:var(--w-semi)}
 
 /* Standortfluss */
-.flow{position:absolute;left:var(--left);top:128px;width:var(--flow-w);max-height:calc(100% - 128px - var(--sb) - var(--vbar-h) - 18px);z-index:11;display:flex;flex-direction:column;border-radius:var(--r-lg);overflow:hidden}
+.flow{position:absolute;left:var(--left);top:var(--flow-top);width:var(--flow-w);max-height:calc(100% - var(--flow-top) - var(--sb) - var(--vbar-h) - 18px);z-index:11;display:flex;flex-direction:column;border-radius:var(--r-lg);overflow:hidden}
 .flow-head{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 8px 8px 14px;border-bottom:1px solid var(--c-line);flex:none}
 body.flow-collapsed .flow-head{border-bottom:0}
 .flow-head b{display:block;font-size:var(--t-md);font-weight:var(--w-semi);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px}
@@ -384,7 +386,7 @@ tr.selected td{background:var(--c-accent-soft)}
 .mission-collapse .ic{width:13px;height:13px}
 
 /* Fahrzeugleiste */
-.vbar{position:absolute;left:var(--left);right:calc(var(--tools) + var(--pw-open));bottom:calc(var(--sb) + 8px);height:var(--vbar-h);z-index:11;display:flex;flex-direction:column;border-radius:var(--r-lg);overflow:hidden}
+.vbar{position:absolute;left:var(--left);right:calc(var(--tools) + var(--pw-open));bottom:calc(var(--sb) + 8px);height:var(--vbar-h);z-index:11;container-type:inline-size;container-name:vbar;display:flex;flex-direction:column;border-radius:var(--r-lg);overflow:hidden}
 .vbar-head{display:flex;align-items:center;gap:10px;padding:0 6px;height:36px;flex:none;border-bottom:1px solid var(--c-line)}
 body.vbar-collapsed .vbar-head{border-bottom:0}
 .vbar-toggle{display:flex;align-items:center;gap:8px;border:0;background:transparent;padding:6px 8px}
@@ -396,7 +398,7 @@ body.vbar-collapsed .vbar-scroll{display:none}
 .vrow{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,.9fr) minmax(0,1.6fr) minmax(0,1fr) 56px;gap:10px;align-items:center;width:100%;text-align:left;border:0;border-radius:0;border-bottom:1px solid var(--c-line-2);background:transparent;padding:5px 12px;font-size:var(--t-sm);line-height:1.3;color:var(--c-ink-2)}
 .vrow>span{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .vrow:hover{background:var(--c-surface-2);border-color:var(--c-line-2)}
-.vhead{position:sticky;top:0;z-index:1;background:var(--c-surface);font-size:var(--t-micro);letter-spacing:var(--track-caps);color:var(--c-muted);font-weight:var(--w-semi);text-transform:uppercase;padding-top:5px;padding-bottom:5px}
+.vhead{position:sticky;top:0;z-index:1;background:var(--c-surface);font-size:var(--t-cap);letter-spacing:var(--track-caps);color:var(--c-muted);font-weight:var(--w-semi);text-transform:uppercase;padding-top:5px;padding-bottom:5px}
 .vhead:hover{background:var(--c-surface)}
 .vrow .num{text-align:right}
 .vrow b{font-weight:var(--w-semi);color:var(--c-ink)}
@@ -478,8 +480,7 @@ body.reduced *{transition:none!important}
 body.large{--font:17px;--flow-w:290px}
 body.large .panel-body{zoom:1.13}
 body.large .kpi{width:196px}
-body.large .view-switch{top:96px}
-body.large .flow{top:138px;max-height:calc(100% - 138px - var(--sb) - var(--vbar-h) - 18px)}
+body.large{--kpi-h:90px;--vs-h:44px;--vs-top:calc(12px + var(--kpi-h) + 8px);--flow-top:calc(var(--vs-top) + var(--vs-h) + 6px)}
 body.scene-only .hud,body.scene-only .rail,body.scene-only .panel{display:none!important}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 @media(max-height:820px){.rail>button,.rail-more{padding:3px 0 2px;gap:1px}.rail .ic{width:18px;height:18px}body:not(.vbar-collapsed){--vbar-h:150px}}
@@ -783,3 +784,47 @@ th.num .sv-sort{text-align:right}
 .vrow.orow{grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) minmax(0,1.5fr) minmax(0,1fr) minmax(0,1fr)}
 /* A01 0.17-Integration: Spaltenköpfe in Lager-/Auftragstabellen dürfen umbrechen (.num-Regel setzte nowrap → Überlappung bei 1366 px) */
 .sv-table th.num,.ov-table th.num,.sv-table th,.ov-table th{white-space:normal}
+/* ==== 0.17 A10 Referenz 1920 × 1080: untere Betriebsleiste kürzt Spalten nach verfügbarer Breite (Containerabfrage statt Zoom).
+   Volle Texte stehen im Tooltip der Zeile bzw. des Spaltenkopfs. Einstiegskarte weicht breiten Fenstern. */
+body.pw-over-mission .mission{display:none}
+.vbar-head{min-width:0}
+.vbar-tab .eyebrow{white-space:nowrap}
+#vbarSummary{min-width:0;flex:1}
+@container vbar (max-width:700px){
+ .vrow{grid-template-columns:minmax(0,1.3fr) minmax(0,1.6fr) minmax(0,1fr) 56px}
+ .vrow.orow{grid-template-columns:minmax(0,1.3fr) minmax(0,1.5fr) minmax(0,1fr) minmax(0,1fr)}
+ .vrow>:nth-child(2){display:none}
+}
+.vbar-tab-ic{display:none;width:17px;height:17px}
+@container vbar (max-width:480px){
+ .vbar-tab .eyebrow{display:none}.vbar-tab-ic{display:block}.vbar-tab{padding:6px 8px}.vbar-head{gap:6px}
+ .vrow{grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) 52px;gap:8px;padding-left:10px;padding-right:10px}
+ .vrow.orow{grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) minmax(0,1fr)}
+ .vrow>:nth-child(3){display:none}
+ #vbarSummary{display:none}
+}
+/* ==== 0.17 A10 Nutzervorgabe 18.10.2026: Lager- und Auftragstabelle einzeilig. Keine Silbentrennung/Umbrüche in Datenzellen und
+   Spaltenköpfen; was nicht passt, endet mit „…“ und steht vollständig im Tooltip (title) bzw. in der Aufklappzeile. */
+.sv-table>thead>tr:not(.sv-filters)>th,.ov-table>thead>tr:not(.sv-filters)>th{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;vertical-align:middle;hyphens:manual}
+.sv-table .sv-sort,.ov-table .sv-sort{display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sv-table th.num .sv-sort,.ov-table th.num .sv-sort{margin-left:auto}
+.sv-row>td,.ov-row>td{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;hyphens:manual;overflow-wrap:normal;word-break:normal;vertical-align:middle}
+.ov-row .chip{white-space:nowrap;display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;vertical-align:middle}
+.ov-row td.ov-act{display:table-cell}
+.ov-row td button{padding:2px 8px;line-height:1.35;vertical-align:middle}
+.ov-row td .sv-link{padding:0 2px}
+.ov-row td .sv-link+.sv-link,.ov-row td button+.sv-link{margin-left:6px}
+.sv-row .sv-toggle{display:inline-flex;align-items:baseline;gap:4px;max-width:100%;vertical-align:middle;white-space:nowrap}
+.sv-row .sv-toggle b{overflow:hidden;text-overflow:ellipsis;min-width:0}
+.sv-resline{display:flex;align-items:center;gap:8px;min-width:0}
+.sv-reslist{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sv-reslist .sv-res{display:inline;padding:0;margin-right:8px}
+.sv-reslist .sv-plus{height:22px;min-width:24px;margin-right:5px;vertical-align:middle}
+.sv-resmore{flex:none;white-space:nowrap}
+.sv-resfull{display:flex;flex-direction:column;gap:2px;margin-top:4px}
+.sv-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.ov-table col:nth-child(1){width:23%}.ov-table col:nth-child(2){width:18.5%}.ov-table col:nth-child(3){width:6%}.ov-table col:nth-child(4){width:6%}
+.ov-table col:nth-child(5){width:4%}.ov-table col:nth-child(6){width:6.5%}.ov-table col:nth-child(7){width:15%}.ov-table col:nth-child(8){width:8%}
+.ov-table col:nth-child(9){width:6%}.ov-table col:nth-child(10){width:7%}
+.sv-table col:nth-child(1){width:24%}.sv-table col:nth-child(2){width:9%}.sv-table col:nth-child(3){width:8%}.sv-table col:nth-child(4){width:8%}
+.sv-table col:nth-child(5){width:16%}.sv-table col:nth-child(6){width:35%}

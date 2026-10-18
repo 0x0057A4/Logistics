@@ -32,13 +32,17 @@ const HUD=['.topbar','.rail','.kpis','.view-switch','#flow','.camera-controls','
 async function rects(page,selectors){return page.evaluate(sel=>sel.map(s=>{const e=document.querySelector(s);if(!e)return {s,visible:false};const st=getComputedStyle(e),r=e.getBoundingClientRect();return {s,visible:st.display!=='none'&&st.visibility!=='hidden'&&!e.hidden&&r.width>0&&r.height>0,x:r.left,y:r.top,w:r.width,h:r.height};}),selectors);}
 const hit=(a,b)=>a.x<b.x+b.w-0.5&&b.x<a.x+a.w-0.5&&a.y<b.y+b.h-0.5&&b.y<a.y+a.h-0.5;
 async function overlapCheck(page,label,withPanel){
+ if(withPanel){const custom=await page.evaluate(()=>{const k=document.querySelector('#panelTitle')&&JSON.parse(localStorage.getItem('industrie-logistik-v1-prefs')||'{}').windows;return k&&Object.keys(k).length;});check(!custom,`${label}: Fenster in Standardlage (keine gespeicherte Geometrie)`);}
  const list=(await rects(page,withPanel?[...HUD,'#panel']:HUD)).filter(r=>r.visible);
  const pairs=[];for(let i=0;i<list.length;i++)for(let j=i+1;j<list.length;j++)if(hit(list[i],list[j]))pairs.push(list[i].s+' ↔ '+list[j].s);
  check(!pairs.length,`${label}: keine Überlappung sichtbarer HUD-Flächen${withPanel?' mit Panel':''}${pairs.length?' – '+pairs.join(', '):''}`);
  const vw=page.viewportSize();const outside=list.filter(r=>r.x<-0.5||r.y<-0.5||r.x+r.w>vw.width+0.5||r.y+r.h>vw.height+0.5).map(r=>r.s);
  check(!outside.length,`${label}: alle HUD-Flächen im Bildschirm${outside.length?' – '+outside.join(', '):''}`);
 }
-for(const [width,height] of [[1920,1080],[1280,800]]){
+// Nutzervorgabe 18.10.2026: Referenz 1920 × 1080, zusätzlich 1366 × 768 und 1280 × 800. Geprüft wird die Standardlage der Fenster
+// (keine gespeicherte Geometrie): Sie muss überlappungsfrei sein. Nur vom Spieler verschobene Fenster dürfen HUD-Flächen verdecken;
+// das prüft dieser Test bewusst nicht (eigene Lage, siehe tests/browser/ui-017-window.mjs).
+for(const [width,height] of [[1920,1080],[1366,768],[1280,800]]){
  const label=`${width}×${height}`;
  const context=await browser.newContext({viewport:{width,height},deviceScaleFactor:1});const page=await context.newPage();
  const errors=[];page.on('console',m=>{if(m.type()!=='error')return;const where=m.location()?.url||'';if(/\/favicon\.ico$/.test(where)){log.push(`${label}: Hinweis – Browser fragt /favicon.ico ab (404, kein Spielfehler)`);return;}errors.push(m.text()+(where?' @ '+where:''));});page.on('pageerror',e=>errors.push(String(e)));
@@ -122,4 +126,4 @@ for(const [width,height] of [[1920,1080],[1280,800]]){
 await browser.close();server.close();
 console.log(log.join('\n'));
 if(failures.length){console.error(failures.join('\n'));process.exit(1);}
-console.log(`Browser-Check bestanden. Bildschirmfotos: ${path.relative(root,outDir)}/hud-0.9-1920.png, hud-0.9-1280.png, hof-ui-0.9.png`);
+console.log(`Browser-Check bestanden. Bildschirmfotos: ${path.relative(root,outDir)}/hud-0.9-1920.png, hud-0.9-1366.png, hud-0.9-1280.png, hof-ui-0.9.png`);

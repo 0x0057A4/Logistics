@@ -34,6 +34,21 @@ for(const [w,h] of [[1366,768],[1920,1080]]){
  const L=`${w}×${h}`,wait=ms=>page.waitForTimeout(ms),text=sel=>page.textContent(sel).catch(()=>'');
  const noOverflow=()=>page.evaluate(()=>{const b=document.querySelector('#panelBody'),d=document.documentElement;return b.scrollWidth<=b.clientWidth+1&&d.scrollWidth<=window.innerWidth+1;});
  const shot=async n=>{if(shots)await page.screenshot({path:join(shots,`${n}-${w}.png`)});};
+ // Nutzervorgabe 18.10.2026 „Alles soll in einer Zeile angezeigt sein“: je Datenzeile höchstens eine Textzeile (Textfragmente
+ // aller Zellen liegen auf einer Höhe), Zeilenhöhe ≈ eine Textzeile, gekürzte Zellen tragen einen Tooltip (title).
+ const oneLine=(sel,nameCol)=>page.evaluate(([sel,nameCol])=>{const out={rows:0,multi:[],tall:[],cutNoTitle:[],nameCut:[],maxH:0};
+  for(const tr of [...document.querySelectorAll(sel)].slice(0,40)){out.rows++;const h=tr.getBoundingClientRect().height;out.maxH=Math.max(out.maxH,Math.round(h));
+   const centers=[];let lh=0;
+   for(const td of tr.children){const tw=document.createTreeWalker(td,NodeFilter.SHOW_TEXT);for(let n=tw.nextNode();n;n=tw.nextNode()){if(!n.textContent.trim()||n.parentElement.closest('.sv-sr'))continue;const r=document.createRange();r.selectNodeContents(n);for(const q of r.getClientRects())if(q.width>0&&q.height>0){centers.push(q.top+q.height/2);lh=Math.max(lh,q.height);}}
+    if(td.scrollWidth>td.clientWidth+1&&!td.closest('[title]')&&!td.querySelector('[title]'))out.cutNoTitle.push(td.textContent.trim().slice(0,30));}
+   const spread=Math.max(...centers)-Math.min(...centers);if(spread>lh*0.6)out.multi.push(tr.textContent.trim().slice(0,40)+' Δ'+Math.round(spread));
+   if(h>lh*1.6+20)out.tall.push(Math.round(h));
+   const nc=tr.children[nameCol],nb=nc?.querySelector('.ov-pname,.sv-toggle b');
+   if(nb){const cr=nc.getBoundingClientRect(),pr=parseFloat(getComputedStyle(nc).paddingRight)||0;if(nb.scrollWidth>nb.clientWidth+1||nb.getBoundingClientRect().right>cr.right-pr+1)out.nameCut.push(nb.textContent.trim().slice(0,30));}else if(nc)out.nameCut.push('kein Produktname');}
+  return out;},[sel,nameCol]);
+ const lineOk=(L,what,r,full)=>{ok(`${L} ${what}: jede Zeile einzeilig`,r.rows>0&&!r.multi.length&&!r.tall.length,`${r.rows} Zeilen, max. ${r.maxH} px ${JSON.stringify(r.multi.slice(0,3))}`);
+  ok(`${L} ${what}: gekürzte Zellen mit Tooltip`,!r.cutNoTitle.length,JSON.stringify(r.cutNoTitle.slice(0,3)));
+  if(full)ok(`${L} ${what}: Produktnamen vollständig sichtbar`,!r.nameCut.length,JSON.stringify(r.nameCut.slice(0,3)));};
  try{
   await page.goto(url+'index.html');await page.waitForFunction(()=>document.querySelector('#welcome')?.open);
   await page.click('#welcome [data-action="start"]');await wait(600);
@@ -53,6 +68,7 @@ for(const [w,h] of [[1366,768],[1920,1080]]){
   ok(`${L} Lager: Sortierung nach Gesamt`,/▼|▲/.test(await text('[data-action="stockSort"][data-id="total"]')));
   ok(`${L} Lager ohne horizontalen Überlauf`,await noOverflow());
   const sticky=await page.evaluate(()=>getComputedStyle(document.querySelector('.sv-table thead')).position);ok(`${L} Lager: Tabellenkopf sticky`,sticky==='sticky',sticky);
+  lineOk(L,'Lager',await oneLine('.sv-row',0),w>=1920);
   await shot('ui017-lager');
   const plus=page.locator('[data-stock-row="lamp|company"] [data-action="stockBuy"]').first();
   ok(`${L} [+] mit Tooltip`,(await plus.getAttribute('title'))==='Ressource bestellen');
@@ -78,6 +94,7 @@ for(const [w,h] of [[1366,768],[1920,1080]]){
   ok(`${L} Suche findet Auftrag`,await page.locator('.ov-row').count()===1&&await page.locator(`[data-order-row="${first.id}"]`).count()===1);
   await page.fill('#search','');await wait(300);
   ok(`${L} Aufträge ohne horizontalen Überlauf`,await noOverflow());
+  lineOk(L,'Aufträge',await oneLine('.ov-row',1),w>=1920);
   ok(`${L} Erklärung Aufträge/Verträge`,/Aufträge und Verträge/.test(await text('#panelBody')));
   await shot('ui017-auftraege');
   // Untere Leiste
