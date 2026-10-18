@@ -2,7 +2,7 @@
 // Fremde Lkw durchlaufen approach→gate→queue→toDock→docking→unloading→exit→gone.
 // Dock-Regel wie transport.js/tours.js/service.js: Dock frei, wenn type 'dock', enabled, condition>0 und ohne b.task.
 // Belegung b.task=arrival.id von toDock bis Ende unloading. Eigene Abläufe prüfen ebenfalls !b.task → keine Doppelbelegung.
-import {workRate,UNLOAD_BASE,GATE_ROLE} from './workforce.js';
+import {workRate,UNLOAD_BASE,FORK_ROLES,GATE_ROLES} from './workforce.js';
 import {BUILDINGS,ITEMS} from './catalog.js';
 import {coolingCapacity,coolingFree} from './special.js';
 import {arrivalDelay,gateDown,gridEnergy,WEATHER_NAME,weatherAt} from './disruptions.js';
@@ -78,12 +78,13 @@ export function isFreeDock(b,site){return b.type==='dock'&&b.site===site&&b.enab
 export function freeDock(s,site){return s.buildings.find(b=>isFreeDock(b,site))||null;}
 
 export function init(s){s.yard??=[];}
-// Torkontrolle (A06 W1b): Phase gate braucht eine Lagerkraft (Schlüssel gateKey) für DURATION.gate Arbeitsminuten.
+// Torkontrolle (A06 W1b): Phase gate braucht einen Torposten oder eine Lagerkraft (0.16 S2, GATE_ROLES; Schlüssel gateKey)
+// für DURATION.gate Arbeitsminuten (Torposten leistet im Mittel 1,25 Minuten je Minute).
 // a.gateDone zählt geleistete Minuten (fehlend = 0, alte Stände starten die Kontrolle neu); ohne Kraft wartet der Lkw
 // mit WAIT.gate, phaseEnd zeigt dann das frühestmögliche Ende. Bindung nur während gate.
 export const gateKey=a=>`${a.id}:gate`;
 export const unloadKey=a=>`${a.id}:warehouse`;
-const heldRate=(s,key,base=UNLOAD_BASE)=>{const w=s.workers.find(w=>w.task===key);return w?workRate(w,base):base;};
+const heldRate=(s,key,base=UNLOAD_BASE,role)=>{const w=s.workers.find(w=>w.task===key);return w?workRate(w,base,role):base;}; // Spezialist: Mittelwert (S2)
 const isPallet=a=>forkItem(a.item); // Staplerumschlag (Palette oder Sperrgut)
 
 // ── Staplerplatz (W2-S2) ─────────────────────────────────────────────────────────────────────────────────────
@@ -241,7 +242,7 @@ function due(s,a){
 function updateRisk(s,a){
  if(a.kind){a.atRisk=false;a.forecast=null;return;}
  const base=BASE_OF(a.item);
- const unloadRest=Math.ceil((a.parcels-a.unloaded)/heldRate(s,unloadKey(a),base)),t=s.t;let ready;
+ const unloadRest=Math.ceil((a.parcels-a.unloaded)/heldRate(s,unloadKey(a),base,isPallet(a)?'forklift':undefined)),t=s.t;let ready;
  const ahead=a.phase==='queue'?queueOrder(s,a.site).indexOf(a):0;
  const queueWait=ahead*Math.ceil(a.parcels/base);
  switch(a.phase){
@@ -271,10 +272,10 @@ export function handle(s,c,api){
 function unloadPallets(s,api,a,t){
  const fk=forkliftKey(a.id),f=acquireForklift(s,a.site,fk);
  if(!f.forklift){api.workforce.release(unloadKey(a));wait(a,f.reason,t);return;}
- const worker=api.workforce.acquire('warehouse',a.site,unloadKey(a));
+ const worker=api.workforce.acquireAny(FORK_ROLES,a.site,unloadKey(a)); // S2: Staplerfahrer vor Lagerkraft
  if(!worker){releaseForklift(s,fk);wait(a,WAIT.staff,t);return;}
  worker.activity=`Entlädt ${a.plate} mit Stapler`;
- const r=unloadMinute(s,api,a,Math.min(workRate(worker,BASE_OF(a.item)),a.parcels-a.unloaded),a.item,'stock');
+ const r=unloadMinute(s,api,a,Math.min(workRate(worker,BASE_OF(a.item),'forklift',t),a.parcels-a.unloaded),a.item,'stock');
  if(r.added)useForklift(s,f.forklift);
  if(r.full){wait(a,WAIT.full,t);if(!r.added){api.workforce.release(unloadKey(a));releaseForklift(s,fk);}}
  else{a.waitReason=null;a.waitSince=null;}
@@ -291,12 +292,12 @@ function stepYard(s,api){
  for(const a of s.yard){
   if(a.phase==='approach'&&t>=a.phaseEnd){setPhase(a,'gate',t);a.gateAt=t;a.gateDone=0;}
   else if(a.phase==='gate'){
-   if(gateDown(s,a.site)){api.workforce.release(gateKey(a));wait(a,WAIT.gateDown,t);a.phaseEnd=t+DURATION.gate-(a.gateDone||0);continue;}
-   const worker=api.workforce.acquire(GATE_ROLE,a.site,gateKey(a));
+   if(gateDown(s,a.site)){api.workforce.release(gateKey(a));wait(a,WAIT.gateDown,t);a.phaseEnd=t+Math.ceil(DURATION.gate-(a.gateDone||0));continue;} // 0.16 S1: Torstörung ohne Bindung
+   const worker=api.workforce.acquireAny(GATE_ROLES,a.site,gateKey(a)); // S2: Torposten vor Lagerkraft
    if(!worker){wait(a,WAIT.gate,t);a.phaseEnd=t+DURATION.gate-(a.gateDone||0);}
    else{
     worker.activity=`Torkontrolle ${a.plate}`;a.waitReason=null;a.waitSince=null;
-    a.gateDone=(a.gateDone||0)+1;
+    a.gateDone=(a.gateDone||0)+(worker.role==='gate'?workRate(worker,1,'gate',t):1); // Lagerkraft 1/min, Torposten Mittel 1,25 (S2)
     if(a.gateDone>=DURATION.gate){api.workforce.release(gateKey(a));delete a.gateDone;setPhase(a,'queue',t);}
    }
   }

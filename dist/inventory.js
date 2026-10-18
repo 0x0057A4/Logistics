@@ -224,6 +224,21 @@ export function createAPI(s, api) {
     b.qty=clean(b.qty-qty);
     return part;
   }
+  // QS-015-03 (A05): Rückgabe allen Fremdeigentums eines Eigentümers (z. B. stornierter Lohnfertigungsauftrag) als Abgang.
+  // Nur freie Menge (qty-reserved) außerhalb von Fahrzeugen; Reserviertes/Geladenes bleibt und kann später zurückgehen.
+  // Nie Eigenmaterial ('company'). Rückgabe: entnommene Teilmengen (wie remove) in Arrayreihenfolge.
+  function returnOwner(owner) {
+    if (typeof owner !== 'string' || !owner || owner === 'company') return [];
+    const parts=[];
+    for (const b of [...activeBatches(s)]) {
+      if (b.owner!==owner || b.location==='vehicle') continue;
+      const q=b.qty-b.reserved;
+      if (q<=1e-9) continue;
+      const part=remove(b.id,q);
+      if (part) parts.push(part);
+    }
+    return parts;
+  }
   function relocate(batchIds,location,site) {
     if(!Array.isArray(batchIds)||!batchIds.length||new Set(batchIds).size!==batchIds.length||!LOCATIONS.has(location)||!siteExists(site))return false;
     const batches=batchIds.map(byId);
@@ -259,7 +274,7 @@ export function createAPI(s, api) {
     if(!b || b.coldDamaged || b.location!=='quarantine' || b.reserved || !Number.isFinite(quality) || quality<0 || quality>100) return false;
     b.quality=quality;b.locked=false;b.location='stock';return true;
   }
-  return {add,available,reserve,release,consume,move,used,capacity,free,transfer,remove,restore,relocate,relocateQty};
+  return {add,available,reserve,release,consume,move,used,capacity,free,transfer,remove,returnOwner,restore,relocate,relocateQty};
 }
 
 export function validate(s) {

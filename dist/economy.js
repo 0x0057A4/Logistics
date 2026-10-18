@@ -1,6 +1,8 @@
 import {committedQty} from './tours.js';
 import {ITEMS,BUILDINGS,RECIPES} from './catalog.js';
 import {assetInfo,accumulated} from './accounting.js';
+import {abortJobs} from './production.js';
+import {activeBatches} from './inventory.js';
 const suppliers={standard:{factor:1,lead:30,quality:88},express:{factor:1.3,lead:10,quality:86},quality:{factor:1.18,lead:45,quality:98}};
 const ledgerIndexes=new WeakMap();
 function keys(s){let index=ledgerIndexes.get(s);if(!index||index.rows!==s.ledger||index.length!==s.ledger.length){index={rows:s.ledger,length:s.ledger.length,keys:new Set(s.ledger.map(l=>l.key)),byKey:new Map(s.ledger.map(l=>[l.key,l]))};ledgerIndexes.set(s,index);}return index;}
@@ -67,6 +69,24 @@ export function init(s){
  // Fertigungsanfragen kommen erst mit der ersten Fertigungsanlage (step → startOffers). init läuft nur bei Neugründung.
  if(!s.orders.some(o=>o.kind==='logistics'))s.orders.push({id:`order-${s.seq++}`,kind:'logistics',customer:'Westbogen Versand',item:'lamp',qty:12,price:18,due:s.t+1800,quality:70,site:'site-1',status:'offer',delivered:0,paid:0});
 }
+/** QS-015-03 (A04/A05/A08): Storno Lohnfertigung (kind 'vas') gibt Fremdeigentum an den Kunden zurück, ohne Geldbuchung.
+ *  1. Noch nicht eingelagerte Kundenanlieferungen (Einkauf owner=Auftrag, kostenlos) entfallen; Lagerkraft wird frei.
+ *  2. Laufende Fertigungsjobs des Auftrags werden abgebrochen (production.abortJobs); ihre verbrauchten Eingänge gehen zurück.
+ *  3. Freie Chargen des Auftrags (Material, Halbfabrikate, Fertigware) gehen per inventory.returnOwner ab.
+ *  Idempotent (auch stündliche Nachlese für Reste/ältere Spielstände). Protokoll o.returnedQty/o.returnedItems + Meldung. */
+function returnVas(s,api,o){
+ const open=s.purchases.filter(p=>p.orderId===o.id&&p.owner===o.id&&p.status!=='stored');
+ for(const p of open)api.workforce.release(p.id);
+ if(open.length)s.purchases=s.purchases.filter(p=>!open.includes(p));
+ const jobs=abortJobs(s,api,o.id),parts=api.inventory.returnOwner(o.id);
+ const back=[...jobs.flatMap(j=>Array.isArray(j.inputs)?j.inputs:[]),...parts];
+ if(!open.length&&!jobs.length&&!back.length)return false;
+ const items=o.returnedItems||{};let qty=0;for(const x of back){items[x.item]=Math.round(((items[x.item]||0)+x.qty)*1e6)/1e6;qty+=x.qty;}
+ if(back.length){o.returnedItems=items;o.returnedQty=Math.round(((o.returnedQty||0)+qty)*1e6)/1e6;}
+ const text=Object.entries(back.reduce((m,x)=>(m[x.item]=(m[x.item]||0)+x.qty,m),{})).map(([k,n])=>`${Math.round(n*100)/100} × ${ITEMS[k]?.name||k}`).join(', ');
+ api.log('inventory',`Storno Lohnfertigung ${o.id}: ${text?`${text} an ${o.customer} zurückgegeben`:'kein Kundenmaterial im Lager'}`+(jobs.length?`, ${jobs.length} Fertigungsjob(s) abgebrochen`:'')+(open.length?`, ${open.length} Anlieferung(en) storniert`:'')+'.',[o.id,...jobs.map(j=>j.id),...open.map(p=>p.id),...parts.map(p=>p.id)]);
+ return true;
+}
 export function handle(s,c,api){
  if(c.type==='takeLoan'||c.type==='repayLoan'){
   const n=c.amount;if(!Number.isInteger(n)||n<100||n>50000)return {ok:false,message:'Kreditbetrag: ganze Euro zwischen 100 und 50.000.'};
@@ -96,7 +116,7 @@ export function handle(s,c,api){
  if(c.type==='cancelOrder'){
   const o=s.orders.find(x=>x.id===c.id);if(!o||!['offer','active'].includes(o.status))return {ok:false,message:'Auftrag kann nicht storniert werden.'};
   if(committedQty(s,o.id)>0||(s.freights||[]).some(f=>f.orderId===o.id&&!f.deliveredAt&&!['complete','cancelled'].includes(f.status))||s.shipments.some(x=>x.orderId===o.id&&!['complete','cancelled'].includes(x.status)))return {ok:false,message:'Erst laufende Lieferung abschließen.'};
-  o.status='cancelled';if(o.delivered<o.qty)s.reputation=Math.max(0,s.reputation-3);api.log('order',`Auftrag ${o.id} storniert. Bereits erfolgte Lieferungen bleiben zahlbar.`,[o.id]);return {ok:true};
+  o.status='cancelled';if(o.delivered<o.qty)s.reputation=Math.max(0,s.reputation-3);api.log('order',`Auftrag ${o.id} storniert. Bereits erfolgte Lieferungen bleiben zahlbar.`,[o.id]);if(o.kind==='vas')returnVas(s,api,o);return {ok:true};
  }
  return null;
 }
@@ -107,6 +127,11 @@ export function step(s,api){
   api.book(`rent:${s.t}`,-cents(s.sites.reduce((n,site)=>n+site.width*site.height*.0025,0)),'Miete','Hallenmiete pro Stunde');
   const interest=cents(((s.loanBalance||0)*.08+Math.max(0,-s.money)*.15)/8760);
   if(interest)api.book(`interest:${s.t}`,-interest,'Zinsen','Kredit 8 % / Kontoüberziehung 15 % p.a.');
+  // QS-015-03: Nachlese für stornierte Lohnfertigung (zuvor reservierte Reste, Spielstände von vor 0.16).
+  let gone=null;for(const o of s.orders)if(o.kind==='vas'&&o.status==='cancelled')(gone??=new Set()).add(o.id);
+  if(gone){const hit=new Set();for(const p of s.purchases)if(p.status!=='stored'&&gone.has(p.owner))hit.add(p.owner);for(const j of s.jobs||[])if(gone.has(j.owner))hit.add(j.owner);
+   for(const b of activeBatches(s))if(gone.has(b.owner)&&b.location!=='vehicle'&&b.qty-b.reserved>1e-9)hit.add(b.owner);
+   if(hit.size)for(const o of s.orders)if(hit.has(o.id))returnVas(s,api,o);}
  }
 
  for(const p of s.purchases){

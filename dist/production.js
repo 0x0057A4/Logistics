@@ -11,6 +11,22 @@ function vasOrders(s){const out=[];for(const o of s.orders||[])if(o.kind==='vas'
 function vasOwner(list,r,site,api){for(const o of list)if(o.site===site&&Object.entries(r.inputs).every(([item,qty])=>api.inventory.available(item,site,o.id)>=qty))return o.id;return null;}
 function outputJob(s,b,j,api){if(!api.inventory.add({item:j.output.item,qty:j.output.qty,site:b.site,owner:j.owner||'company',location:'stock',quality:j.quality,unitCost:j.unitCost,parents:j.inputs.map(x=>x.id)})){b.status='storage';j.status='storage';return false;}s.stats.produced+=['lamp','lamp_pro','sensor'].includes(j.output.item)?j.output.qty:0;b.condition=Math.max(0,b.condition-0.2);api.log('production',`${j.snapshot?.name||RECIPES[j.recipe]?.name||'Fertigung'} abgeschlossen.`,[b.id]);return true;}
 function finish(s,b,j,api,jobs){api.workforce.release(j.id);s.jobs.splice(s.jobs.indexOf(j),1);if(jobs?.get(j.id)===j)jobs.delete(j.id);if(j.workshop){const workshop=s.buildings.find(x=>x.id===j.workshop);if(workshop?.maintenanceTask===j.id)workshop.maintenanceTask=null;}b.job=j.previousJob||null;b.progress=0;b.status='idle';}
+/** QS-015-03 (A04): Bricht alle Fertigungsjobs eines Eigentümers ab (Storno Lohnfertigung). Reservierungen und Personal
+ *  werden frei, die Anlage wird leer (offene Rüstzeit bleibt an der Anlage). Bereits verbrauchte Eingänge (j.inputs) gibt der
+ *  Aufrufer an den Kunden zurück; es entsteht keine Ausgabe. Eine Wartung, die den Job unterbrochen hat, kehrt danach nicht zu
+ *  ihm zurück. Rückgabe: abgebrochene Jobs. Eigene Jobs (ohne owner) bleiben unberührt. */
+export function abortJobs(s,api,owner){
+ if(typeof owner!=='string'||!owner||owner==='company')return [];
+ const out=[];
+ for(const j of s.jobs.filter(j=>j.owner===owner)){
+  api.workforce.release(j.id);api.inventory.release(j.id);s.jobs.splice(s.jobs.indexOf(j),1);
+  for(const m of s.jobs)if(m.previousJob===j.id)m.previousJob=null;
+  const b=s.buildings.find(x=>x.id===j.building);
+  if(b?.job===j.id){b.job=null;b.progress=0;b.status='idle';if(j.setupRemaining>0)b.setupRemaining=j.setupRemaining;}
+  out.push(j);
+ }
+ return out;
+}
 export function step(s,api){
  // Ein Durchlauf statt zwei Filtern je Standort; Summen je Standort weiter in Gebäudereihenfolge.
  const supply=new Map(),demand=new Map();for(const b of s.buildings){if(!b.enabled)continue;const d=BUILDINGS[b.type];if(b.type==='power')supply.set(b.site,(supply.get(b.site)??0)+(d.energy||0));if(!d?.recipes.length)demand.set(b.site,(demand.get(b.site)??0)+(d?.power||0));}

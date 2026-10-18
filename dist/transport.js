@@ -2,6 +2,7 @@ import {committedQty} from './tours.js';
 import {travelMinutes} from './disruptions.js'; // 0.16 S1: Fahrtdauer beim Start inkl. Wetter/Stau
 import {VEHICLES,ITEMS} from './catalog.js';
 import {acquireForklift,releaseForklift,useForklift,forkliftKey,forkItem} from './yard.js';
+import {FORK_ROLES} from './workforce.js';
 import {deliverySiteOf} from './contracts.js';
 import {loadingTrip,abortLinehaul} from './linehaul.js';
 import {loadingAirShuttle,abortAirShuttle} from './airexport.js';
@@ -92,7 +93,7 @@ export function step(s,api){
    // QS-W2-01: Ladezeit erfüllt (loadDone) → Abfahrt braucht weder Stapler noch Lagerkraft; Warten auf Geld/Ladung verbraucht keinen Akku.
    if(sh.loadDone){if(pallet)releaseForklift(s,forkliftKey(sh.id));api.workforce.release(`${sh.id}:warehouse`);sh.worker=null;}else{
    let fork=null;if(pallet){const f=acquireForklift(s,sh.site,forkliftKey(sh.id));if(!f.forklift){api.workforce.release(`${sh.id}:warehouse`);sh.worker=null;sh.blocked=f.reason;continue;}fork=f.forklift;}
-   const worker=api.workforce.acquire('warehouse',sh.site,`${sh.id}:warehouse`);if(!worker){sh.blocked='Lagerpersonal für Beladung fehlt';if(fork)releaseForklift(s,forkliftKey(sh.id));continue;}sh.worker=worker.id;sh.blocked=null;
+   const worker=pallet?api.workforce.acquireAny(FORK_ROLES,sh.site,`${sh.id}:warehouse`):api.workforce.acquire('warehouse',sh.site,`${sh.id}:warehouse`);if(!worker){sh.blocked='Lagerpersonal für Beladung fehlt';if(fork)releaseForklift(s,forkliftKey(sh.id));continue;}sh.worker=worker.id;sh.blocked=null;
    if(fork)useForklift(s,fork);
    if(--sh.remaining>0)continue;sh.loadDone=true;}
    const cost=Math.round(sh.distance*2*VEHICLES[v.type].runningCost*100)/100;
