@@ -24,7 +24,7 @@
 // Läuft über yard.containerHooks innerhalb yard.step (vor tickForklifts), damit Staplernutzung im selben Akkutakt zählt.
 import {containerHooks,WAIT,PALLET,PALLET_BASE,acquireForklift,releaseForklift,useForklift,forkliftKey,forkliftAvailable,
  sitePowered,freeDock,unloadMinute,apportion,pick,makePlate,setPhase,wait,DURATION,KEEP_GONE} from './yard.js';
-import {workRate,UNLOAD_BASE,onShift} from './workforce.js';
+import {workRate,UNLOAD_BASE,FORK_ROLES,available} from './workforce.js';
 import {BUILDINGS,ITEMS} from './catalog.js';
 
 export const STATUSES=['arriving','yard','toDock','unstuffing','empty','pickup','gone'];
@@ -123,7 +123,9 @@ function backToYard(s,api,c,reason,t){
  release(s,api,c);c.status='yard';c.statusAt=t;wait(c,reason,t);
  api.log('yard',`Container ${c.id}: ${reason}, zurück in den Containerhof (${c.unloaded}/${c.qty} entladen).`,[c.id]);
 }
-const freeWorker=(s,site)=>s.workers.some(w=>w.role==='warehouse'&&w.site===site&&!w.task&&!w.training&&!w.relocation&&!(w.breakRemaining>0)&&onShift(w,s.t)&&w.fatigue<80);
+// S2 (0.16): Palettencontainer = Staplerumschlag (Staplerfahrer vor Lagerkraft), Paketcontainer = Lagerkraft.
+const rolesOf=c=>isPal(c)?FORK_ROLES:['warehouse'];
+const freeWorker=(s,site,roles)=>s.workers.some(w=>roles.includes(w.role)&&!w.task&&available(s,w,site));
 function forkReason(s,site){
  if(!sitePowered(s,site))return WAIT.forkliftPower;let any=false,charging=false;
  for(const b of s.buildings)if(b.type==='forklift'&&b.site===site&&b.enabled&&b.condition>0){any=true;if(!b.task&&(b.charging||(b.charge??100)<10))charging=true;}
@@ -162,7 +164,7 @@ function stepHandling(s,api,c,t){
  if(!b||!b.enabled||!(b.condition>0))return backToYard(s,api,c,WAIT.dockOff,t);
  let fork=null;
  if(isPal(c)){const f=acquireForklift(s,c.site,forkliftKey(c.id));if(!f.forklift)return backToYard(s,api,c,f.reason,t);fork=f.forklift;}
- const w=api.workforce.acquire('warehouse',c.site,workKey(c));
+ const w=api.workforce.acquireAny(rolesOf(c),c.site,workKey(c));
  if(!w)return backToYard(s,api,c,WAIT.staff,t);
  if(c.status==='toDock'){
   w.activity=`Holt Container ${c.id} zum Dock`;
@@ -170,7 +172,7 @@ function stepHandling(s,api,c,t){
   return;
  }
  const item=isPal(c)?PALLET:'parcel',fit=Math.floor((api.inventory.free(c.site)+1e-9)/vol(item));
- const n=Math.min(workRate(w,isPal(c)?PALLET_BASE:UNLOAD_BASE),c.qty-c.unloaded,fit);
+ const n=Math.min(isPal(c)?workRate(w,PALLET_BASE,'forklift',t):workRate(w,UNLOAD_BASE),c.qty-c.unloaded,fit);
  if(n<1)return backToYard(s,api,c,WAIT.full,t);
  const r=unloadMinute(s,api,c,n,item,isPal(c)?'stock':'inbound');
  if(!r.added)return backToYard(s,api,c,WAIT.full,t);
@@ -195,10 +197,10 @@ function startUnstuffing(s,api,t){
   const b=freeDock(s,site);if(!b){noDock.add(site);/* QS-W3b-01: alle Docks aus → eigener Grund */const docks=s.buildings.filter(x=>x.type==='dock'&&x.site===site);wait(c,docks.length&&docks.every(x=>!x.enabled||!(x.condition>0))?WAIT.dockOff:WAIT.dock,t);continue;}
   if(api.inventory.free(site)+1e-9<vol(isPal(c)?PALLET:'parcel')){wait(c,WAIT.full,t);continue;}
   if(isPal(c)&&!forkliftAvailable(s,site,forkliftKey(c.id))){wait(c,forkReason(s,site),t);continue;}
-  if(!freeWorker(s,site)){wait(c,WAIT.staff,t);continue;}
+  if(!freeWorker(s,site,rolesOf(c))){wait(c,WAIT.staff,t);continue;}
   b.task=c.id;c.dock=b.id;
   if(isPal(c))acquireForklift(s,site,forkliftKey(c.id));
-  const w=api.workforce.acquire('warehouse',site,workKey(c));w.activity=`Holt Container ${c.id} zum Dock`;
+  const w=api.workforce.acquireAny(rolesOf(c),site,workKey(c));w.activity=`Holt Container ${c.id} zum Dock`;
   c.status='toDock';c.statusAt=t;c.moveEnd=t+MOVE;c.waitReason=null;c.waitSince=null;
  }
 }
@@ -222,13 +224,14 @@ function stepContainers(s,api){
 export function step(){} // Takt über yard.containerHooks.step (s. Kopf)
 
 /** Lagerkräfte, die der Containerumschlag eines Standorts gerade braucht (Vorrang vor Sortierung, sorting.unloadNeed). */
-export function staffNeed(s,site){
+// out (optional, S2): zählt den Anteil mit Staplerumschlag in out.fork (für sorting.js-Vorrang mit Staplerfahrern).
+export function staffNeed(s,site,out){
  if(!s.containers?.length)return 0;
  let docks=0,n=0;for(const b of s.buildings)if(b.type==='dock'&&b.site===site&&b.enabled&&b.condition>0&&!b.task)docks++;
  for(const c of s.containers){
   if(c.site!==site)continue;
-  if(AT_DOCK.has(c.status)){if(!s.workers.some(w=>w.task===workKey(c)))n++;continue;}
-  if(c.status==='yard'&&c.unloaded<c.qty&&docks>0&&(!isPal(c)||forkliftAvailable(s,site,forkliftKey(c.id)))){docks--;n++;}
+  if(AT_DOCK.has(c.status)){if(!s.workers.some(w=>w.task===workKey(c))){n++;if(out&&isPal(c))out.fork++;}continue;}
+  if(c.status==='yard'&&c.unloaded<c.qty&&docks>0&&(!isPal(c)||forkliftAvailable(s,site,forkliftKey(c.id)))){docks--;n++;if(out&&isPal(c))out.fork++;}
  }
  return n;
 }
