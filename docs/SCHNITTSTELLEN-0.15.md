@@ -11,7 +11,7 @@ Stand 17.10.2026. Fahrplan: docs/FAHRPLAN-BIS-1.0.md (Nutzer: „Ja“).
 
 ## Katalog (A01 angelegt, Werte vorläufig)
 - `ITEMS.parcel_cold` (Kühlpaket, cold:true, Volumen 0,05, Gewicht 0,5) · `ITEMS.bulky` (Sperrgut, Volumen 0,6, Gewicht 25, noSorter:true)
-- `BUILDINGS.crossbelt` (Quergurtsorter, 6×3, 120.000 €, Durchsatz 2.400/h, Personal 2, Strom 12) · `RESEARCH.megahub` (Mega-Hub, 20.000 €, 240 Min.)
+- `BUILDINGS.crossbelt` (Quergurtsorter, 6×3, 60.000 € (A02, vorher 120.000), Durchsatz 2.400/h, Personal 2, Strom 12) · `RESEARCH.megahub` (Mega-Hub, 12.000 € (A02, vorher 20.000), 240 Min.)
 
 ## S1 GuV + Abschreibung (A08: accounting.js, economy.js, core-Anlagenfelder minimal)
 - Anlagen: Gebäude und gekaufte Fahrzeuge mit `acquiredAt`, `cost` (neue Käufe setzen Felder; Altbestand: aus Ledger ableiten oder Startzeitpunkt, dokumentieren). Lineare Abschreibung: Gebäude 180 Spieltage, Fahrzeuge 90 Spieltage, Restwert 0; Abriss/Verkauf → Restbuchwert als Abgang.
