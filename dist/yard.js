@@ -3,7 +3,7 @@
 // Dock-Regel wie transport.js/tours.js/service.js: Dock frei, wenn type 'dock', enabled, condition>0 und ohne b.task.
 // Belegung b.task=arrival.id von toDock bis Ende unloading. Eigene Abläufe prüfen ebenfalls !b.task → keine Doppelbelegung.
 import {workRate,UNLOAD_BASE,GATE_ROLE} from './workforce.js';
-import {BUILDINGS} from './catalog.js';
+import {BUILDINGS,ITEMS} from './catalog.js';
 import {coolingCapacity,coolingFree} from './special.js';
 // W3b-S2: Containerchassis (a.kind==='container') nutzen approach→gate→queue→toYard→drop→exit→gone (Logik containers.js).
 export const PHASES=['approach','gate','queue','toDock','docking','unloading','exit','gone'];
@@ -35,6 +35,31 @@ export const ARRIVAL_ITEMS=[PALLET,COLD,BULKY];
 WAIT.coldMissing='Kühllager fehlt';WAIT.coldFull='Kühllager voll';
 /** Wartegrund für Kühlware ohne freien Kühlplatz am Standort. */
 export const coldWait=(s,site)=>coolingCapacity(s,site)>0?WAIT.coldFull:WAIT.coldMissing;
+// B-0.15-1 (A01): Dockfreigabe bei Platzmangel. Ein Fremd-Lkw in unloading, der ohne Fortschritt auf Platz wartet
+// (SPACE_WAIT, nicht Personal/Stapler/Dock), gibt sein Dock nach DOCK_YIELD Minuten frei, sobald ein eigenes Fahrzeug
+// an diesem Standort auf ein Dock wartet (ownDockWaiting). Er kehrt mit Teilstand (unloaded/split bleiben) in die
+// Warteschlange (phase 'queue', Wartegrund und waitSince bleiben). Kraft, Stapler und alle Docks der Bindung werden
+// frei; das freigegebene Dock wird in derselben Minute keiner anderen Fremdankunft zugeteilt (eigene Abläufe laufen
+// im Minutentakt vor yard). In der Warteschlange erhält eine Ankunft ohne Platz kein Dock, solange ein eigenes
+// Fahrzeug am Standort auf ein Dock wartet; mit Platz oder ohne wartende eigene Fahrzeuge gilt FIFO wie bisher.
+// Kein neues gespeichertes Feld; Mengen, Vertragsfrist und Strafen laufen über die bestehenden Pfade.
+export const SPACE_WAIT=new Set([WAIT.full,WAIT.coldFull,WAIT.coldMissing]);
+export const DOCK_YIELD=5;
+// Wartetexte eigener Abläufe, wenn kein Dock frei ist (transport.js, tours.js, service.js, linehaul.js, airexport.js).
+const OWN_DOCK_WAIT=[
+ [s=>s.shipments,x=>x.status==='loading'?x.site:null,b=>b==='Warteschlange: freie Laderampe fehlt'],
+ [s=>s.transfers,x=>x.status==='loading'?x.site:x.status==='unloading'?x.toSite:null,b=>typeof b==='string'&&b.startsWith('Freie Rampe am ')],
+ [s=>s.tours,x=>x.status==='loading'||x.status==='returnUnloading'?x.site:null,b=>b==='Freie Laderampe fehlt'||b==='Freie Laderampe für Rückladung fehlt'],
+ [s=>s.returns,x=>x.status==='unloading'?x.site:null,b=>b==='Freie Laderampe fehlt'],
+ [s=>s.linehauls,x=>x.status==='loading'?x.from:x.status==='unloading'?x.to:null,b=>b==='Kein freies Dock'],
+ [s=>s.airShuttles,x=>x.status==='loading'?x.site:null,b=>b==='Kein freies Dock'],
+];
+/** Anzahl eigener Fahrzeuge (Lieferung, Transfer, Sammeltour, Retoure, Linienfahrt, Luftshuttle), die am Standort auf ein
+ * Dock warten (0 = keines). Liest die Wartetexte des laufenden Minutentakts. */
+export function ownDockWaiting(s,site){
+ let n=0;for(const [list,at,blocked] of OWN_DOCK_WAIT)for(const x of list(s)||[])if(x.blocked&&blocked(x.blocked)&&at(x)===site)n++;
+ return n;
+}
 const BASE_OF=item=>item===PALLET?PALLET_BASE:item===BULKY?BULKY_BASE:UNLOAD_BASE;
 const WORD={pallet:['Palette','Paletten'],parcel_cold:['Kühlpaket','Kühlpakete'],bulky:['Sperrgutstück','Sperrgutstücke']};
 const word=(a,n)=>(WORD[a.item]||['Paket','Pakete'])[n===1?0:1];
@@ -173,6 +198,19 @@ function switchDock(s,api,a,t){
  api.log('yard',`${a.plate}: Dock außer Betrieb, wechselt zu freiem Dock.`,[a.id,from,n.id].filter(Boolean));return true;
 }
 // FIFO: vorgezogene zuerst, dann nach Ankunft am Tor, dann Anlagereihenfolge.
+/** Platzmangel für die nächste Einheit der Ankunft (Wartegrund) oder null, wenn mindestens eine Einheit Platz hat. */
+function spaceLack(s,api,a){
+ if(a.item===COLD&&Math.floor(coolingFree(s,a.site)+1e-9)<1)return coldWait(s,a.site);
+ return api.inventory.free(a.site)+1e-9<(ITEMS[a.item||'parcel']?.volume??0)?WAIT.full:null;
+}
+// B-0.15-1: Dock freigeben und mit Teilstand zurück in die Warteschlange; Wartegrund/waitSince bleiben sichtbar.
+function yieldDock(s,api,a,t){
+ const reason=a.waitReason,since=a.waitSince,from=a.dock;
+ api.workforce.release(unloadKey(a));if(isPallet(a))releaseForklift(s,forkliftKey(a.id));
+ releaseDock(s,a);setPhase(a,'queue',t);a.waitReason=reason;a.waitSince=since;
+ api.log('yard',`${a.plate}: ${reason} – Dock für eigenes Fahrzeug freigegeben, ${a.unloaded}/${a.parcels} ${a.item?word(a,2):'Pakete'} entladen, wartet in der Warteschlange.`,[a.id,from].filter(Boolean));
+ return from;
+}
 function queueOrder(s,site){return s.yard.map((a,i)=>[a,i]).filter(([a])=>a.site===site&&a.phase==='queue'&&!a.kind).sort((x,y)=>(y[0].priority-x[0].priority)||(x[0].gateAt-y[0].gateAt)||(x[1]-y[1])).map(([a])=>a);}
 
 // Teilt n Pakete auf die Aufträge: jeweils an den Auftrag mit dem größten offenen Anteil. Monoton, Summe exakt.
@@ -243,7 +281,7 @@ export function step(s,api){
  for(const b of s.buildings)if(b.type==='forklift'){tickForklifts(s);break;}
 }
 function stepYard(s,api){
- if(!s.yard?.length)return;const t=s.t;
+ if(!s.yard?.length)return;const t=s.t;let yielded=null; // in dieser Minute freigegebene Docks (B-0.15-1)
  for(const a of s.yard){
   if(a.phase==='approach'&&t>=a.phaseEnd){setPhase(a,'gate',t);a.gateAt=t;a.gateDone=0;}
   else if(a.phase==='gate'){
@@ -266,7 +304,7 @@ function stepYard(s,api){
    else if(t>=a.phaseEnd)setPhase(a,'unloading',t);
   }
   else if(a.phase==='unloading'){
-   const b=dockOf(s,a);
+   const b=dockOf(s,a),before=a.unloaded;
    if(!usable(b)){api.workforce.release(`${a.id}:warehouse`);if(isPallet(a))releaseForklift(s,forkliftKey(a.id));if(!switchDock(s,api,a,t))wait(a,WAIT.dockOff,t);}
    else if(isPallet(a))unloadPallets(s,api,a,t);
    else{
@@ -283,16 +321,23 @@ function stepYard(s,api){
     }
    }
    if(a.unloaded>=a.parcels){api.workforce.release(`${a.id}:warehouse`);if(isPallet(a))releaseForklift(s,forkliftKey(a.id));releaseDock(s,a);setPhase(a,'exit',t);api.log('yard',`${a.plate}: ${a.parcels} ${a.item?word(a,2):'Pakete'} entladen.`,[a.id]);}
+   // B-0.15-1: je wartendem eigenen Fahrzeug höchstens ein Dock je Minute freigeben.
+   else if(a.unloaded===before&&SPACE_WAIT.has(a.waitReason)&&t-a.waitSince>=DOCK_YIELD&&ownDockWaiting(s,a.site)>(yielded?.get(a.site)?.size||0)){
+    yielded??=new Map();if(!yielded.has(a.site))yielded.set(a.site,new Set());yielded.get(a.site).add(yieldDock(s,api,a,t));}
   }
   else if(a.phase==='exit'&&t>=a.phaseEnd){setPhase(a,'gone',t);}
  }
  // Dock-Zuteilung je Standort in FIFO-Reihenfolge.
  const sites=new Set(s.yard.filter(a=>a.phase==='queue'&&!a.kind).map(a=>a.site));
  for(const site of sites){
-  let blocked=false;
+  let blocked=false,own;
   for(const a of queueOrder(s,site)){
-   const b=blocked?null:freeDock(s,site);
-   if(!b){blocked=true;wait(a,WAIT.dock,t);continue;}
+   // B-0.15-1: ohne Platz kein Dock vor wartenden eigenen Fahrzeugen (überspringt, ohne Nachfolger zu blockieren).
+   own??=ownDockWaiting(s,site)>0;
+   const lack=own?spaceLack(s,api,a):null;
+   if(lack){wait(a,lack,t);continue;}
+   const b=blocked?null:yielded?.has(site)?s.buildings.find(b=>isFreeDock(b,site)&&!yielded.get(site).has(b.id))||null:freeDock(s,site);
+   if(!b){blocked=true;wait(a,own?WAIT.dock:spaceLack(s,api,a)||WAIT.dock,t);continue;} // ohne Platz bleibt der Platzgrund sichtbar
    b.task=a.id;a.dock=b.id;setPhase(a,'toDock',t);
   }
  }
