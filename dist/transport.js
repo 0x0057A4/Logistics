@@ -1,6 +1,6 @@
 import {committedQty} from './tours.js';
 import {VEHICLES,ITEMS} from './catalog.js';
-import {acquireForklift,releaseForklift,useForklift,forkliftKey,PALLET} from './yard.js';
+import {acquireForklift,releaseForklift,useForklift,forkliftKey,forkItem} from './yard.js';
 import {deliverySiteOf} from './contracts.js';
 import {loadingTrip,abortLinehaul} from './linehaul.js';
 import {loadingAirShuttle,abortAirShuttle} from './airexport.js';
@@ -84,7 +84,7 @@ export function step(s,api){
    if(!dock)dock=s.buildings.find(b=>b.site===sh.site&&b.type==='dock'&&b.enabled&&b.condition>0&&!b.task);
    if(!dock){sh.blocked='Warteschlange: freie Laderampe fehlt';continue;}dock.task=sh.id;sh.dock=dock.id;
   }
-  const pallet=sh.status==='loading'&&o.item===PALLET;
+  const pallet=sh.status==='loading'&&forkItem(o.item); // 0.15 S2: Palette oder Sperrgut → Stapler + Lagerkraft
   const driver=api.workforce.acquire('driver',sh.site,`${sh.id}:driver`);if(!driver){sh.blocked='Fahrpersonal oder Schicht fehlt';if(pallet)releaseForklift(s,forkliftKey(sh.id));continue;}sh.driver=driver.id;
   if(sh.status==='loading'){
    // Paletten (W2-S2): Stapler zuerst; ohne Stapler bleibt keine Lagerkraft gebunden, ohne Lagerkraft kein Stapler.

@@ -11,7 +11,8 @@
 import {BUILDINGS, ITEMS} from './catalog.js';
 import {siteItemBatches} from './inventory.js';
 import {onShift, workRate} from './workforce.js';
-import {forkliftAvailable, forkliftKey, PALLET} from './yard.js';
+import {forkliftAvailable, forkliftKey, COLD, forkItem} from './yard.js';
+import {coolingCapacity, coolingFree} from './special.js';
 import {staffNeed as containerNeed} from './containers.js';
 
 export const ITEM = 'parcel';
@@ -31,16 +32,22 @@ const releaseAll = (api, b) => { for (const k of keysOf(b)) api.workforce.releas
 
 export function handle() { return null; }
 
-/** Sortierbare Inbound-Pakete eines Standorts in Arrayreihenfolge. */
+const sortable = (b, site) => b.site === site && b.location === 'inbound' && !b.blocked && !b.locked && b.qty - b.reserved > 1e-9;
+/** Sortierbare Inbound-Pakete eines Standorts in Arrayreihenfolge. 0.15 S2: Kühlpakete (COLD) danach, aber nur mit
+ *  einsatzbereitem Kühllager am Standort (special.coolingCapacity > 0); Sperrgut kommt nie hierher (Staplerumschlag nach stock).
+ *  Ohne Kühlpakete bleibt die Liste bitgleich zu 0.14 (die Prioritätssortierung ist stabil). */
 function inbound(s, site) {
   const out = [];
-  for (const b of siteItemBatches(s, site, ITEM)) if (b.site === site && b.location === 'inbound' && !b.resort && !b.blocked && !b.locked && b.qty - b.reserved > 1e-9) out.push(b);
+  for (const b of siteItemBatches(s, site, ITEM)) if (!b.resort && sortable(b, site)) out.push(b);
+  const cold = siteItemBatches(s, site, COLD);
+  if (cold.length) { let any = false; for (const b of cold) if (!b.resort && sortable(b, site)) { if (!any && !(coolingCapacity(s, site) > 0)) break; any = true; out.push(b); } }
   return out;
 }
-/** Fehlwürfe des Quergurts (b.resort) warten inbound auf Nachsortierung von Hand; Arrayreihenfolge (FIFO). */
+/** Fehlwürfe des Quergurts (b.resort) warten inbound auf Nachsortierung von Hand; Arrayreihenfolge (FIFO). Kühlpakete nur mit Kühllager. */
 function resortList(s, site) {
   const out = [];
-  for (const b of siteItemBatches(s, site, ITEM)) if (b.resort && b.site === site && b.location === 'inbound' && !b.blocked && !b.locked && b.qty - b.reserved > 1e-9) out.push(b);
+  for (const b of siteItemBatches(s, site, ITEM)) if (b.resort && sortable(b, site)) out.push(b);
+  if (coolingCapacity(s, site) > 0) for (const b of siteItemBatches(s, site, COLD)) if (b.resort && sortable(b, site)) out.push(b);
   return out;
 }
 
@@ -57,7 +64,9 @@ function unloadNeed(s, site) {
     if (a.phase === 'gate') { if (!s.workers.some(w => w.task === `${a.id}:gate`)) n++; continue; }
     if ((a.phase !== 'docking' && a.phase !== 'unloading') || a.unloaded >= a.parcels) continue;
     // Paletten (W2-S2) gehen nicht durchs Sortieren; ohne einsatzbereiten Stapler braucht die Entladung keine Lagerkraft.
-    if (a.item === PALLET && !forkliftAvailable(s, site, forkliftKey(a.id))) continue;
+    if (forkItem(a.item) && !forkliftAvailable(s, site, forkliftKey(a.id))) continue;
+    // Kühlpakete ohne freien Kühlplatz warten ohne Lagerkraft (yard.js) → kein Vorrang.
+    if (a.item === COLD && coolingFree(s, site) < 1) continue;
     const key = `${a.id}:warehouse`;
     if (!s.workers.some(w => w.task === key) && s.buildings.some(b => b.id === a.dock && b.enabled && b.condition > 0)) n++;
   }
@@ -77,7 +86,7 @@ function loadNeed(s, site) {
   // Palettenbeladung (W2-S2) ohne einsatzbereiten Stapler bindet keine Lagerkraft → kein Vorrang.
   const noFork = (id, pallet) => pallet && !forkliftAvailable(s, site, forkliftKey(id));
   for (const sh of s.shipments || []) if (sh.status === 'loading' && sh.site === site && waits(sh.id, site) && !noFork(sh.id, palletOrder(s, sh.orderId))) n++;
-  for (const t of s.tours || []) if ((t.status === 'loading' || t.status === 'returnUnloading') && t.site === site && waits(t.id, site) && !(t.status === 'loading' && noFork(t.id, t.stops.some(x => x.item === PALLET)))) n++;
+  for (const t of s.tours || []) if ((t.status === 'loading' || t.status === 'returnUnloading') && t.site === site && waits(t.id, site) && !(t.status === 'loading' && noFork(t.id, t.stops.some(x => forkItem(x.item))))) n++;
   for (const tr of s.transfers || []) {
     const at = tr.status === 'loading' ? tr.site : tr.status === 'unloading' ? tr.toSite : null;
     if (at === site && waits(tr.id, site)) n++;
@@ -89,7 +98,7 @@ function loadNeed(s, site) {
   }
   return n;
 }
-const palletOrder = (s, id) => s.orders.find(o => o.id === id)?.item === PALLET;
+const palletOrder = (s, id) => forkItem(s.orders.find(o => o.id === id)?.item); // Palette oder Sperrgut (Staplerumschlag)
 // Gleiche Bedingungen wie workforce.acquire (ohne task).
 const ready = (s, w, site) => w.role === 'warehouse' && w.site === site && !w.training && !w.relocation && !(w.breakRemaining > 0) && onShift(w, s.t) && w.fatigue < 80;
 const freeWarehouse = (s, site) => { let n = 0; for (const w of s.workers) if (!w.task && ready(s, w, site)) n++; return n; };
@@ -209,11 +218,11 @@ export function step(s, api) {
 // gebuchten Pakete (Fehlwürfe nach der Nachsortierung), damit jedes Paket genau einmal zählt.
 // Erschöpft: ganz verschoben (relocateQty wechselt bei ganzer Charge nur location) oder ohne freie Menge.
 const spent = x => x.location !== 'inbound' || x.qty - x.reserved <= 1e-9;
-const sortable = x => !ITEMS[x.item]?.noSorter && !spent(x);
+const beltable = x => !ITEMS[x.item]?.noSorter && !spent(x);
 function crossbelt(s, api, b, q, st, grab) {
   const spec = BUILDINGS[b.type];
   let work = false;
-  if (!q.blocked) for (let j = q.i; j < q.list.length; j++) if (sortable(q.list[j])) { work = true; break; }
+  if (!q.blocked) for (let j = q.i; j < q.list.length; j++) if (beltable(q.list[j])) { work = true; break; }
   if (!work) { b.status = q.blocked ? 'storage' : 'idle'; b.crew = 0; releaseAll(api, b); return; }
   let crew = 0, first = null;
   for (const key of keysOf(b)) { const w = grab(b.site, key); if (w) { crew++; first ??= w; w.activity = 'Sortierung'; } }
@@ -228,7 +237,7 @@ function crossbeltTake(s, api, b, q, limit, st) {
   let left = limit, done = 0;
   for (let j = q.i; j < q.list.length && left > 1e-9; j++) {
     const x = q.list[j];
-    if (!sortable(x)) { if (j === q.i && spent(x)) q.i++; continue; }
+    if (!beltable(x)) { if (j === q.i && spent(x)) q.i++; continue; }
     const n = Math.min(x.qty - x.reserved, left), c0 = b.sortCount || 0, c1 = c0 + n;
     const miss = Math.min(Math.floor(n), Math.floor(c1 / MISSORT_EVERY) - Math.floor(c0 / MISSORT_EVERY));
     if (miss > 0) {
@@ -266,8 +275,9 @@ function takeQueue(api, q, limit, st) {
 
 /** Lesesicht für Darstellung/HUD: Pakete inbound/stock, Nennrate je Minute, Handstatus, heute sortiert. */
 export function summary(s, site) {
-  let inb = 0, stock = 0, resort = 0;
+  let inb = 0, stock = 0, resort = 0, coldIn = 0, coldStock = 0;
   for (const b of siteItemBatches(s, site, ITEM)) if (b.site === site) { if (b.location === 'inbound') { inb += b.qty; if (b.resort) resort += b.qty; } else if (b.location === 'stock') stock += b.qty; }
+  for (const b of siteItemBatches(s, site, COLD)) if (b.site === site) { if (b.location === 'inbound') { coldIn += b.qty; if (b.resort) resort += b.qty; } else if (b.location === 'stock') coldStock += b.qty; }
   const sorters = s.buildings.filter(b => SORT_TYPES.has(b.type) && b.site === site && b.enabled);
   const x = s.sorting?.sites?.[site];
   // Quergurt: Nennrate nach gebundener Besetzung (crew/staff); Sortierplatz wie bisher.
@@ -275,7 +285,8 @@ export function summary(s, site) {
   return {inbound:inb, stock, rate:sorters.length ? sorters.reduce((n, b) => n + rate(b), 0) : HAND_RATE,
     sorters:sorters.map(b => ({id:b.id, type:b.type, status:b.status, ...(b.type === CROSSBELT ? {crew:b.crew || 0} : {})})),
     hand:sorters.length && !resort ? 'off' : (x?.hand || 'idle'), today:x?.today || 0, total:x?.total || 0,
-    rejects:x?.rejects || 0, rejectsToday:x?.rejectsToday || 0, resort};
+    rejects:x?.rejects || 0, rejectsToday:x?.rejectsToday || 0, resort,
+    cold:{inbound:coldIn, stock:coldStock, sortable:coolingCapacity(s, site) > 0}};
 }
 
 export function validate(s) {

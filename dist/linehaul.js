@@ -18,7 +18,10 @@
 // Reservierung, Dock, Personal und Stapler frei, Pakete bleiben am Standort; nächste Abfahrt nimmt sie mit.
 import {ITEMS,VEHICLES} from './catalog.js';
 import {UNLOAD_BASE} from './workforce.js';
-import {acquireForklift,releaseForklift,useForklift,forkliftKey,PALLET,PALLET_BASE} from './yard.js';
+import {acquireForklift,releaseForklift,useForklift,forkliftKey,PALLET,PALLET_BASE,BULKY,BULKY_BASE,forkItem,coldWait} from './yard.js';
+import {coolingCapacity,coolingFree} from './special.js';
+// 0.15 S2: lh.pallet = Staplerumschlag (Palette oder Sperrgut, yard.forkItem); Sperrgut wie Paletten direkt nach stock.
+// Kühlpakete nur im Kühlfahrzeug (room) und nur zu Zielen mit Kühllager; Entladen am Ziel nur in freie Kühlplätze.
 import {deliverySiteOf,siteDistance} from './contracts.js';
 
 export const CUTOFF=30;
@@ -29,7 +32,7 @@ export const WAIT=Object.freeze({vehicle:'Kein Lkw zugeordnet',away:'Lkw nicht a
 const STATUSES=['loading','transit','unloading','returning','complete','cancelled'];
 const ACTIVE=new Set(['loading','transit','unloading','returning']);
 const cents=n=>Math.round(n*100)/100;
-const rate=item=>item==='parcel'?UNLOAD_BASE:item===PALLET?PALLET_BASE:5;
+const rate=item=>item==='parcel'||item==='parcel_cold'?UNLOAD_BASE:item===PALLET?PALLET_BASE:item===BULKY?BULKY_BASE:5;
 /** Lade- bzw. Entlademinuten: 2 + je Artikel ceil(Menge / Rate) (Paket 20/min, Palette 1/min, sonst 5/min). */
 export function handlingMinutes(orders,s){let n=2;const by=new Map();for(const x of orders){const item=s.orders.find(o=>o.id===x.orderId)?.item;by.set(item,(by.get(item)||0)+x.qty);}for(const [item,qty]of by)n+=Math.ceil(qty/rate(item));return n;}
 export const tripCost=(v,distance)=>cents(distance*2*VEHICLES[v.type].runningCost);
@@ -111,7 +114,7 @@ function cutoffLine(s,api,l){
  if(v.status==='maintenance'||v.condition<MIN_CONDITION)return missLine(s,api,l,WAIT.maintenance);
  if(v.status!=='idle'||activeTrip(s,l.id))return missLine(s,api,l,WAIT.busy);
  const cand=[];
- for(let i=0;i<s.orders.length;i++){const o=s.orders[i];if(o.status==='active'&&o.kind==='logistics'&&!o.airExport&&deliverySiteOf(o)===l.to&&ITEMS[o.item])cand.push([o,i]);}
+ for(let i=0;i<s.orders.length;i++){const o=s.orders[i];if(o.status==='active'&&o.kind==='logistics'&&!o.airExport&&deliverySiteOf(o)===l.to&&ITEMS[o.item]&&!(ITEMS[o.item].cold&&!(coolingCapacity(s,l.to)>0)))cand.push([o,i]);}
  cand.sort((a,b)=>a[0].due-b[0].due||a[1]-b[1]);
  const plan=[];let usedV=0,usedW=0,qty=0;
  for(const [o]of cand){
@@ -122,7 +125,7 @@ function cutoffLine(s,api,l){
  if(!qty)return missLine(s,api,l,WAIT.empty);
  const id=api.id('linehaul'),orders=[];
  for(const {o,n}of plan){if(!api.inventory.reserve(o.item,n,l.from,id,o.id)){api.inventory.release(id);return missLine(s,api,l,WAIT.cargo);}orders.push({orderId:o.id,qty:n});}
- const distance=siteDistance(s,l.from,l.to),pallet=orders.some(x=>s.orders.find(o=>o.id===x.orderId).item===PALLET),remaining=handlingMinutes(orders,s);
+ const distance=siteDistance(s,l.from,l.to),pallet=orders.some(x=>forkItem(s.orders.find(o=>o.id===x.orderId).item)),remaining=handlingMinutes(orders,s);
  s.linehauls.push({id,lineId:l.id,vehicleId:v.id,from:l.from,to:l.to,status:'loading',cargo:[],orders,qty,pallet,remaining,duration:remaining,distance,cutoffAt:s.t,departAt:s.t+l.cutoff,departedAt:null,arrivedAt:null,completedAt:null,cost:tripCost(v,distance),dock:null,driver:null,worker:null,blocked:null});
  v.status='linehaul';v.linehaul=id;l.wait=null;l.waitAt=null;
  api.log('linehaul',`Ladeschluss: ${qty} Einheiten für Linienfahrt reserviert.`,[id,l.id,v.id]);
@@ -170,7 +173,9 @@ function stepTrip(s,api,lh){
   if(cargo.some(b=>!b||b.location!=='vehicle')){lh.blocked=WAIT.cargo;endHandling(s,api,lh);return;}
   const need=cargo.reduce((n,b)=>n+b.qty*(ITEMS[b.item].volume||1),0);
   if(api.inventory.free(lh.to)+1e-9<need){lh.blocked=WAIT.full;endHandling(s,api,lh);return;/* QS-W3-01 */}
-  const parcels=cargo.filter(b=>b.item!==PALLET).map(b=>b.id),pallets=cargo.filter(b=>b.item===PALLET).map(b=>b.id);
+  const coldQty=cargo.reduce((n,b)=>n+(ITEMS[b.item].cold?b.qty:0),0);
+  if(coldQty>0&&coolingFree(s,lh.to)+1e-9<coldQty){lh.blocked=coldWait(s,lh.to);endHandling(s,api,lh);return;}
+  const parcels=cargo.filter(b=>!forkItem(b.item)).map(b=>b.id),pallets=cargo.filter(b=>forkItem(b.item)).map(b=>b.id);
   // Pakete gehen durch die Sortierung am Ziel; Paletten direkt ins Lager (wie Hof-Entladung).
   if(parcels.length&&!api.inventory.relocate(parcels,'inbound',lh.to)){lh.blocked=WAIT.full;endHandling(s,api,lh);return;/* QS-W3-01 */}
   if(pallets.length&&!api.inventory.relocate(pallets,'stock',lh.to)){lh.blocked=WAIT.full;endHandling(s,api,lh);return;/* QS-W3-01 */}
@@ -218,7 +223,7 @@ export function validate(s){
   let sum=0;const seen=new Set();
   for(const x of lh.orders){const o=orders.get(x?.orderId);if(!o||seen.has(o.id)||!int(x.qty,1))bad('Fahrtaufträge');seen.add(o.id);sum+=x.qty;}
   if(sum!==lh.qty)bad('Fahrtmenge');
-  if(lh.pallet!==lh.orders.some(x=>orders.get(x.orderId).item===PALLET))bad('Ladeeinheit');
+  if(lh.pallet!==lh.orders.some(x=>forkItem(orders.get(x.orderId).item)))bad('Ladeeinheit');
   trips.set(lh.id,lh);
   if(!ACTIVE.has(lh.status))continue;
   const l=lines.get(lh.lineId);if(!l||l.from!==lh.from||l.to!==lh.to)bad('Linienbezug');
