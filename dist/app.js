@@ -22,6 +22,7 @@ import {startPerfOverlay} from './perf-overlay.js';
 import {createReplayBuffer,REPLAY,maxOffset,parseSnapshot} from './replay.js';
 import {AIRPORT,AIR,handlingMinutes,tripCost,airportDistance,room as airRoom,nextFlight as airNextFlight} from './airexport.js';
 import {TICK as ASSIST_TICK,LOG_MAX as ASSIST_LOG_MAX} from './assistant.js';
+import {createPanelWindow,initRail} from './ui-window.js';
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 // Zahlformat je Nachkommastellen einmal erzeugen: toLocaleString baut sonst je Aufruf ein Intl.NumberFormat (HUD/Panels, QS-W0-02).
@@ -374,8 +375,13 @@ function applyPrefs(){document.body.classList.toggle('large',prefs.large);docume
 function setSpeed(n){if(rp){replayBlocked('Tempo');return;}speed=n&&canWrite()?n:0;if(speed)lastSpeed=speed;accumulator=0;lastTick=performance.now();render();}
 /** Geschwindigkeitsleiste zeigt den tatsächlichen Takt (auch wenn speed direkt auf 0 gesetzt wurde: Dateimodus, Schreibschutz). */
 function syncSpeed(){if(hudCache.get('speed')===speed)return;hudCache.set('speed',speed);$$('[data-speed]').forEach(b=>{const on=+b.dataset.speed===speed;b.classList.toggle('active',on);b.setAttribute?.('aria-pressed',String(on));});}
-function openPanel(p,focus=null){panel=p;hubFocus=focus;search='';panelHtml=null;$('#search').value='';$('#panel').hidden=false;document.body.classList.add('panel-open');const wide=['inventory','finance','history','staff','network','planning','yard','containers','air','assistant'].includes(p);$('#panel').classList.toggle('wide',wide);document.body.classList.toggle('panel-wide',wide);$$('.rail [data-panel]').forEach(b=>b.classList.toggle('active',b.dataset.panel===p));renderPanel();}
-function closePanel(){panel='';panelHtml=null;$('#panel').hidden=true;document.body.classList.remove('panel-open');document.body.classList.remove('panel-wide');$$('.rail .active').forEach(b=>b.classList.remove('active'));}
+/* Fenster 0.17 (A10-W): #panel schwebt (ui-window.js); Geometrie je Fensterart in prefs.windows[panel]={x,y,w,h,max}.
+ * Breite Fensterarten erhalten nur eine breitere Startgröße. Ohne Fenstermodul (Prüfumgebung) bleibt das bisherige Layout. */
+const WIDE_PANELS=['inventory','orders','finance','history','staff','network','planning','yard','containers','air','assistant','service'];
+let panelWin=null;
+function windowCtl(){if(panelWin===null)try{panelWin=(typeof createPanelWindow==='function'&&createPanelWindow({panel:$('#panel'),game:$('#game'),load:k=>prefs.windows?.[k]||null,save:(k,g)=>{prefs.windows={...(prefs.windows&&typeof prefs.windows==='object'?prefs.windows:{}),[k]:g};savePrefs();}}))||false;}catch(e){console.warn('Fenstersystem nicht verfügbar:',e?.message||e);panelWin=false;}return panelWin||null;}
+function openPanel(p,focus=null){panel=p;hubFocus=focus;search='';panelHtml=null;$('#search').value='';$('#panel').hidden=false;document.body.classList.add('panel-open');windowCtl()?.open(p,{wide:WIDE_PANELS.includes(p)});$$('.rail [data-panel]').forEach(b=>b.classList.toggle('active',b.dataset.panel===p));renderPanel();}
+function closePanel(){panel='';panelHtml=null;$('#panel').hidden=true;document.body.classList.remove('panel-open');document.body.classList.remove('panel-wide');windowCtl()?.close();$$('.rail .active').forEach(b=>b.classList.remove('active'));}
 function startBuild(type){if(replayBlocked('Bauen'))return;const lock=type&&buildLock(V().state,type);if(lock){toast(`${name(BUILDINGS,type)}: ${lock}. Forschung unter „Forschung & Produkte“ starten.`,true);type=null;}closePanel();build=type||null;$('#buildTray').hidden=false;document.body.classList.add('build-open');scene.setBuild(build,rotation,moving);renderBuild();}
 function endBuild(){build=null;moving=null;scene.setBuild(null);$('#buildTray').hidden=true;document.body.classList.remove('build-open');}
 function renderBuild(){const icons={assembly:'⚒',testing:'⌁',packing:'▣',rack:'▤',dock:'⇥',power:'ϟ',workshop:'⚙',research:'⌘',coldstore:'❄',terminal:'⌂',sorter:'⇶',crossbelt:'⇉',forklift:'⇈',containeryard:'▦'};const s=V().state;
@@ -854,7 +860,7 @@ document.addEventListener('submit',e=>{const f=e.target.closest('[data-form]');i
 $('#importFile').addEventListener('change',async e=>{const file=e.target.files[0];e.target.value='';if(!file)return;try{if(file.size>30000000)throw Error('Datei zu groß.');const candidate=Simulation.fromJSON(await file.text());confirm('Spielstand importieren?',`${time(candidate.state.t)} · ${euro(candidate.state.money)} · ${candidate.state.buildings.length} Anlagen. Aktuellen Stand ersetzen?`,()=>activate(candidate.state.mode,{candidate}));}catch(err){toast(err.message,true);}});
 /* Tastenkürzel (A10, 0.11, abgenommen). Nie in Eingabefeldern oder offenen Dialogen; Strg/Alt/Meta bleiben dem Browser.
  * Jedes Kürzel ruft denselben Pfad wie der zugehörige Schalter auf. F/T nur, wenn die Szene follow()/tour() anbietet. */
-const KEYS=[['/','Suche und Befehle'],['Leertaste','Pause / Fortsetzen'],['1 · 2 · 3 · 4','Tempo 1×, 4×, 12×, Pause'],['B','Baumodus'],['R','Anlage drehen (im Baumodus)'],['Esc · Rechtsklick','Abbrechen'],['H','Hof & Docks'],['V','Frachtverträge'],['N','Linienverkehr'],['C','Containerhof'],['X','Luftexport'],['J','Dispositionsassistent'],['L','Beschriftungen durchschalten',()=>typeof scene.setLabels==='function'],['P','Nur Szene (Panels aus/ein)'],['F','Ausgewähltes Fahrzeug verfolgen',()=>typeof scene.follow==='function'],['T','Kamerarundgang',()=>typeof scene.tour==='function'],['Q · E','Kamera drehen'],['+ · −','Zoom'],['Pos1','Ansicht zurücksetzen'],['Z','Replay: letzte 60 Spielminuten'],['?','Diese Übersicht']];
+const KEYS=[['/','Suche und Befehle'],['Leertaste','Pause / Fortsetzen'],['1 · 2 · 3 · 4','Tempo 1×, 4×, 12×, Pause'],['B','Baumodus'],['R','Anlage drehen (im Baumodus)'],['Esc · Rechtsklick','Abbrechen'],['H','Hof & Docks'],['V','Frachtverträge'],['N','Linienverkehr'],['C','Containerhof'],['X','Luftexport'],['J','Dispositionsassistent'],['L','Beschriftungen durchschalten',()=>typeof scene.setLabels==='function'],['P','Nur Szene (Panels aus/ein)'],['F','Ausgewähltes Fahrzeug verfolgen',()=>typeof scene.follow==='function'],['T','Kamerarundgang',()=>typeof scene.tour==='function'],['W · A · S · D · ← ↑ ↓ →','Kamera verschieben (auch im Baumodus)'],['Q · E','Kamera drehen'],['+ · −','Zoom'],['Pos1','Ansicht zurücksetzen'],['Z','Replay: letzte 60 Spielminuten'],['?','Diese Übersicht']];
 function showKeys(){closeMenus();$('#keysList').innerHTML=KEYS.filter(k=>!k[2]||k[2]()).map(([k,t])=>`<div class="keys-row"><dt>${k.split(' · ').map(x=>`<kbd>${esc(x)}</kbd>`).join('<span class="keys-or">/</span>')}</dt><dd>${esc(t)}</dd></div>`).join('');$('#keys').showModal();}
 const SPEED_KEYS={'1':1,'2':4,'3':12,'4':0};
 function togglePanel(p){if(panel===p)closePanel();else openPanel(p);}
@@ -862,6 +868,7 @@ function onKey(e){if(e.target.matches('input,select,textarea,[contenteditable="t
  const k=e.key,lk=typeof k==='string'&&k.length===1?k.toLowerCase():k;
  if(k==='/'){e.preventDefault();closeMenus();$('#cmd').focus?.();return;}
  if(rp&&replayKey(e,k,lk))return;
+ if(panKeyDown(e,lk))return;
  if(e.code==='Space'||k===' '){e.preventDefault();setSpeed(speed?0:lastSpeed);return;}
  if(k==='Escape'&&camAtKey)return;
  if(lk==='t'&&(camAtKey==='tour'||camAtKey?.mode==='tour'))return;
@@ -874,6 +881,23 @@ function onKey(e){if(e.target.matches('input,select,textarea,[contenteditable="t
 // Kameramodus vor dem Szenen-Listener merken: Esc/T beenden dann nur Rundgang bzw. Verfolgen.
 let camAtKey=null;document.addEventListener('keydown',()=>{camAtKey=scene?.cameraMode?.()||null;},true);
 document.addEventListener('keydown',onKey);
+/* Kamera verschieben mit WASD/Pfeiltasten (0.17, A10-W): auch im Baumodus (Bauobjekt und Vorschau bleiben, Tasten platzieren nie),
+ * nicht bei Texteingabe (onKey kehrt dort vorher zurück). Gehaltene Tasten bewegen je Bildschirmbild gleichmäßig (Zeit, nicht Bildrate);
+ * Loslassen, Fokusverlust, verdeckter Tab oder Fokus in einem Eingabefeld beenden die Bewegung sofort. Rein darstellend. */
+const PAN_DIRS={w:[0,1],arrowup:[0,1],s:[0,-1],arrowdown:[0,-1],a:[-1,0],arrowleft:[-1,0],d:[1,0],arrowright:[1,0]};
+const PAN_CODES={KeyW:'w',KeyA:'a',KeyS:'s',KeyD:'d'};
+const panHeld=new Set();let panFrame=0,panLast=0;
+const panName=(e,lk)=>{const c=PAN_CODES[e.code];if(c)return c;const n=typeof lk==='string'?lk.toLowerCase():'';return n in PAN_DIRS?n:'';};
+function panKeyDown(e,lk){const n=panName(e,lk);if(!n)return false;if(n.startsWith('arrow')&&e.target?.closest?.('#panel,.dropdown,.rail-flyout,[role=listbox],[role=menu]'))return false;e.preventDefault?.();if(!panHeld.has(n)){panHeld.add(n);if(scene?.cameraMode?.()?.mode==='follow')scene.follow?.(null);panStart();}return true;}
+function panStart(){if(panFrame||typeof requestAnimationFrame!=='function')return;panLast=performance.now();panFrame=requestAnimationFrame(panStep);}
+function panStop(){panHeld.clear();if(panFrame&&typeof cancelAnimationFrame==='function')cancelAnimationFrame(panFrame);panFrame=0;}
+function panStep(now){panFrame=0;if(!panHeld.size)return;const dt=Math.min(.1,Math.max(0,(now-panLast)/1000));panLast=now;let x=0,y=0;for(const n of panHeld){x+=PAN_DIRS[n][0];y+=PAN_DIRS[n][1];}
+ const len=Math.hypot(x,y);if(len&&dt){x/=len;y/=len;if(typeof scene.panBy==='function')scene.panBy(x,y,dt);else if(scene.pan){const v=520*dt;scene.pan.x-=x*v;scene.pan.y+=y*v;scene.dirty=true;}}
+ panFrame=requestAnimationFrame(panStep);}
+document.addEventListener('keyup',e=>{const n=panName(e,typeof e.key==='string'&&e.key.length===1?e.key.toLowerCase():e.key);if(n){panHeld.delete(n);if(!panHeld.size)panStop();}});
+window.addEventListener('blur',panStop);
+document.addEventListener('focusin',e=>{if(e.target?.matches?.('input,select,textarea,[contenteditable="true"]'))panStop();});
+if(typeof initRail==='function')try{initRail();}catch{/* DOM-Ersatz in Prüfumgebungen */}
 // Rechtsklick ohne Ziehen bricht schrittweise ab wie Esc: Menü → Bau/Versetzen → Fenster → Auswahl. Browsermenü nur in Eingabefeldern und Dialogen.
 let rightDown=null;
 const nativeMenu=t=>!!t.closest?.('input,select,textarea,[contenteditable="true"],dialog[open]');
@@ -881,8 +905,12 @@ function cancelByContext(){if(menuOpen('siteMenu')||menuOpen('bellMenu')){closeM
 // Abbruch erst beim Loslassen: Linux meldet contextmenu schon beim Drücken, Windows beim Loslassen.
 document.addEventListener('pointerdown',e=>{rightDown=e.button===2&&!nativeMenu(e.target)?{x:e.clientX,y:e.clientY}:null;},true);
 document.addEventListener('pointerup',e=>{if(e.button!==2||!rightDown)return;const d=rightDown;rightDown=null;if(Math.hypot(e.clientX-d.x,e.clientY-d.y)>5)return;cancelByContext();},true);
-document.addEventListener('contextmenu',e=>{if(!nativeMenu(e.target))e.preventDefault();});
-document.addEventListener('visibilitychange',()=>{accumulator=0;lastTick=performance.now();if(document.hidden&&started)leaveSave();render();});
+// Browsermenü im gesamten Spielbereich unterdrücken (Erfassungsphase, damit es auch ohne Fenster und bei gestoppter Weitergabe gilt).
+// Rechte/mittlere Taste lösen dort keine Browseraktion aus (Auswahl, Autoscroll); Textfelder behalten ihr Menü.
+document.addEventListener('contextmenu',e=>{if(!nativeMenu(e.target))e.preventDefault();},true);
+document.addEventListener('mousedown',e=>{if((e.button===1||e.button===2)&&!nativeMenu(e.target))e.preventDefault();},true);
+document.addEventListener('auxclick',e=>{if(e.button!==0&&!nativeMenu(e.target))e.preventDefault();},true);
+document.addEventListener('visibilitychange',()=>{if(document.hidden)panStop();accumulator=0;lastTick=performance.now();if(document.hidden&&started)leaveSave();render();});
 window.addEventListener('beforeunload',e=>{if(!started)return;if(temporary?dirty:leaveSave()!=='saved'){e.preventDefault();e.returnValue='';}});
 window.addEventListener('pagehide',()=>guard.release());
 window.addEventListener('pageshow',e=>{if(e.persisted){writable=false;speed=0;toast('Ansicht wiederhergestellt. Für sicheres Fortsetzen Seite neu laden.',true);render();}});

@@ -1284,7 +1284,7 @@ export class Scene3D {
     const on = (target, type, fn, options) => { target.addEventListener(type, fn, options); this.listeners.push([target, type, fn, options]); };
     on(canvas, 'pointerdown', e => { if (this.camMode?.mode === 'tour') this.stopCamera('input'); if (e.button !== 0) return; try { canvas.setPointerCapture?.(e.pointerId); } catch { /* synthetische Zeiger */ } const p = this.local(e), g = this.groundAt(p.x, p.y); this.pointer = { x: e.clientX, y: e.clientY, moved: false, gx: g?.x, gz: g?.z }; });
     on(canvas, 'pointermove', e => {
-      const p = this.local(e); this.needs = true;
+      const p = this.local(e); this.needs = true; this.lastLocal = p;
       if (this.pointer) {
         if (Math.hypot(e.clientX - this.pointer.x, e.clientY - this.pointer.y) > 5) this.pointer.moved = true;
         if (this.pointer.moved && this.camMode) this.stopCamera('input');
@@ -1296,7 +1296,7 @@ export class Scene3D {
     });
     on(canvas, 'pointerup', e => { const down = this.pointer; this.pointer = null; if (!down || down.moved) return; this.click(this.local(e)); });
     on(canvas, 'pointercancel', () => { this.pointer = null; });
-    on(canvas, 'pointerleave', () => { if (!this.pointer && this.hover) { this.hover = null; this.dynDirty = true; } });
+    on(canvas, 'pointerleave', () => { this.lastLocal = null; if (!this.pointer && this.hover) { this.hover = null; this.dynDirty = true; } });
     on(canvas, 'wheel', e => { e.preventDefault(); if (this.camMode?.mode === 'tour') this.stopCamera('input'); if (this.camMode?.mode === 'follow') { this.zoom(e.deltaY < 0 ? 1 : -1, true); return; } const p = this.local(e), before = this.groundAt(p.x, p.y), bx = before?.x, bz = before?.z; this.zoom(e.deltaY < 0 ? 1 : -1, true); if (bx != null) { const after = this.groundAt(p.x, p.y); if (after) { this.cam.tx += bx - after.x; this.cam.tz += bz - after.z; this.goal.tx = this.cam.tx; this.goal.tz = this.cam.tz; this.applyCamera(); } } }, { passive: false });
     on(canvas, 'webglcontextlost', e => { e.preventDefault(); this.lost = true; });
     on(canvas, 'webglcontextrestored', () => { this.lost = false; this.signature = ''; this.sigDirty = true; this.needs = true; });
@@ -1345,6 +1345,18 @@ export class Scene3D {
     c.base = t; c.at = now;
   }
   zoom(delta, immediate = false) { this.scale = Math.max(.45, Math.min(2.7, this.scale * Math.pow(1.13, delta))); this.goal.dist = this.homeDist / this.scale; if (immediate) { this.cam.dist = this.goal.dist; this.applyCamera(); } this.needs = true; }
+  /** Kamera mit Tastatur verschieben (0.17): x nach rechts, y nach vorn (Bildschirm oben), dt in Sekunden; Tempo folgt dem Zoom.
+   *  Beendet Rundgang/Verfolgen; im Baumodus folgt die Vorschau der neuen Zellposition unter dem Zeiger (keine Platzierung). */
+  panBy(x, y, dt) {
+    if (!dt || (!x && !y)) return;
+    if (this.camMode) this.stopCamera('input');
+    const a = this.view === 'flat' ? this.cam.yaw - Math.PI / 4 : this.cam.yaw, v = Math.max(4, this.cam.dist * 0.9) * dt;
+    const dx = (x * Math.cos(a) - y * Math.sin(a)) * v, dz = (-x * Math.sin(a) - y * Math.cos(a)) * v;
+    this.cam.tx += dx; this.cam.tz += dz; this.goal.tx = this.cam.tx; this.goal.tz = this.cam.tz; this.applyCamera(); this.needs = true;
+    const p = this.lastLocal; if (!p || this.view === 'network') return;
+    const g = this.groundAt(p.x, p.y); if (!g) return;
+    const c = worldToCell(g.x, g.z); if (!this.hover || this.hover.x !== c.x || this.hover.y !== c.y) { this.hover = c; this.dynDirty = true; this.callbacks.onHover?.(c.x, c.y); }
+  }
   rotate(dir = 1) { if (this.camMode?.mode === 'tour') this.stopCamera('user'); const d = dir < 0 ? -1 : 1; this.quarter = (this.quarter + d + 4) % 4; this.goal.yaw += d * Math.PI / 2; this.needs = true; this.dynDirty = true; }
   home() {
     this.stopCamera('user'); const s = defaultSite(this.state), W = s.width || 20, H = s.height || 16; this.scale = 1;
