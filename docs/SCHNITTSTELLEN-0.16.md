@@ -22,7 +22,7 @@ Abnahme (A11): Jede Störung hat Ursache, Dauer, Wirkung und Ende, sichtbar in M
 - Ereignisse `event={id, kind, site, startT, endT, target?, text}`; Arten mindestens:
   - `jam` Stau auf einer Zustellgebietsrichtung (lane) oder Linie: zusätzliche Fahrtzeit.
   - `gate` Torstörung: Torkontrolle steht 20–90 Min. (yard Wartegrund „Torstörung“).
-  - `grid` Netzstörung: Standortstrom fällt 15–60 Min. aus, außer ein Energiegebäude deckt den Bedarf (Wirkung über `special`-Energieberechnung, Vorrang Kühlung, siehe S4).
+  - `grid` Netzstörung: Standortstrom fällt 30–120 Min. aus (A02), außer ein Energiegebäude deckt den Bedarf (Wirkung über `special`-Energieberechnung, Vorrang Kühlung, siehe S4).
 - Exporte (rein lesend, ohne Seiteneffekte):
   - `travelFactor(s, site, {lane?, line?})` ≥ 1 (Wetter × Stau).
   - `arrivalDelay(s, site, contractId)` Minuten Verspätung fremder Lkw (Wetter).
@@ -32,7 +32,7 @@ Abnahme (A11): Jede Störung hat Ursache, Dauer, Wirkung und Ende, sichtbar in M
 
 ## S2 Personalrollen (A06, workforce.js + Aufrufer)
 
-- Neue Rollen in `ROLES` (A01 trägt in catalog.js ein): `forklift` Staplerfahrer (Lohn 20, Einstellung 400), `gate` Torposten (Lohn 17, Einstellung 300).
+- Neue Rollen in `ROLES` (A01 trägt in catalog.js ein): `forklift` Staplerfahrer (Lohn 20, Einstellung 400), `gate` Torposten (Lohn 15, Einstellung 250; A02).
 - Neue API `api.workforce.acquireAny(roles, site, task)`: erste passende freie Person in Rollenreihenfolge; bestehende Bindung bleibt, solange gültig.
 - Staplerarbeiten (yard Paletten/Sperrgut, containers, linehaul/transport/tours Staplerumschlag) nutzen `['forklift','warehouse']`, Torkontrolle `['gate','warehouse']`. Spezialist arbeitet mit Faktor 1,25 (`workRate`), Lagerkraft wie bisher.
 - Lagerkräfte bleiben universell; ohne Spezialisten ändert sich nichts.
