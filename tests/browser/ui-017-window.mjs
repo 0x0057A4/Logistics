@@ -1,5 +1,8 @@
 // A10-W 0.17: Fenster (ziehen, vergrößern, maximieren, wiederherstellen, Geometrie nach Neuladen, Klemmen), Bereichsleiste ohne
-// Scrollbalken, WASD im Baumodus (bewegt Kamera, platziert nicht, nicht im Suchfeld), Kontextmenü im Spielbereich unterdrückt.
+// Scrollbalken, Startlage ohne Überlappung mit Kennzahlen/Ansichtsumschalter/Leiste/Standortfluss, proportionale Skalierung
+// der Fenster bei Auflösungswechsel (Nutzervorgabe 18.10.2026: Referenz 1920 × 1080, Fenster skalieren mit), Umrechnung
+// alter absoluter Fenstergeometrie, Betriebsleiste kürzt Spalten statt sie abzuschneiden,
+// WASD im Baumodus (bewegt Kamera, platziert nicht, nicht im Suchfeld), Kontextmenü im Spielbereich unterdrückt.
 // Kein Teil von `npm test`. Aufruf: node tests/browser/ui-017-window.mjs [--repo] [--shots <Verzeichnis>]
 // Kamerabewegung wird an den Szenenbeschriftungen gemessen (pausiertes Spiel: Positionen ändern sich nur durch die Kamera).
 import {join} from 'node:path';
@@ -21,6 +24,13 @@ for(const [W,H] of [[1366,768],[1920,1080]]){
  const rect=sel=>page.evaluate(s=>{const r=document.querySelector(s).getBoundingClientRect();return {x:Math.round(r.left),y:Math.round(r.top),w:Math.round(r.width),h:Math.round(r.height)};},sel);
  const shot=async n=>{if(shots)await page.screenshot({path:join(shots,`ui017-${W}-${n}.png`)});};
  // Kamerazustand: Transform aller sichtbaren Szenenbeschriftungen
+ const area=()=>page.evaluate(()=>{const g=document.querySelector('#game'),sb=document.querySelector('.statusbar');const r=g.getBoundingClientRect();return {x:Math.round(r.left),y:Math.round(r.top),w:g.clientWidth,h:g.clientHeight-sb.offsetHeight};});
+ const prefsWin=k=>page.evaluate(k=>JSON.parse(localStorage.getItem('industrie-logistik-v1-prefs')||'{}').windows?.[k]||null,k);
+ // Erwartete Pixel aus Anteilen: Mindestgröße (rechte Kante bleibt bei rechts liegenden Fenstern), Klemmen in die Fläche.
+ const expectRel=(rel,a)=>{let x=rel.rx*a.w,y=rel.ry*a.h,w=rel.rw*a.w,h=rel.rh*a.h;if(w<380){if(x+w/2>a.w/2)x-=380-w;w=380;}if(h<260){if(y+h/2>a.h/2)y-=260-h;h=260;}w=Math.min(w,a.w);h=Math.min(h,a.h);x=Math.max(0,Math.min(a.w-w,x));y=Math.max(0,Math.min(a.h-h,y));return {x:x+a.x,y:y+a.y,w,h};};
+ const near=(r,e,t=2)=>['x','y','w','h'].every(k=>Math.abs(r[k]-e[k])<=t);
+ const hit=(a,b)=>a.x<b.x+b.w-0.5&&b.x<a.x+a.w-0.5&&a.y<b.y+b.h-0.5&&b.y<a.y+a.h-0.5;
+ const hudRects=()=>page.evaluate(()=>['.kpis','.view-switch','.rail','#flow','.camera-controls'].map(s=>{const e=document.querySelector(s);if(!e||e.offsetParent===null)return null;const r=e.getBoundingClientRect();return {s,x:r.left,y:r.top,w:r.width,h:r.height};}).filter(Boolean));
  const camSig=()=>page.evaluate(()=>[...document.querySelectorAll('.scene3d-labels > *')].filter(e=>e.style.display!=='none').map(e=>e.style.transform).join('|'));
  const start=async()=>{
   if(await page.evaluate(()=>document.querySelector('#welcome')?.open)){await page.click('#welcome [data-action="start"]');await page.waitForFunction(()=>!document.querySelector('#welcome').open);}
@@ -59,6 +69,23 @@ for(const [W,H] of [[1366,768],[1920,1080]]){
   ok(`${L} Kontextmenü im Spielbereich verhindert (Szene, Statuszeile, Leiste, Rechts-Ziehen)`,rc.length>=5&&rc.slice(0,-1).every(r=>r[1]),JSON.stringify(rc));
   ok(`${L} Suchfeld behält Browsermenü`,rc.at(-1)?.[1]===false);
   await page.keyboard.press('Escape');await page.locator('#world').focus();
+
+  // Startlage (keine gespeicherte Geometrie): verdeckt weder Kennzahlen, Ansichtsumschalter, Leiste, Standortfluss noch Kamerawerkzeuge
+  for(const p of ['overview','finance','contracts','inventory','orders','staff','yard','service']){
+   await page.evaluate(p=>document.querySelector(`[data-panel="${p}"]`).click(),p);await wait(250);
+   const pr=await rect('#panel'),hits=(await hudRects()).filter(r=>hit(pr,r)).map(r=>r.s);
+   ok(`${L} Startlage ${p} überlappungsfrei`,!hits.length&&!(await prefsWin(p)),`${JSON.stringify(pr)} ${hits.join(',')}`);
+  }
+  ok(`${L} Tabellenfenster beginnt unterhalb der Kennzahlen`,(await rect('#panel')).y>=(await rect('.kpis')).y+(await rect('.kpis')).h);
+  await page.click('[data-action="close"]');await wait(150);
+  // Untere Leiste: Spaltenköpfe nie abgeschnitten (bei Platzmangel entfallen ganze Spalten), Schrift ≥ 12 px, Kopf mit Tooltip
+  for(const p of ['','contracts','finance','inventory']){
+   if(p){await page.evaluate(p=>document.querySelector(`[data-panel="${p}"]`).click(),p);await wait(250);}
+   const vh=await page.evaluate(()=>[...document.querySelectorAll('#vbarVehicles .vhead span')].filter(e=>e.offsetParent).map(e=>({t:e.textContent,cut:e.scrollWidth>e.clientWidth+1,fs:parseFloat(getComputedStyle(e).fontSize),title:!!e.title})));
+   const tabs=await page.evaluate(()=>[...document.querySelectorAll('.vbar-tab')].map(b=>{const r=b.getBoundingClientRect(),v=document.querySelector('#vbar').getBoundingClientRect();return r.right<=v.right+1;}));
+   ok(`${L} Betriebsleiste${p?' neben '+p:''}: Köpfe lesbar`,vh.length>=3&&vh.every(h=>!h.cut&&h.fs>=12&&h.title)&&tabs.every(Boolean),JSON.stringify(vh.map(h=>h.t+(h.cut?'(abgeschnitten)':''))));
+  }
+  if(W===1920){await page.evaluate(()=>document.querySelector('[data-panel="orders"]').click());await wait(300);await shot('auftraege');await page.click('[data-action="close"]');await wait(150);}
 
   // Fenster öffnen: Startgeometrie, ein Scrollbereich, sticky Tabellenkopf
   await page.click('.rail [data-panel="finance"]');await wait(300);
@@ -104,11 +131,35 @@ for(const [W,H] of [[1366,768],[1920,1080]]){
 
   // Geometrie nach Neuladen
   const stored=await page.evaluate(()=>JSON.parse(localStorage.getItem('industrie-logistik-v1-prefs')||'{}').windows?.finance||null);
-  ok(`${L} Geometrie in prefs.windows.finance`,!!stored&&stored.w===gs.w&&stored.max===false,JSON.stringify(stored));
+  const a0=await area();
+  ok(`${L} Geometrie relativ in prefs.windows.finance`,!!stored&&stored.x===undefined&&Math.abs(stored.rw*a0.w-gs.w)<=1&&Math.abs(stored.rx*a0.w+a0.x-gs.x)<=1&&stored.max===false,JSON.stringify(stored));
   await page.click('[data-action="close"]');await wait(1500);
   await page.reload();await page.waitForFunction(()=>document.querySelector('#statusText')?.textContent&&!/Lade|lädt/i.test(document.querySelector('#statusText').textContent),null,{timeout:15000}).catch(()=>{});await wait(800);await start();await wait(300);
   await page.click('.rail [data-panel="finance"]');await wait(300);
   ok(`${L} Geometrie bleibt nach Neuladen`,JSON.stringify(await rect('#panel'))===JSON.stringify(gs),JSON.stringify(await rect('#panel')));
+  // Proportionale Skalierung: andere Auflösungen → gleiche Anteile; zurück → identische Pixel; maximiert bleibt maximiert
+  const rel=await prefsWin('finance');
+  for(const [vw,vh] of [[1366,768],[2560,1440],[1920,1080]].filter(([a,b])=>a!==W)){
+   await page.setViewportSize({width:vw,height:vh});await wait(400);
+   const r=await rect('#panel'),e=expectRel(rel,await area());
+   ok(`${L} → ${vw}×${vh}: Fenster proportional skaliert`,near(r,e),`${JSON.stringify(r)} erwartet ${JSON.stringify(e)}`);
+   await shot(`skaliert-${vw}`);
+  }
+  await page.click('#panelMax');await wait(100);await page.setViewportSize({width:1366,height:768});await wait(400);
+  {const r=await rect('#panel'),rl=await rect('.rail');ok(`${L} maximiert bleibt bei Auflösungswechsel maximiert`,await page.getAttribute('#panelMax','aria-pressed')==='true'&&r.x<=rl.x+rl.w+12&&r.w>=1366-rl.x-rl.w-30,JSON.stringify(r));}
+  await page.setViewportSize({width:W,height:H});await wait(300);await page.click('#panelMax');await wait(100);
+  ok(`${L} zurück auf ${W}×${H}: identische Größe`,JSON.stringify(await rect('#panel'))===JSON.stringify(gs),JSON.stringify(await rect('#panel')));
+  ok(`${L} Anteile durch Auflösungswechsel unverändert`,JSON.stringify(await prefsWin('finance'))===JSON.stringify({...rel,max:false}),JSON.stringify(await prefsWin('finance')));
+  // Neuladen bei anderer Auflösung: gleiche Anteile
+  await page.setViewportSize({width:2560,height:1440});await page.click('[data-action="close"]');await page.reload();await page.waitForFunction(()=>document.querySelector('#statusText')?.textContent&&!/Lade|lädt/i.test(document.querySelector('#statusText').textContent),null,{timeout:15000}).catch(()=>{});await wait(800);await start();await wait(300);
+  await page.click('.rail [data-panel="finance"]');await wait(300);
+  {const r=await rect('#panel'),e=expectRel(rel,await area());ok(`${L} nach Neuladen bei 2560×1440 gleiche Anteile`,near(r,e),`${JSON.stringify(r)} erwartet ${JSON.stringify(e)}`);}
+  // Alte absolute Geometrie (vor der Umstellung) wird einmalig umgerechnet
+  await page.evaluate(()=>{const k='industrie-logistik-v1-prefs',p=JSON.parse(localStorage.getItem(k)||'{}');p.windows={...(p.windows||{}),history:{x:700,y:40,w:600,h:500,max:false}};localStorage.setItem(k,JSON.stringify(p));});
+  await page.setViewportSize({width:W,height:H});await page.click('[data-action="close"]');await page.reload();await page.waitForFunction(()=>document.querySelector('#statusText')?.textContent&&!/Lade|lädt/i.test(document.querySelector('#statusText').textContent),null,{timeout:15000}).catch(()=>{});await wait(800);await start();await wait(300);
+  await page.evaluate(()=>document.querySelector('[data-panel="history"]').click());await wait(300);
+  {const r=await rect('#panel'),a=await area(),m=await prefsWin('history');ok(`${L} alte Fenstergeometrie umgerechnet und relativ gespeichert`,!!m&&m.x===undefined&&Number.isFinite(m.rx)&&r.x===a.x+700&&r.y===a.y+40&&r.w===600&&r.h===500,`${JSON.stringify(r)} ${JSON.stringify(m)}`);}
+  await page.click('[data-action="close"]');await page.click('.rail [data-panel="finance"]');await wait(300);
   // Anderes Fenster hat eigene Geometrie
   await page.click('.rail [data-panel="contracts"]');await wait(200);const gc=await rect('#panel');ok(`${L} Verträge mit eigener Startgeometrie`,JSON.stringify(gc)!==JSON.stringify(gs),JSON.stringify(gc));
   // Klemmen nach Viewport-Wechsel: Fenster nach rechts unten schieben, dann Ansicht verkleinern
