@@ -1,7 +1,7 @@
 import {ITEMS,VEHICLES} from './catalog.js';
 import {returnSources} from './service.js';
 import {onShift} from './workforce.js';
-import {acquireForklift,releaseForklift,useForklift,forkliftKey,PALLET} from './yard.js';
+import {acquireForklift,releaseForklift,useForklift,forkliftKey,forkItem} from './yard.js';
 const active=t=>!['complete','cancelled'].includes(t.status);
 const owner=o=>o.kind==='logistics'?o.id:'company';
 const cents=n=>Math.round(n*100)/100;
@@ -82,7 +82,7 @@ function cargoValid(s,stop){const batches=stop.cargo.map(id=>s.batches.find(b=>b
 export function step(s,api){for(const t of s.tours||[]){
  for(const [i,stop] of t.stops.entries())if(stop.paymentAt!=null&&s.t>=stop.paymentAt&&!stop.paid){const o=s.orders.find(o=>o.id===stop.orderId);if(api.book(`tour-payment:${t.id}:${i}`,stop.invoiceAmount,'Umsatz',`Sammeltour: ${o.customer}`,[t.id,o.id])){stop.paid=true;o.paid=cents(o.paid+stop.invoiceAmount);}}
  if(!active(t))continue;const v=s.vehicles.find(v=>v.id===t.vehicleId);if(!v)continue;
- const pallet=t.status==='loading'&&t.stops.some(x=>x.item===PALLET);
+ const pallet=t.status==='loading'&&t.stops.some(x=>forkItem(x.item)); // 0.15 S2: Palette oder Sperrgut
  const driver=api.workforce.acquire('driver',t.site,`${t.id}:driver`);if(!driver){t.blocked='Fahrpersonal oder Schicht fehlt';t.driver=null;if(pallet)releaseForklift(s,forkliftKey(t.id));continue;}t.driver=driver.id;
  if(t.status==='loading'){
   let dock=s.buildings.find(b=>b.type==='dock'&&b.site===t.site&&b.enabled&&b.condition>0&&b.task===t.id);dock??=s.buildings.find(b=>b.type==='dock'&&b.site===t.site&&b.enabled&&b.condition>0&&!b.task);if(!dock){t.blocked='Freie Laderampe fehlt';continue;}dock.task=t.id;t.dock=dock.id;

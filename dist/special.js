@@ -1,5 +1,7 @@
 import {ITEMS,BUILDINGS,VEHICLES} from './catalog.js';
-import {activeBatches,findBatch} from './inventory.js';
+import {activeBatches,findBatch,siteItemBatches} from './inventory.js';
+const COLD_ITEMS=Object.keys(ITEMS).filter(k=>ITEMS[k].cold);
+const COLD_STORED=new Set(['stock','inbound','quarantine']);
 export function init(){}
 // Ganze Chargen werden FIFO auf reale Kühlplätze verteilt. Kein virtueller Überlauf.
 export function coolingCapacity(s,siteId){
@@ -10,11 +12,19 @@ export function coolingCapacity(s,siteId){
  if(supply<demand)return 0;
  return enabled.filter(b=>b.type==='coldstore').reduce((n,b)=>n+(BUILDINGS[b.type].capacity||0),0);
 }
+/** 0.15 S2: Belegte Kühlplätze eines Standorts (Menge aller Kühlartikel in stock/inbound/quarantine). Nur lesend. */
+export function coolingUsed(s,siteId){
+ let n=0;for(const item of COLD_ITEMS)for(const b of siteItemBatches(s,siteId,item))if(b.site===siteId&&b.qty>0&&COLD_STORED.has(b.location))n+=b.qty;
+ return n;
+}
+/** 0.15 S2: Freie Kühlplätze (Kühllagerkapazität − Belegung, nie negativ). Neue Kühlware wird nur bis hierhin angenommen
+ *  (yard/linehaul), damit step() jede Charge gekühlt einplant (FIFO, ganze Chargen, Summe ≤ Kapazität). */
+export function coolingFree(s,siteId){return Math.max(0,coolingCapacity(s,siteId)-coolingUsed(s,siteId));}
 // Ladungszuordnung je Minutenschritt, erst bei der ersten Fahrzeugcharge aufgebaut (laufzeitlokal).
-// Erster Treffer gewinnt wie zuvor: Lieferungen, Transfers, Retouren, danach Sammeltouren.
+// Erster Treffer gewinnt wie zuvor: Lieferungen, Transfers, Retouren, (0.15 S2) Linienfahrten, danach Sammeltouren.
 function cargoIndex(s){
  const trips=new Map(),tours=new Map();
- for(const list of [s.shipments||[],s.transfers||[],s.returns||[]])for(const t of list)if(Array.isArray(t.cargo))for(const id of t.cargo)if(!trips.has(id))trips.set(id,t);
+ for(const list of [s.shipments||[],s.transfers||[],s.returns||[],s.linehauls||[]])for(const t of list)if(Array.isArray(t.cargo))for(const id of t.cargo)if(!trips.has(id))trips.set(id,t);
  for(const t of s.tours||[])for(const stop of t.stops)if(Array.isArray(stop.cargo))for(const id of stop.cargo)if(!tours.has(id))tours.set(id,t);
  return {trips,tours};
 }

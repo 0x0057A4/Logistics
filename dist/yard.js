@@ -4,6 +4,7 @@
 // Belegung b.task=arrival.id von toDock bis Ende unloading. Eigene Abläufe prüfen ebenfalls !b.task → keine Doppelbelegung.
 import {workRate,UNLOAD_BASE,GATE_ROLE} from './workforce.js';
 import {BUILDINGS} from './catalog.js';
+import {coolingCapacity,coolingFree} from './special.js';
 // W3b-S2: Containerchassis (a.kind==='container') nutzen approach→gate→queue→toYard→drop→exit→gone (Logik containers.js).
 export const PHASES=['approach','gate','queue','toDock','docking','unloading','exit','gone'];
 export const CONTAINER_PHASES=['approach','gate','queue','toYard','drop','exit','gone'];
@@ -23,6 +24,20 @@ export const containerHooks={schedule:null,step:null,holder:null};
 export const isContainerArrival=a=>a.kind==='container';
 export const PALLET='pallet';
 export const PALLET_BASE=1; // Paletten je Minute einer Standardkraft mit Stapler; tatsächlich workRate(Kraft,1)
+// 0.15 S2 Warenarten (A05/A08): Kühlpaket (a.item 'parcel_cold') entlädt nur in freie Kühlplätze (special.coolingFree) nach
+// inbound und wird nur mit Kühllager sortiert; Sperrgut (a.item 'bulky') geht nie über Sortierer, sondern per Handumschlag
+// (Lagerkraft + Stapler, BULKY_BASE je Minute vor workRate) direkt nach stock – Ablauf wie Paletten (forkItem).
+export const COLD='parcel_cold',BULKY='bulky',BULKY_BASE=2;
+/** Ware mit Staplerumschlag (Palette, Sperrgut): Entladen/Beladen nur mit Stapler + Lagerkraft, nie Sortierung. */
+export const forkItem=item=>item===PALLET||item===BULKY;
+/** Sonderware im Hof (a.item gesetzt); Paketankünfte tragen kein Feld (Altstände/Hashes unverändert). */
+export const ARRIVAL_ITEMS=[PALLET,COLD,BULKY];
+WAIT.coldMissing='Kühllager fehlt';WAIT.coldFull='Kühllager voll';
+/** Wartegrund für Kühlware ohne freien Kühlplatz am Standort. */
+export const coldWait=(s,site)=>coolingCapacity(s,site)>0?WAIT.coldFull:WAIT.coldMissing;
+const BASE_OF=item=>item===PALLET?PALLET_BASE:item===BULKY?BULKY_BASE:UNLOAD_BASE;
+const WORD={pallet:['Palette','Paletten'],parcel_cold:['Kühlpaket','Kühlpakete'],bulky:['Sperrgutstück','Sperrgutstücke']};
+const word=(a,n)=>(WORD[a.item]||['Paket','Pakete'])[n===1?0:1];
 const AT_DOCK=new Set(['toDock','docking','unloading']);
 const CARRIER_A=['Talgrund','Weidenstein','Ostheiden','Kranichmoor','Lerchental','Fuchsbrunn','Eschenfurt','Moorwiesen','Hohenkamp','Silberau'];
 const CARRIER_B=['Spedition','Logistik','Transporte','Frachtdienst','Güterverkehr'];
@@ -40,7 +55,7 @@ export function init(s){s.yard??=[];}
 export const gateKey=a=>`${a.id}:gate`;
 export const unloadKey=a=>`${a.id}:warehouse`;
 const heldRate=(s,key,base=UNLOAD_BASE)=>{const w=s.workers.find(w=>w.task===key);return w?workRate(w,base):base;};
-const isPallet=a=>a.item===PALLET;
+const isPallet=a=>forkItem(a.item); // Staplerumschlag (Palette oder Sperrgut)
 
 // ── Staplerplatz (W2-S2) ─────────────────────────────────────────────────────────────────────────────────────
 // Je Gebäude 'forklift' ein Stapler. b.charge 0–100 (fehlend = 100, beim ersten Takt gesetzt). Bindung exklusiv über
@@ -131,14 +146,16 @@ export function schedule(s,api,payload={}){
  else if(ids.length)weights=ids.map(()=>1);
  const targets=ids.length?apportion(parcels,weights):[parcels];
  const owners=ids.length?ids:[`contract:${contractId??'unbekannt'}`];
- const pallet=ids.length?orders.every(o=>o?.item===PALLET):(s.contracts||[]).find(c=>c.id===contractId)?.unit===PALLET;
+ const k=(s.contracts||[]).find(c=>c.id===contractId);
+ const first=orders[0]?.item,item=ids.length?(ARRIVAL_ITEMS.includes(first)&&orders.every(o=>o?.item===first)?first:null):k?.unit===PALLET?PALLET:ARRIVAL_ITEMS.includes(k?.content)&&k?.unit!=='container'?k.content:null;
+ const pallet=item===PALLET;
  const carrier=`${pick(api,CARRIER_A)} ${pick(api,CARRIER_B)}`;
  const plate=`${pick(api,PLATE)}-${pick(api,LETTERS.split(''))}${pick(api,LETTERS.split(''))} ${100+Math.floor(api.random()*9900)%9900}`;
  const a={id:api.id('arrival'),site,contractId:contractId??null,orderIds:ids,carrier,plate,parcels,
   phase:'approach',phaseStart:eta-DURATION.approach,phaseEnd:eta,eta,dock:null,waitReason:null,waitSince:null,
   unloaded:0,atRisk:false,forecast:null,gateAt:null,priority:false,
-  split:owners.map((owner,i)=>({owner,target:targets[i],done:0})),...(pallet?{item:PALLET}:{})};
- s.yard.push(a);api.log('yard',`${carrier} (${plate}) angekündigt: ${parcels} ${pallet?'Paletten':'Pakete'}, Ankunft Minute ${eta}.`,[a.id]);
+  split:owners.map((owner,i)=>({owner,target:targets[i],done:0})),...(item?{item}:{})};
+ s.yard.push(a);api.log('yard',`${carrier} (${plate}) angekündigt: ${parcels} ${pallet?'Paletten':item?word(a,2):'Pakete'}, Ankunft Minute ${eta}.`,[a.id]);
  updateRisk(s,a);
  return a;
 }
@@ -179,7 +196,7 @@ function due(s,a){
 // Einfache Prognose: Restzeit im Hof + Warteschlange + Entladen + Sortieren.
 function updateRisk(s,a){
  if(a.kind){a.atRisk=false;a.forecast=null;return;}
- const base=isPallet(a)?PALLET_BASE:UNLOAD_BASE;
+ const base=BASE_OF(a.item);
  const unloadRest=Math.ceil((a.parcels-a.unloaded)/heldRate(s,unloadKey(a),base)),t=s.t;let ready;
  const ahead=a.phase==='queue'?queueOrder(s,a.site).indexOf(a):0;
  const queueWait=ahead*Math.ceil(a.parcels/base);
@@ -206,14 +223,14 @@ export function handle(s,c,api){
  a.priority=true;api.log('yard',`${a.plate}: Dockzuteilung vorgezogen.`,[a.id]);return {ok:true};
 }
 
-// Paletten entladen: Stapler zuerst (ohne Stapler bleibt keine Lagerkraft gebunden), dann Lagerkraft; direkt nach stock.
+// Paletten/Sperrgut entladen: Stapler zuerst (ohne Stapler bleibt keine Lagerkraft gebunden), dann Lagerkraft; direkt nach stock.
 function unloadPallets(s,api,a,t){
  const fk=forkliftKey(a.id),f=acquireForklift(s,a.site,fk);
  if(!f.forklift){api.workforce.release(unloadKey(a));wait(a,f.reason,t);return;}
  const worker=api.workforce.acquire('warehouse',a.site,unloadKey(a));
  if(!worker){releaseForklift(s,fk);wait(a,WAIT.staff,t);return;}
  worker.activity=`Entlädt ${a.plate} mit Stapler`;
- const r=unloadMinute(s,api,a,Math.min(workRate(worker,PALLET_BASE),a.parcels-a.unloaded),PALLET,'stock');
+ const r=unloadMinute(s,api,a,Math.min(workRate(worker,BASE_OF(a.item)),a.parcels-a.unloaded),a.item,'stock');
  if(r.added)useForklift(s,f.forklift);
  if(r.full){wait(a,WAIT.full,t);if(!r.added){api.workforce.release(unloadKey(a));releaseForklift(s,fk);}}
  else{a.waitReason=null;a.waitSince=null;}
@@ -253,16 +270,19 @@ function stepYard(s,api){
    if(!usable(b)){api.workforce.release(`${a.id}:warehouse`);if(isPallet(a))releaseForklift(s,forkliftKey(a.id));if(!switchDock(s,api,a,t))wait(a,WAIT.dockOff,t);}
    else if(isPallet(a))unloadPallets(s,api,a,t);
    else{
-    const worker=api.workforce.acquire('warehouse',a.site,`${a.id}:warehouse`);
-    if(!worker)wait(a,WAIT.staff,t);
+    // Kühlpakete: nur bis zu den freien Kühlplätzen; ohne Platz wartet der Lkw ohne gebundene Lagerkraft.
+    const room=a.item===COLD?Math.floor(coolingFree(s,a.site)+1e-9):Infinity;
+    const worker=room<1?null:api.workforce.acquire('warehouse',a.site,`${a.id}:warehouse`);
+    if(room<1){api.workforce.release(`${a.id}:warehouse`);wait(a,coldWait(s,a.site),t);}
+    else if(!worker)wait(a,WAIT.staff,t);
     else{
      worker.activity=`Entlädt ${a.plate}`;
-     const r=unloadMinute(s,api,a,Math.min(workRate(worker,UNLOAD_BASE),a.parcels-a.unloaded));
+     const r=room===Infinity?unloadMinute(s,api,a,Math.min(workRate(worker,UNLOAD_BASE),a.parcels-a.unloaded)):unloadMinute(s,api,a,Math.min(workRate(worker,UNLOAD_BASE),a.parcels-a.unloaded,room),COLD);
      if(r.full){wait(a,WAIT.full,t);if(!r.added)api.workforce.release(`${a.id}:warehouse`);}
      else{a.waitReason=null;a.waitSince=null;}
     }
    }
-   if(a.unloaded>=a.parcels){api.workforce.release(`${a.id}:warehouse`);if(isPallet(a))releaseForklift(s,forkliftKey(a.id));releaseDock(s,a);setPhase(a,'exit',t);api.log('yard',`${a.plate}: ${a.parcels} ${isPallet(a)?'Paletten':'Pakete'} entladen.`,[a.id]);}
+   if(a.unloaded>=a.parcels){api.workforce.release(`${a.id}:warehouse`);if(isPallet(a))releaseForklift(s,forkliftKey(a.id));releaseDock(s,a);setPhase(a,'exit',t);api.log('yard',`${a.plate}: ${a.parcels} ${a.item?word(a,2):'Pakete'} entladen.`,[a.id]);}
   }
   else if(a.phase==='exit'&&t>=a.phaseEnd){setPhase(a,'gone',t);}
  }
@@ -287,7 +307,7 @@ export function validate(s){
  const ids=new Set(s.yard.map(a=>a.id)),docks=new Map();
  for(const a of s.yard){
   if(!(a.kind?CONTAINER_PHASES:PHASES).includes(a.phase))fail('Phase');
-  if(a.item!==undefined&&a.item!==PALLET)fail('Ladeeinheit');
+  if(a.item!==undefined&&!ARRIVAL_ITEMS.includes(a.item))fail('Ladeeinheit');
   if(a.kind!==undefined&&a.kind!=='container')fail('Art');
   if(!s.sites.some(x=>x.id===a.site))fail('Standort');
   if(typeof a.carrier!=='string'||typeof a.plate!=='string')fail('Spediteur');
