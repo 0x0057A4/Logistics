@@ -1,5 +1,16 @@
 # Änderungen
 
+## 0.16 – 18.10.2026 · Betrieb: Wetter, Störungen, Personalrollen, Kundendienst (Entwicklungsfassung)
+
+- Wetter je Standort und Tag (klar, Regen, Nebel, Schnee, Sturm) ab Spieltag 2: längere Fahrten, verspätete Fremd-Lkw (Fristen bleiben).
+- Störungen: Stau (Gebiet/Linie), Torstörung (Torkontrolle steht), Netzstörung 30–120 Min. (ohne Energieversorgung stehen Fertigung und Sortierung, Kühlung hat Vorrang). Fenster „Wetter & Störungen“, Glocke, Schalter in den Einstellungen.
+- Personalrollen Staplerfahrer und Torposten: 25 % schneller in ihrer Tätigkeit, Lagerkraft springt ein.
+- Kundendienst: automatische Anliegen (Verspätung, drohende Verspätung, Teillieferung, Störungsverzug) mit Antwortfrist; Zufriedenheit je Versender wirkt auf neue Angebote (bis ±12 %).
+- Linienwarnung bei Ankunft nach Schichtende (QS-W3-02); Warenangebote zeigen Kühlplätze bzw. Sperrgut-Kapazität.
+- 3D: Regen, Schnee, Nebel, Sturm, Störungsmarker, Westenfarben der neuen Rollen.
+- Fixes aus 0.15: Kühlung zuerst bei Strommangel (QS-015-01), Rückgabe Kundenmaterial bei Storno Lohnfertigung (QS-015-03).
+- Balancing: Sortierplatz 300 Pakete/h für 10.000 €; Details docs/BALANCING-0.16.md. Unabhängige Prüfung: docs/QS-0.16.md.
+
 ## 0.15 – 18.10.2026 · Wirtschaft, neue Warenarten, Mega-Hub, Grafikqualität (Entwicklungsfassung)
 
 - Unternehmensrechnung mit Tab „GuV & Anlagen“: Ergebnisrechnung (Umsatz, Kostenarten, EBITDA, Abschreibung, EBIT, Ergebnis) mit Abstimmung zum Geldfluss; lineare Abschreibung (Gebäude 180, Fahrzeuge 90 Spieltage), Anlagenspiegel, Abgänge bei Abriss.
