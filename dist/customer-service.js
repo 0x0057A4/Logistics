@@ -1,19 +1,43 @@
 // Auftragsbezogener Kundendienst. Ware, Rechnungen und Zahlungseingänge bleiben unverändert.
-const DURATIONS={status:15,deadline:30,complaint:20};
-const RESPONSES={status:['inform'],deadline:['approve','reject'],complaint:['goodwill','apologize']};
+// 0.16 S3 (A08, docs/SCHNITTSTELLEN-0.16.md): automatische Anliegen aus echten Ereignissen, Antwortfrist je Anliegen und
+// Versenderzufriedenheit (s.shippers, contracts.js). Geld weiterhin nur über api.book (Kulanz/Gebühr genau einmal).
+import {committedQty} from './tours.js';
+import {active as disruptionsActive} from './disruptions.js';
+import {adjustShipper,shipperOf,SATISFACTION} from './contracts.js';
+const DURATIONS={status:15,deadline:30,complaint:20,partial:15};
+// partial (Teillieferung) nutzt dieselben Antworten wie die Beschwerde (Kulanz/Entschuldigung); die Oberfläche bietet für
+// Arten außer Status/Frist bereits genau diese beiden Knöpfe an.
+const RESPONSES={status:['inform'],deadline:['approve','reject'],complaint:['goodwill','apologize'],partial:['goodwill','apologize']};
+/** Manuell anlegbare Arten; Teillieferung entsteht nur automatisch. */
+const MANUAL=['status','deadline','complaint'];
+/** 0.16 S3 Antwortfrist in Spielminuten ab Anlage (A08-Vorschlag, Balancing A02 offen). Gilt für alle neu angelegten Anliegen
+ *  (Feld respondBy; Altstände ohne Feld haben keine Frist). Unbeantwortet abgelaufen → einmalig Versenderzufriedenheit
+ *  SATISFACTION.ignored; bei Aufträgen ohne Versender sinkt der Ruf um 1. Das Anliegen bleibt danach beantwortbar. */
+export const RESPONSE_MINUTES={status:240,deadline:480,complaint:240,partial:360};
+/** 0.16 S3 Auslöser automatischer Anliegen (nur Vertragsaufträge, außer der bestehenden Beschwerde für alle Aufträge):
+ *  risk: Frist in ≤ riskLead Min., nichts zugestellt und offene Menge nicht unterwegs (Statusanfrage, drohende Verspätung);
+ *  partial: Teil zugestellt, Rest nicht unterwegs und Frist in ≤ partialLead Min. oder überschritten (Teillieferung);
+ *  disruption: aktive Störung am Zustellstandort (disruptions.active, Liste nicht leer) und Frist in ≤ disruptionLead Min.
+ *  (Statusanfrage, Störungsverzug). late: überfälliger aktiver Auftrag (Beschwerde, Regel bis 0.15). Vorläufig, A02 balanciert. */
+export const AUTO={riskLead:90,partialLead:120,disruptionLead:240};
+const TRIGGERS={complaint:['late'],status:['risk','disruption'],partial:['partial']};
+export const KIND_TEXT={status:'Statusanfrage',deadline:'Fristverlängerung',complaint:'Beschwerde',partial:'Teillieferung'};
 const cents=n=>Math.round(n*100)/100;
 const task=t=>'ticket:'+t.id;
 const costFor=(response,value)=>response==='approve'?cents(value*.02):response==='goodwill'?cents(Math.min(50,value*.05)):0;
 export function init(s){s.tickets??=[];}
-function create(s,o,kind,extension,source,api){
+function create(s,o,kind,extension,source,api,trigger){
  const id=api.id('ticket');
- s.tickets.push({id,orderId:o.id,site:o.site,kind,source,status:'open',createdAt:s.t,remaining:0,blocked:null,response:null,originalDue:o.due,requestedDue:kind==='deadline'?o.due+extension:null,cost:0,valueAtResponse:null,startedAt:null,completedAt:null,outcome:null,reply:null});
- api.log('service',`Kundendienst: ${kind==='status'?'Statusanfrage':kind==='deadline'?'Fristverlängerung':'Beschwerde'} zu ${o.customer}.`,[id,o.id]);return {ok:true,id};
+ const t={id,orderId:o.id,site:o.site,kind,source,status:'open',createdAt:s.t,remaining:0,blocked:null,response:null,originalDue:o.due,requestedDue:kind==='deadline'?o.due+extension:null,cost:0,valueAtResponse:null,startedAt:null,completedAt:null,outcome:null,reply:null,respondBy:s.t+RESPONSE_MINUTES[kind]};
+ if(trigger)t.trigger=trigger;
+ s.tickets.push(t);
+ const why=trigger==='risk'?' (drohende Verspätung)':trigger==='disruption'?' (Störungsverzug)':'';
+ api.log('service',`Kundendienst: ${KIND_TEXT[kind]}${why} zu ${o.customer}. Antwort bis Spielminute ${t.respondBy}.`,[id,o.id]);return {ok:true,id};
 }
 export function handle(s,c,api){
  if(c.type==='createTicket'){
   const o=s.orders.find(o=>o.id===c.orderId);
-  if(!o||!['active','fulfilled'].includes(o.status)||!Object.hasOwn(DURATIONS,c.kind))return {ok:false,message:'Aktiven oder erfüllten Auftrag und gültigen Anliegen-Typ wählen.'};
+  if(!o||!['active','fulfilled'].includes(o.status)||!MANUAL.includes(c.kind))return {ok:false,message:'Aktiven oder erfüllten Auftrag und gültigen Anliegen-Typ wählen.'};
   if(s.tickets.some(t=>t.orderId===o.id&&t.kind===c.kind))return {ok:false,message:'Dieses Anliegen wurde bereits angelegt.'};
   if(c.kind==='deadline'&&(o.status!=='active'||o.delivered>=o.qty||!Number.isInteger(c.extensionMinutes)||c.extensionMinutes<60||c.extensionMinutes>1440))return {ok:false,message:'Offener Restauftrag und Verlängerung von 60 bis 1440 ganzen Minuten erforderlich.'};
   return create(s,o,c.kind,c.extensionMinutes,'manual',api);
@@ -29,9 +53,33 @@ export function handle(s,c,api){
  }
  return null;
 }
+/** Automatische Anliegen. Höchstens ein Anliegen je Auftrag und Art (auch gegenüber manuellen Tickets). Liest nur Zustand. */
+function automatic(s,api){
+ let pairs=null;const has=(o,kind)=>(pairs??=new Set(s.tickets.map(t=>t.orderId+':'+t.kind))).has(o.id+':'+kind);
+ const add=(o,kind,trigger)=>{create(s,o,kind,null,'automatic',api,trigger);pairs?.add(o.id+':'+kind);};
+ const disrupted=new Map(),disruption=site=>{if(!disrupted.has(site)){const list=disruptionsActive(s,site);disrupted.set(site,Array.isArray(list)&&list.length>0);}return disrupted.get(site);};
+ for(const o of s.orders){
+  if(o.status!=='active')continue;
+  // Bestehende Regel (bis 0.15): überfälliger aktiver Auftrag → Beschwerde, für alle Auftragsarten.
+  if(s.t>o.due&&!has(o,'complaint'))add(o,'complaint','late');
+  if(!o.contractId||o.delivered>=o.qty)continue;
+  const left=o.due-s.t,needStatus=!has(o,'status'),needPartial=o.delivered>0&&left<=AUTO.partialLead&&!has(o,'partial');
+  if(needStatus&&left>=0&&left<=AUTO.disruptionLead&&disruption(o.deliverySite??o.site)){add(o,'status','disruption');continue;}
+  const risk=needStatus&&o.delivered===0&&left>=0&&left<=AUTO.riskLead;
+  if(!risk&&!needPartial)continue;
+  if(o.delivered+committedQty(s,o.id)>=o.qty)continue;
+  if(risk)add(o,'status','risk');else add(o,'partial','partial');
+ }
+}
 export function step(s,api){
- for(const o of s.orders)if(o.status==='active'&&s.t>o.due&&!s.tickets.some(t=>t.orderId===o.id&&t.kind==='complaint'))create(s,o,'complaint',null,'automatic',api);
+ automatic(s,api);
  for(const t of s.tickets){
+  if(t.status==='open'&&t.respondBy!==undefined&&!t.expired&&s.t>t.respondBy){
+   // Antwortfrist abgelaufen: genau einmal (Kennzeichen expired). Anliegen bleibt beantwortbar.
+   t.expired=true;const o=s.orders.find(o=>o.id===t.orderId),shipper=shipperOf(s,o);
+   if(shipper)adjustShipper(s,shipper,SATISFACTION.ignored,'ignored');else s.reputation=Math.max(0,s.reputation-1);
+   api.log('warning',`Kundendienst: ${KIND_TEXT[t.kind]} zu ${o.customer} nicht fristgerecht beantwortet${shipper?`, Zufriedenheit ${shipper} sinkt`:', Ruf sinkt'}.`,[t.id,o.id]);
+  }
   if(t.status!=='processing')continue;t.blocked=null;
   if(t.remaining>0){
    if(!api.workforce.acquire('service',t.site,task(t))){t.blocked='Kundendienstpersonal, Schicht oder Pause';continue;}
@@ -43,8 +91,11 @@ export function step(s,api){
   if(!obsolete&&t.cost>0&&!api.book('ticket-cost:'+t.id,-t.cost,'Kundendienst','Kundenanliegen '+t.id,[t.id,o.id])){t.blocked='Kapital für Kundendienst fehlt';continue;}
   if(!obsolete&&t.response==='approve')o.due=t.requestedDue;
   t.status='closed';t.outcome=obsolete?'obsolete':t.response;t.completedAt=s.t;t.blocked=null;
+  // 0.16 S3: abgeschlossene Antwort an einen Versender hebt dessen Zufriedenheit (Kulanz stärker); Ablehnung/gegenstandslos neutral.
+  const shipper=shipperOf(s,o),delta=t.outcome==='goodwill'?SATISFACTION.goodwill:['inform','apologize','approve'].includes(t.outcome)?SATISFACTION.answered:0;
+  if(shipper&&delta)adjustShipper(s,shipper,delta,null);
   const status={active:'aktiv',fulfilled:'erfüllt',cancelled:'storniert',offer:'angeboten'}[o.status];
-  t.reply=obsolete?'Friständerung gegenstandslos. Keine Gebühr berechnet.':t.response==='inform'?`Auftrag ${status}: ${o.delivered} von ${o.qty} Stück geliefert, ${Math.max(0,o.qty-o.delivered)} Stück offen. Lieferfrist: Spielminute ${o.due}.`:t.response==='approve'?`Lieferfrist auf Spielminute ${o.due} verlängert. Gebühr: ${t.cost.toFixed(2)} €.`:t.response==='reject'?'Fristverlängerung abgelehnt. Bisherige Lieferfrist bleibt bestehen.':t.response==='goodwill'?`Kulanz von ${t.cost.toFixed(2)} € ausgezahlt.`:'Beschwerde beantwortet. Entschuldigung ohne Auszahlung dokumentiert.';
+  t.reply=obsolete?'Friständerung gegenstandslos. Keine Gebühr berechnet.':t.response==='inform'?`Auftrag ${status}: ${o.delivered} von ${o.qty} Stück geliefert, ${Math.max(0,o.qty-o.delivered)} Stück offen. Lieferfrist: Spielminute ${o.due}.`:t.response==='approve'?`Lieferfrist auf Spielminute ${o.due} verlängert. Gebühr: ${t.cost.toFixed(2)} €.`:t.response==='reject'?'Fristverlängerung abgelehnt. Bisherige Lieferfrist bleibt bestehen.':t.response==='goodwill'?`Kulanz von ${t.cost.toFixed(2)} € ausgezahlt.`:t.kind==='partial'?'Teillieferung beantwortet. Entschuldigung ohne Auszahlung dokumentiert.':'Beschwerde beantwortet. Entschuldigung ohne Auszahlung dokumentiert.';
   api.workforce.release(task(t));
   api.log('service',obsolete?'Friständerung gegenstandslos; keine Kosten.':`Kundenanliegen abgeschlossen: ${o.customer}.`,[t.id,o.id]);
  }
@@ -58,7 +109,13 @@ export function validate(s){
  for(const t of s.tickets){
   if(!t||typeof t!=='object'||typeof t.id!=='string'||!/^ticket-\d+$/.test(t.id)||ids.has(t.id))bad();ids.add(t.id);
   const o=s.orders.find(o=>o.id===t.orderId),pair=t.orderId+':'+t.kind;
-  if(!o||t.site!==o.site||!s.sites.some(site=>site.id===t.site)||!Object.hasOwn(DURATIONS,t.kind)||pairs.has(pair)||!['manual','automatic'].includes(t.source)||t.source==='automatic'&&t.kind!=='complaint'||!['open','processing','closed'].includes(t.status))bad();pairs.add(pair);
+  if(!o||t.site!==o.site||!s.sites.some(site=>site.id===t.site)||!Object.hasOwn(DURATIONS,t.kind)||pairs.has(pair)||!['manual','automatic'].includes(t.source)||t.source==='automatic'&&!Object.hasOwn(TRIGGERS,t.kind)||t.source==='manual'&&!MANUAL.includes(t.kind)||!['open','processing','closed'].includes(t.status))bad();pairs.add(pair);
+  // 0.16 S3: Auslöser nur bei automatischen Anliegen (Altstände ohne Feld gültig); Teillieferung, Risiko und Störung nur bei Vertragsaufträgen.
+  if(t.trigger!==undefined&&(t.source!=='automatic'||!TRIGGERS[t.kind].includes(t.trigger)||t.trigger!=='late'&&!o.contractId))bad();
+  if(t.kind==='partial'&&t.trigger!=='partial'||t.kind==='status'&&t.source==='automatic'&&t.trigger===undefined)bad();
+  if(t.respondBy!==undefined&&t.respondBy!==t.createdAt+RESPONSE_MINUTES[t.kind])bad();
+  if(t.respondBy===undefined&&(t.kind==='partial'||t.trigger!==undefined))bad();
+  if(t.expired!==undefined&&(t.expired!==true||t.respondBy===undefined||s.t<=t.respondBy||t.startedAt!==null&&t.startedAt<=t.respondBy))bad();
   if(t.status==='closed'?(typeof t.reply!=='string'||!t.reply.trim()||t.reply.length>1000):t.reply!==null)bad();
   if(!time(t.createdAt)||!number(t.originalDue)||!number(t.cost)||cents(t.cost)!==t.cost||!Number.isInteger(t.remaining)||t.remaining<0||t.remaining>DURATIONS[t.kind]||!(t.blocked===null||typeof t.blocked==='string'))bad();
   if(t.kind==='deadline'){const extension=t.requestedDue-t.originalDue;if(!number(t.requestedDue)||!Number.isInteger(extension)||extension<60||extension>1440)bad();}else if(t.requestedDue!==null)bad();

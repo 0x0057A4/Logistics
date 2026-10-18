@@ -67,6 +67,54 @@ export const TERMS={
 };
 // Strafen der Warenarten (≈ 30 %/100 % des Preises wie Paket; A02 0.15 an die neuen Preise angepasst).
 Object.assign(TERMS.penalty,{parcel_cold:{late:4.5,open:15},bulky:{late:9,open:33}});
+/** 0.16 S3 Versenderzufriedenheit (A08-Vorschlag, alle Werte vorläufig, Balancing A02). Zustand s.shippers[name] =
+ *  {score 0–100 (ganzzahlig), onTime, late, penalties, ignored} entsteht erst beim ersten Ereignis eines Vertragsauftrags
+ *  (Altstände und Spiele ohne Vertragsaufträge bleiben bitgleich). Startwert = neutral = start.
+ *  Änderungen: onTime je pünktlich erfüllter Vertragsauftrag, late je verspätet erfüllter (o.late), penalty je gebuchter
+ *  Verspätungsstrafe (penalty:<lieferung>), open je Auftrag mit Strafe bei Vertragsende, ignored je abgelaufener Antwortfrist
+ *  (customer-service.js), answered/goodwill je abgeschlossener Antwort bzw. Kulanz. Bewertung je Auftrag genau einmal (o.rated).
+ *  Wirkung auf neue Folgeangebote (nicht Startangebot) ab Spielminute effectFrom (Spieltag 2) und nur mit s.shippers, mit eigenem
+ *  Zufall (slotRandom, MOOD_SALT), api.random bleibt unberührt: unzufriedener Versender (score < neutral) verzichtet mit
+ *  Wahrscheinlichkeit avoid × (neutral − score)/neutral, dann bietet ein nicht unzufriedener Versender an; sonst übernimmt der
+ *  zufriedenste Versender (score > neutral) mit Wahrscheinlichkeit prefer × (score − neutral)/neutral. Preis je Einheit
+ *  × (1 + priceSpan × (score − neutral)/neutral), auf 0,1 % gerundet und als k.priceAdjust ausgewiesen. */
+export const SATISFACTION={start:50,neutral:50,onTime:2,late:-4,penalty:-1,open:-8,ignored:-6,answered:1,goodwill:3,effectFrom:2280,priceSpan:0.08,avoid:0.6,prefer:0.3};
+const SHIPPER_COUNTERS=['onTime','late','penalties','ignored'];
+const MOOD_SALT=0x27d4eb2f;
+/** Versendername eines Vertragsauftrags oder null (Aufträge ohne Vertrag). */
+export function shipperOf(s,o){if(!o?.contractId)return null;return s.contracts.find(k=>k.id===o.contractId)?.shipper??null;}
+/** Zufriedenheit eines Versenders (ohne Datensatz: SATISFACTION.start). */
+export function shipperScore(s,name){return s.shippers?.[name]?.score??SATISFACTION.start;}
+/** Ändert die Zufriedenheit um delta (begrenzt 0–100) und zählt optional counter hoch. Legt s.shippers erst bei Bedarf an. */
+export function adjustShipper(s,name,delta,counter){
+ if(typeof name!=='string'||!name)return;
+ s.shippers??={};
+ const r=s.shippers[name]??={score:SATISFACTION.start,onTime:0,late:0,penalties:0,ignored:0};
+ r.score=Math.max(0,Math.min(100,r.score+delta));if(counter)r[counter]++;
+}
+/** Wirkung der Zufriedenheit auf ein neues Folgeangebot k (Versenderwahl, Preis). Vor effectFrom oder ohne s.shippers wirkungslos. */
+function shipperMood(s,api,k,salt){
+ if(s.t<SATISFACTION.effectFrom||!s.shippers)return;
+ const S=SATISFACTION,random=slotRandom(s,MOOD_SALT^salt),score=n=>shipperScore(s,n),old=k.shipper,own=score(old);
+ if(own<S.neutral){
+  if(random()<S.avoid*(S.neutral-own)/S.neutral){const alt=SHIPPERS.filter(n=>n!==old&&score(n)>=S.neutral);if(alt.length)k.shipper=alt[Math.floor(random()*alt.length)];}
+ }else{
+  const best=SHIPPERS.reduce((b,n)=>score(n)>score(b)?n:b,SHIPPERS[0]);
+  if(best!==old&&score(best)>S.neutral&&score(best)>own&&random()<S.prefer*(score(best)-S.neutral)/S.neutral)k.shipper=best;
+ }
+ if(k.shipper!==old)api.log('contract',`Angebot von ${k.shipper} statt ${old} (Zufriedenheit ${score(k.shipper)} bzw. ${own}).`,[k.id]);
+ const adjust=Math.round(S.priceSpan*(score(k.shipper)-S.neutral)/S.neutral*1000)/1000;
+ if(adjust){k.pricePerParcel=cents(k.pricePerParcel*(1+adjust));k.priceAdjust=adjust;}
+}
+/** Bewertet abgeschlossene Vertragsaufträge genau einmal (o.rated=true): erfüllt pünktlich/verspätet, storniert mit Strafe. */
+function rateOrders(s){
+ for(const o of s.orders){
+  if(!o.contractId||o.rated||o.status==='active')continue;
+  const name=shipperOf(s,o);o.rated=true;
+  if(o.status==='fulfilled')adjustShipper(s,name,o.late?SATISFACTION.late:SATISFACTION.onTime,o.late?'late':'onTime');
+  else if(o.status==='cancelled'&&o.penaltyOpen>0)adjustShipper(s,name,SATISFACTION.open,'late');
+ }
+}
 const STATUSES=['offer','active','ended'];
 export const UNITS=['parcel','pallet','container','air'];
 export const CONTENTS=['pallet','parcel'];
@@ -274,11 +322,11 @@ export function step(s,api){
   // Höchstens ein offenes Paletten- und ein offenes Containerangebot; Auswahl ohne Zufallszug, Paletten zuerst (Verhalten bis 0.12 bleibt).
   const pallet=palletsUnlocked(s)&&!list.some(k=>k.status==='offer'&&unitOf(k)==='pallet');
   const container=!pallet&&containersUnlocked(s)&&!list.some(k=>k.status==='offer'&&unitOf(k)==='container');
-  const offer=makeOffer(s,api,false,pallet,container);list.push(offer);api.log('contract',`Neues Vertragsangebot${pallet?' (Paletten)':container?` (Seeimport, Container mit ${offer.content==='pallet'?'Paletten':'Paketen'})`:''}: ${offer.shipper}.`,[offer.id]);
+  const offer=makeOffer(s,api,false,pallet,container);shipperMood(s,api,offer,1);list.push(offer);api.log('contract',`Neues Vertragsangebot${pallet?' (Paletten)':container?` (Seeimport, Container mit ${offer.content==='pallet'?'Paletten':'Paketen'})`:''}: ${offer.shipper}.`,[offer.id]);
  }
  // W3c-S1: eigener Luftexport-Angebotsplatz. Vor Freischaltung kein Zugriff auf Zufall, IDs oder Zustand.
  if(s.t%1440===TERMS.air.phase&&airUnlocked(s)&&!list.some(k=>k.status==='offer'&&unitOf(k)==='air')){
-  const offer=makeOffer(s,{random:airRandom(s),id:api.id},false,false,false,true);list.push(offer);
+  const offer=makeOffer(s,{random:airRandom(s),id:api.id},false,false,false,true);shipperMood(s,api,offer,2);list.push(offer);
   api.log('contract',`Neues Vertragsangebot (Luftexport ${AIRPORT.short}, Flüge ${offer.flights.map(clock).join(', ')}): ${offer.shipper}.`,[offer.id]);
  }
  // 0.15 S2: eigener Warenarten-Angebotsplatz. Vor Freischaltung kein Zugriff auf Zufall, IDs oder Zustand.
@@ -286,13 +334,14 @@ export function step(s,api){
   const cold=coldUnlocked(s),bulky=bulkyUnlocked(s);
   if(cold||bulky){
    const random=slotRandom(s,WARE_SALT),ware=cold&&bulky?(random()<0.5?'parcel_cold':'bulky'):cold?'parcel_cold':'bulky';
-   const offer=makeOffer(s,{random,id:api.id},false,false,false,false,ware);list.push(offer);
+   const offer=makeOffer(s,{random,id:api.id},false,false,false,false,ware);shipperMood(s,api,offer,3);list.push(offer);
    api.log('contract',`Neues Vertragsangebot (${ware==='bulky'?'Sperrgut: Stapler und Lkw nötig':`Kühlpakete: Kühllager und Kühlfahrzeug nötig, Zuschlag ${offer.surcharge.toFixed(2)} € je Paket`}): ${offer.shipper}.`,[offer.id]);
   }
  }
  containerMoney(s,api);
  latePenalties(s,api);
  for(const k of list)if(k.status==='ended'&&!k.settled&&Number.isFinite(k.penaltyOpen)&&s.t>=k.endT+TERMS.penalty.openGrace)settle(s,api,k);
+ rateOrders(s);
 }
 
 /** W3b-S1 Containergeld. Liest s.containers (Datensätze von containers.js, nur lesend):
@@ -324,8 +373,10 @@ function latePenalty(s,api,key,orderId,qty,deliveredAt,refs){
  const o=s.orders.find(o=>o.id===orderId);if(!o?.contractId||!(deliveredAt>o.due))return;
  const k=s.contracts.find(k=>k.id===o.contractId);if(!(k?.penaltyLate>0)||!(qty>0))return;
  const amount=cents(qty*k.penaltyLate);
- if(api.book(key,-amount,'Vertragsstrafe',`Vertragsstrafe ${k.shipper}: ${qty} ${unitWord(k,qty)} verspätet`,[k.id,o.id,...refs]))
+ if(api.book(key,-amount,'Vertragsstrafe',`Vertragsstrafe ${k.shipper}: ${qty} ${unitWord(k,qty)} verspätet`,[k.id,o.id,...refs])){
+  adjustShipper(s,k.shipper,SATISFACTION.penalty,'penalties');
   api.log('warning',`Vertragsstrafe ${k.shipper}: ${qty} ${unitWord(k,qty)} nach Frist zugestellt, ${amount.toFixed(2)} €.`,[k.id,o.id,...refs]);
+ }
 }
 /** W2-S1 penaltyOpen: Vertragsende + openGrace. Je aktivem Vertragsauftrag: offene Einheiten bestrafen, freie Fremdware an den
  *  Versender zurückgeben (inventory.remove), Auftrag stornieren. Regel für gebundene Ware: Solange ein Lkw des Auftrags noch
@@ -383,6 +434,14 @@ export function validate(s){
   }else if(k.flights!==undefined||k.cutoff!==undefined||k.penaltyMissed!==undefined)bad('Flugfelder ohne Luftexportvertrag.');
   if((k.penaltyLate!==undefined&&!num(k.penaltyLate,0))||(k.penaltyOpen!==undefined&&!num(k.penaltyOpen,0)))bad('Vertragsstrafe beschädigt.');
   if(k.settled!==undefined&&(typeof k.settled!=='boolean'||(k.settled&&k.status!=='ended')))bad('Abrechnung beschädigt.');
+  if(k.priceAdjust!==undefined&&(!num(k.priceAdjust)||k.priceAdjust===0||Math.abs(k.priceAdjust)>SATISFACTION.priceSpan+1e-9))bad('Zufriedenheitszuschlag beschädigt.');
+ }
+ // 0.16 S3: Versenderzufriedenheit (optional).
+ if(s.shippers!==undefined){
+  if(!s.shippers||typeof s.shippers!=='object'||Array.isArray(s.shippers)||Object.keys(s.shippers).length>1000)bad('Versenderzufriedenheit beschädigt.');
+  for(const [name,r] of Object.entries(s.shippers)){
+   if(!name||name.length>200||!r||typeof r!=='object'||Array.isArray(r)||!Number.isInteger(r.score)||r.score<0||r.score>100||SHIPPER_COUNTERS.some(c=>!Number.isSafeInteger(r[c])||r[c]<0)||Object.keys(r).length!==1+SHIPPER_COUNTERS.length)bad('Zufriedenheit '+name+' beschädigt.');
+  }
  }
  if(offers>MAX_OFFERS||airOffers>1||wareOffers>1)bad('zu viele offene Angebote.');
  const contracts=new Map(s.contracts.map(k=>[k.id,k]));
@@ -395,5 +454,6 @@ export function validate(s){
   if(o.deliverySite!==undefined){const lane=k.lanes.find(l=>l.id===o.lane);if(!sites.has(o.deliverySite)||o.deliverySite!==laneSite(k,lane))bad('Zustellstandort Auftrag '+o.id+' beschädigt.');}
   if(o.returnedQty!==undefined&&(o.status!=='cancelled'||!num(o.returnedQty,0)))bad('Rückgabe Auftrag '+o.id+' beschädigt.');
   if((o.airExport===true)!==(unitOf(k)==='air'))bad('Luftexportkennung Auftrag '+o.id+' beschädigt.');
+  if(o.rated!==undefined&&(o.rated!==true||o.status==='active'))bad('Bewertung Auftrag '+o.id+' beschädigt.');
  }
 }
