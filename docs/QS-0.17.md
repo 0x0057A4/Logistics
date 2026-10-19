@@ -183,3 +183,4 @@ Screenshots 1920 × 1080 (Scratchpad dieser Sitzung, nicht im Repo), unter `/tmp
 
 - **QS-017-01 behoben:** `rename` für Standorte prüft dieselben Regeln wie `buySite` (2–48 normale Zeichen, eindeutig, auch beim Zurücksetzen auf den Standardnamen). Anlagennamen ohne `<>`/Steuerzeichen. Zusätzlich Lade-Reparatur (`repairSiteNames` in den Schema-1-Auffüllungen) für bereits erzeugte ungültige Stände. Befundtest aktiviert, Reparaturtest in tests/rename-017.test.js.
 - QS-017-02 bis -08: an A10 übergeben (Fix-Runde vor Release).
+QS-017-02..08: behoben durch A10 (06c2ee9); qa-017.mjs 131 OK / 0 FEHL / 0 BEFUND.
