@@ -70,7 +70,14 @@ try{
  await page.keyboard.press('Escape');await wait(200);
  // Mehrwertdienste
  await page.click('[data-panel="orders"]');await wait(400);body=await text('#panelBody');
- ok('Auftragsliste: Mehrwertdienst mit Kundenmaterial und Vergütung',/Mehrwertdienst · Lohnfertigung/.test(body)&&/Kundenmaterial/.test(body)&&/Vergütung \/ Stück/.test(body));
+ // 0.17: Auftragstabelle einzeilig (Nutzervorgabe) – Art und Vergütung je Stück stehen im Kennzeichen „MWD“ (Tooltip),
+ // im Tooltip der Wertspalte und in der Aufklappzeile statt als zweite Zeile „Vergütung / Stück“.
+ const vasRow=page.locator('.ov-row:has(.badge.vas)').first();
+ const vasBadge=await vasRow.locator('.badge.vas').getAttribute('title').catch(()=>'');
+ const vasValue=await vasRow.locator('td.num').last().getAttribute('title').catch(()=>'');
+ await vasRow.locator('[data-action="orderToggle"]').evaluate(b=>b.click()).catch(()=>{});await wait(400);
+ const vasSub=await text('.ov-sub').catch(()=>'');
+ ok('Auftragsliste: Mehrwertdienst mit Kundenmaterial und Vergütung',/Mehrwertdienst · Lohnfertigung/.test(vasSub)&&/Kunde liefert Material/.test(vasBadge||'')&&/€ \/ Stück/.test(vasValue||'')&&/€ \/ Stück/.test(vasSub),`${vasBadge} | ${vasValue} | ${vasSub.slice(0,80)}`);
  ok('Aufträge ohne Überlauf',await noOverflow());await shot('ui-015-mwd.png');
  ok('Kontostand unverändert (pausiert, nur Anzeige)',(await text('#cash'))===cash0,cash0);
 }catch(e){ok('Ablauf ohne Ausnahme',false,e.message.slice(0,200));}

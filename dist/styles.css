@@ -828,3 +828,33 @@ body.pw-over-mission .mission{display:none}
 .ov-table col:nth-child(9){width:6%}.ov-table col:nth-child(10){width:7%}
 .sv-table col:nth-child(1){width:24%}.sv-table col:nth-child(2){width:9%}.sv-table col:nth-child(3){width:8%}.sv-table col:nth-child(4){width:8%}
 .sv-table col:nth-child(5){width:16%}.sv-table col:nth-child(6){width:35%}
+/* ==== 0.17 A10 QS-Nacharbeit (QS-017-02/04/05/07/08) ==== */
+/* QS-017-08 Kopfzeile: Standortwahl kürzt sich (Ellipsis, voller Text im Tooltip) statt über Tempo/Pause zu ragen;
+   bei Platzmangel zeigt das Wetter nur sein Symbol (Tooltip „Wetter …“ bleibt). */
+.site-pick{max-width:300px}
+.site-label{max-width:100%}
+.site-text small{display:flex;align-items:center;min-width:0}
+#siteStatus{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.site-weather{flex:none}
+@media(max-width:1600px){.site-weather #siteWeatherText{display:none}.site-weather{margin-right:5px}}
+@media(max-width:1360px){.site-pick{max-width:240px}}
+/* QS-017-02 Nebentexte ≥ 12 px (Tabellen, Fenster, HUD) */
+.brand-sub{font-size:12px;letter-spacing:.14em}
+.bell-count{font-size:12px}
+.panel-body small,.data-table small,.vrow small{font-size:max(12px,.86em)}
+.statusbar b{font-size:1em}
+/* QS-017-04 Glocken-Zähler „wartet“: Kontrast ≥ 4,5 : 1 (#000 auf --c-wait 5,3 : 1 hell, > 10 : 1 dunkel) */
+.bell-count.wait{color:#000}
+/* QS-017-05 Chargen-Detailtabelle einzeilig; volle Angaben im Tooltip der Zelle */
+.sv-batches td{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:0;vertical-align:middle}
+.sv-batches td.num small{margin-left:2px}
+.sv-batches{table-layout:fixed}
+.sv-batches col,.sv-batches th:nth-child(1){width:16%}.sv-batches th:nth-child(2){width:16%}.sv-batches th:nth-child(3){width:22%}.sv-batches th:nth-child(4){width:22%}
+/* QS-017-03 geteilter freier Bestand */
+.ov-shared{font-weight:var(--w-semi);cursor:help}
+/* QS-017-07 Tabellen in schmaleren Fenstern: Spaltenköpfe dürfen umbrechen, Inhalte schrumpfen statt waagerecht überzulaufen */
+.panel-body table:not(.sv-table):not(.ov-table):not(.sv-batches) th{white-space:normal}
+.panel-body .grid2>*,.panel-body .grid3>*,.panel-body .metrics>*{min-width:0}
+/* Umbenennen: abgelehnter Name bleibt in der Eingabe, Hinweis direkt darunter */
+.site-row.editing{flex-wrap:wrap}
+.rename-hint{flex:1 0 100%;margin:4px 0 0;font-size:13px;color:var(--c-bad-ink);line-height:1.4}

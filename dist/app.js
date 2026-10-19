@@ -385,12 +385,14 @@ function syncSpeed(){if(hudCache.get('speed')===speed)return;hudCache.set('speed
  * Breite Fensterarten erhalten nur eine breitere Startgröße. Ohne Fenstermodul (Prüfumgebung) bleibt das bisherige Layout. */
 const WIDE_PANELS=['inventory','orders','finance','history','staff','network','planning','yard','containers','air','assistant','service'];
 const TABLE_PANELS=['inventory','orders','service'];
+/** QS-017-07: Mindest-Startbreite (px) je Fensterart nach Tabelleninhalt; sonst gelten die Anteile von 1920 × 1080 (ui-window START). */
+const PANEL_MIN_W={contracts:700,yard:860,finance:720,staff:720,fleet:560,network:720,history:640,lines:620,containers:760,air:760,special:560,disruptions:560};
 let panelWin=null;
 function windowCtl(){if(panelWin===null)try{panelWin=(typeof createPanelWindow==='function'&&createPanelWindow({panel:$('#panel'),game:$('#game'),load:k=>prefs.windows?.[k]||null,save:(k,g)=>{prefs.windows={...(prefs.windows&&typeof prefs.windows==='object'?prefs.windows:{}),[k]:g};savePrefs();}}))||false;}catch(e){console.warn('Fenstersystem nicht verfügbar:',e?.message||e);panelWin=false;}return panelWin||null;}
-function openPanel(p,focus=null){panel=p;hubFocus=focus;search='';panelHtml=null;$('#search').value='';$('#panel').hidden=false;document.body.classList.add('panel-open');windowCtl()?.open(p,{wide:WIDE_PANELS.includes(p),table:TABLE_PANELS.includes(p)});$$('.rail [data-panel]').forEach(b=>b.classList.toggle('active',b.dataset.panel===p));renderPanel();}
+function openPanel(p,focus=null){panel=p;hubFocus=focus;search='';panelHtml=null;$('#search').value='';$('#panel').hidden=false;document.body.classList.add('panel-open');windowCtl()?.open(p,{wide:WIDE_PANELS.includes(p),table:TABLE_PANELS.includes(p),minW:PANEL_MIN_W[p]||0});$$('.rail [data-panel]').forEach(b=>b.classList.toggle('active',b.dataset.panel===p));renderPanel();}
 function closePanel(){panel='';panelHtml=null;$('#panel').hidden=true;document.body.classList.remove('panel-open');document.body.classList.remove('panel-wide');windowCtl()?.close();$$('.rail .active').forEach(b=>b.classList.remove('active'));}
-function startBuild(type){if(replayBlocked('Bauen'))return;const lock=type&&buildLock(V().state,type);if(lock){toast(`${name(BUILDINGS,type)}: ${lock}. Forschung unter „Forschung & Produkte“ starten.`,true);type=null;}closePanel();build=type||null;$('#buildTray').hidden=false;document.body.classList.add('build-open');scene.setBuild(build,rotation,moving);renderBuild();}
-function endBuild(){build=null;moving=null;scene.setBuild(null);$('#buildTray').hidden=true;document.body.classList.remove('build-open');}
+function startBuild(type){if(replayBlocked('Bauen'))return;const lock=type&&buildLock(V().state,type);if(lock){toast(`${name(BUILDINGS,type)}: ${lock}. Forschung unter „Forschung & Produkte“ starten.`,true);type=null;}closePanel();build=type||null;$('#buildTray').hidden=false;document.body.classList.add('build-open');scene.setBuild(build,rotation,moving);renderBuild();windowCtl()?.refit();}
+function endBuild(){build=null;moving=null;scene.setBuild(null);$('#buildTray').hidden=true;document.body.classList.remove('build-open');windowCtl()?.refit();}
 function renderBuild(){const icons={assembly:'⚒',testing:'⌁',packing:'▣',rack:'▤',dock:'⇥',power:'ϟ',workshop:'⚙',research:'⌘',coldstore:'❄',terminal:'⌂',sorter:'⇶',crossbelt:'⇉',forklift:'⇈',containeryard:'▦'};const s=V().state;
  // 0.15 (A10): Forschungssperre (management.buildResearchMissing) sichtbar statt erst beim Platzieren abgelehnt.
  // 0.17 (A10-E): Kurzbeschreibung und Platzierungshinweise (ui-explain.buildInfo) als Untertext und Tooltip.
@@ -535,7 +537,7 @@ const station=(id,n,sub,tone)=>{put(`st-${id}-n`,n);put(`st-${id}-sub`,sub);putC
 const parts=list=>list.filter(([n])=>n>0).map(([n,t])=>fmt(n)+' '+t).join(' · ');
 function renderHud(h){
  const s=V().state;hudData=h;
- put('siteCode',h.code);put('siteName',h.siteName);put('flowSite',h.code+' · '+h.siteName);put('siteStatus',`Rampen ${h.busy}/${h.docks} · Lager ${fmt(h.used)}/${fmt(h.cap)}`);
+ put('siteCode',h.code);put('siteName',h.siteName);put('flowSite',h.code+' · '+h.siteName);put('siteStatus',`Rampen ${h.busy}/${h.docks} · Lager ${fmt(h.used)}/${fmt(h.cap)}`);putAttr('siteBtn','title',`Standort wählen · ${h.code} ${h.siteName} · Rampen ${h.busy}/${h.docks} · Lager ${fmt(h.used)}/${fmt(h.cap)}`);
  put('clock',time(s.t));put('shiftName',shiftName(s.t));put('cash',euro(s.money));
  put('simState',rp?'Replay · nur Ansicht':!writable&&!temporary?'Schreibgeschützt':document.hidden?'Hintergrundpause':speed?'Betrieb läuft':'Pausiert');
  put('kpiDelivered',fmt(h.today));put('kpiDeliveredSub',h.day?`Stück · Δ ${signed(h.today-h.yesterday)} ggü. gestern (${fmt(h.yesterday)})`:'Stück · erster Spieltag');
@@ -591,7 +593,7 @@ function closeMenus(except=''){for(const [menu,btn] of [['siteMenu','siteBtn'],[
 function toggleMenu(menu,btn){const open=$('#'+menu).hidden;closeMenus(menu);$('#'+menu).hidden=!open;$('#'+btn).setAttribute?.('aria-expanded',String(open));return open;}
 function renderSiteMenu(){const s=V().state;$('#siteList').innerHTML=s.sites.map(x=>{const l=siteLoad(s,x.id),key='site:'+x.id;
  // 0.17 (A10-E): Standort umbenennen per Stift, Inline-Eingabe statt Zeile (Enter/Escape, leer = Startname).
- if(renaming===key)return `<div class="site-row editing">${renameInput(key,x.name,x.defaultName||x.name)}</div>`;
+ if(renaming===key)return `<div class="site-row editing">${renameInput(key,renameValue(key,x.name),x.defaultName||x.name)}${renameHint(key)}</div>`;
  return `<div class="site-row"><button class="drop-row" data-site="${esc(x.id)}" ${x.id===s.selectedSite?'aria-current="true"':''}><span class="dot ${x.id===s.selectedSite?'tone-good':''}"></span><span><b>${esc(siteCode(s,x.id))} · ${esc(x.name)}</b><small>${s.disruptions?esc(weatherText(weatherInfo(s,x.id)))+(siteDisruptions(s,x.id).some(e=>e.kind!=='weather')?' · Störung':'')+' · ':''}Rampen ${l.busy}/${l.docks} · Lager ${fmt(l.used)}/${fmt(l.cap)}</small></span><span class="kind">${x.id===s.selectedSite?'Aktiv':'Wechseln'}</span></button>${renameButton(key,'Standort')}</div>`;}).join('');}
 /** Globale Suche über reale Objekte des aktuellen Zustands. */
 function searchAll(query){const s=V().state,q=String(query||'').trim().toLowerCase();if(!q)return [];const hits=[],has=(...p)=>p.some(x=>String(x??'').toLowerCase().includes(q));objectHits(s,q,has,hits);return rankHits(hits,q).slice(0,12).map(x=>x[2]);}
@@ -851,20 +853,26 @@ function detail(){const s=V().state;let kind='',o;for(const k of ['buildings','w
  * Stift öffnet eine Inline-Eingabe; Enter bestätigt, Escape verwirft (schließt das Fenster nicht), Fokusverlust verwirft,
  * leerer Name setzt den Standardnamen. Eingabezustand nur zur Laufzeit (renaming = 'building:<id>' | 'site:<id>'). */
 let renaming=null;
+/** Abgelehnter Name (z. B. zu kurz oder doppelt): Eingabe bleibt mit dem Wert offen, Hinweis direkt darunter (A01-Hinweis zu QS-017-01). */
+let renameErr=null;
+const renameHint=key=>renameErr?.key===key?`<p class="rename-hint" role="alert">${esc(renameErr.msg)}</p>`:'';
+const renameValue=(key,v)=>renameErr?.key===key?renameErr.value:v;
 function buildingHead(s,o){const key='building:'+o.id,editing=renaming===key;
- return `<div class="card building-file"><div class="card-top"><div class="name-line">${editing?renameInput(key,o.label||'',defaultName(s,o)):`<h3>${esc(displayName(s,o))}</h3>${replayLocked()?'':renameButton(key,'Anlage')}`}<small class="type-line">Typ: ${esc(typeName(o.type))} · ${esc(siteNameOf(s,o.site))}</small></div>${badge(o.id)}</div>`;}
+ return `<div class="card building-file"><div class="card-top"><div class="name-line">${editing?renameInput(key,renameValue(key,o.label||''),defaultName(s,o))+renameHint(key):`<h3>${esc(displayName(s,o))}</h3>${replayLocked()?'':renameButton(key,'Anlage')}`}<small class="type-line">Typ: ${esc(typeName(o.type))} · ${esc(siteNameOf(s,o.site))}</small></div>${badge(o.id)}</div>`;}
 const replayLocked=()=>!!rp;
 function renameFocus(){try{const i=document.querySelector?.('.rename-input');if(i){i.focus();i.select?.();}}catch{}}
 function renameRefresh(key){if(String(key).startsWith('site:')){renderSiteMenu();if(panel)renderPanel(true);}else renderPanel(true);}
-function renameStart(key){if(replayBlocked('Umbenennen'))return;renaming=key;renameRefresh(key);renameFocus();}
-function renameCancel(){const key=renaming;renaming=null;if(key)renameRefresh(key);}
+function renameStart(key){if(replayBlocked('Umbenennen'))return;renaming=key;renameErr=null;renameRefresh(key);renameFocus();}
+function renameCancel(){const key=renaming;renaming=null;renameErr=null;if(key)renameRefresh(key);}
 function renameCommit(input){const key=input?.dataset?.rename||renaming;if(!key)return null;const i=key.indexOf(':'),target=key.slice(0,i),id=key.slice(i+1),value=String(input?.value??'');
  renaming=null;try{input?.blur?.();}catch{}const r=send({type:'rename',target,id,name:value},true);
+ if(!r.ok&&r.message!==REPLAY_LOCK&&canWrite()){renameErr={key,msg:r.message||'Name nicht zulässig.',value};renaming=key;renameRefresh(key);renameFocus();return r;}
+ renameErr=null;
  if(r.ok){const s=V().state,o=target==='site'?s.sites.find(x=>x.id===id):s.buildings.find(x=>x.id===id);toast(value.trim()?`Name übernommen: ${target==='site'?o?.name:displayName(s,o)}`:`Standardname: ${target==='site'?o?.name:displayName(s,o)}`);}
  renameRefresh(key);return r;}
 function renameKeys(e){const t=e.target;if(!t?.dataset?.rename)return;if(e.key==='Enter'){e.preventDefault?.();e.stopPropagation?.();renameCommit(t);}else if(e.key==='Escape'){e.preventDefault?.();e.stopPropagation?.();renameCancel();}}
 function renameClick(e){const b=e.target?.closest?.('[data-rename-start]');if(!b)return;e.stopPropagation?.();renameStart(b.dataset.renameStart);}
-function renameBlur(e){const t=e.target,key=t?.dataset?.rename;if(!key)return;setTimeout(()=>{if(renaming===key&&document.activeElement!==t)renameCancel();},0);}
+function renameBlur(e){const t=e.target,key=t?.dataset?.rename;if(!key)return;setTimeout(()=>{if(renaming===key&&document.activeElement!==t&&document.activeElement?.dataset?.rename!==key)renameCancel();},0);}
 for(const sel of ['#panelBody','#siteList']){const n=$(sel);n?.addEventListener?.('keydown',renameKeys);n?.addEventListener?.('click',renameClick);n?.addEventListener?.('focusout',renameBlur);}
 /* ---- 0.15 (A10): Buchwert in der Akte, Quergurtsorter-Karte ---- Lesesicht (accounting.assetInfo/accumulated, sorting.summary). */
 function bookValueHtml(s,o,kind){const i=assetInfo(s,o,kind);if(!i)return '';const acc=accumulated(i,s.t),bv=Math.round((i.cost-acc)*100)/100;

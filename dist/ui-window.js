@@ -53,6 +53,7 @@ export function avoidRects(g, avoid = [], min = WIN_MIN) {
     const down = { x: r.x, y: Math.ceil(a.y + a.h + WIN_GAP), w: r.w, h: 0 }; down.h = bottom - down.y;
     const side = { x: Math.ceil(a.x + a.w + WIN_GAP), y: r.y, w: 0, h: r.h }; side.w = right - side.x;
     const okD = down.h >= min.h, okS = side.w >= min.w;
+    if (a.y > r.y + r.h / 2) { const up = { ...r, h: Math.floor(a.y - WIN_GAP - r.y) }; if (up.h >= min.h) { r = up; continue; } }
     if (okD && (!okS || down.w * down.h >= side.w * side.h)) r = down; else if (okS) r = side;
   }
   return r;
@@ -61,12 +62,26 @@ export function avoidRects(g, avoid = [], min = WIN_MIN) {
 /** Startlage auf 1920 × 1080 ausgelegt (Anteile der Breite): rechts neben den Kamerawerkzeugen, volle Höhe;
  * breite Fensterarten breiter; Tabellen (Lager, Aufträge, Board) noch breiter, beginnen aber unterhalb der Kennzahlen.
  * avoid: HUD-Flächen in Spielflächenkoordinaten, die die Startlage nicht verdecken darf. */
-export function defaultGeom(area, { wide = false, table = false } = {}, avoid = []) {
+export function defaultGeom(area, { wide = false, table = false, minW = 0 } = {}, avoid = []) {
   const aw = num(area?.w, REF.w), ah = num(area?.h, REF.h);
   const frac = table ? START.table : wide ? START.wide : START.normal;
-  const w = Math.max(WIN_MIN.w, Math.round(aw * frac)), top = table ? START.tableTop : START.top;
+  // QS-017-07: Inhaltsbreite der Fensterart (Pixel) als Untergrenze, damit Tabellen auf kleineren Bildschirmen nicht waagerecht
+  // überlaufen; höchstens bis zur Spielfläche ohne Bereichsleiste (START.right links wie rechts).
+  const w = Math.max(WIN_MIN.w, Math.round(aw * frac), Math.min(Math.round(num(minW, 0)), aw - 2 * START.right - 30)), top = table ? START.tableTop : START.top;
   const g = clampGeom({ x: aw - START.right - w, y: top, w, h: ah - top - WIN_GAP }, area);
-  return clampGeom(avoidRects(g, avoid), area);
+  // Ausweichen nach rechts nur, solange die Inhaltsbreite (minW) erhalten bleibt; sonst unterhalb der HUD-Fläche beginnen.
+  const need = Math.min(g.w, Math.max(WIN_MIN.w, Math.round(num(minW, 0))));
+  return clampGeom(avoidRects(g, avoid, { w: need, h: WIN_MIN.h }), area);
+}
+
+/** QS-017-06: Fenster endet oberhalb der Fläche a (Baumenü am unteren Rand), sofern es sie überdeckt. Reicht der Platz über a
+ * nicht für die Mindesthöhe, rückt das Fenster nach oben (höchstens bis zum oberen Rand). Nur Anzeige, wird nicht gespeichert. */
+export function aboveRect(g, a, min = WIN_MIN) {
+  if (!a || !(a.w > 0 && a.h > 0) || !overlaps(g, a)) return g;
+  const limit = Math.max(0, Math.floor(a.y - WIN_GAP));
+  if (limit - g.y >= Math.min(min.h, limit)) return { ...g, h: Math.min(g.h, limit - g.y) };
+  const h = Math.max(Math.min(min.h, limit), Math.min(g.h, limit));
+  return { ...g, y: Math.max(0, limit - h), h };
 }
 
 /** Maximiert: gesamte Spielfläche ohne Bereichsleiste links (inset.left) mit kleinem Rand. */
@@ -138,6 +153,12 @@ export function createPanelWindow({ panel, game, load = () => null, save = () =>
     }
     return out;
   };
+  /** Baumenü (#buildTray) in Spielflächenkoordinaten, solange es sichtbar ist (sonst null). */
+  const tray = () => {
+    const t = doc.querySelector('#buildTray'); if (!t || t.hidden || t.offsetParent === null) return null;
+    const r = t.getBoundingClientRect(), gr = game.getBoundingClientRect();
+    return r.width > 0 && r.height > 0 ? { x: r.left - gr.left, y: r.top - gr.top, w: r.width, h: r.height } : null;
+  };
   /** Wiederherstellungsgröße für die aktuelle Fläche: Startlage stets neu, eigene Lage aus Anteilen (nur bei Flächenwechsel). */
   function sync() {
     const a = area(), ak = a.w + 'x' + a.h;
@@ -145,7 +166,8 @@ export function createPanelWindow({ panel, game, load = () => null, save = () =>
     else if (ak !== geomArea || !geom) { geom = fromRel(rel, a); geomArea = ak; }
     return a;
   }
-  const shown = () => { const a = sync(); return max ? maxGeom(a, inset()) : clampGeom(geom, a); };
+  // Baumenü und Fenster verdecken sich nicht: bei offenem Baumenü endet das Fenster darüber (auch maximiert/eigene Lage).
+  const shown = () => { const a = sync(), g = max ? maxGeom(a, inset()) : clampGeom(geom, a), t = tray(); return t ? aboveRect(g, t) : g; };
   function reserve(r) {
     // Fahrzeugleiste/Hinweise rechts nur dann einrücken, wenn das Fenster rechts unten über ihnen liegt.
     const body = doc.body, a = area(); if (!body?.style?.setProperty) return;
@@ -176,7 +198,7 @@ export function createPanelWindow({ panel, game, load = () => null, save = () =>
   /** Aktuelle Wiederherstellungsgröße als Anteile übernehmen und speichern. */
   const persist = () => { if (!key || !geom) return; const a = area(); rel = toRel(clampGeom(geom, a), a); geomArea = a.w + 'x' + a.h; save(key, { ...rel, max }); };
   function open(k, o = {}) {
-    key = String(k || ''); opts = { wide: !!o.wide, table: !!o.table };
+    key = String(k || ''); opts = { wide: !!o.wide, table: !!o.table, minW: Number(o.minW) || 0 };
     const a = area(), stored = readGeom(load(key), a);
     rel = stored ? { rx: stored.rx, ry: stored.ry, rw: stored.rw, rh: stored.rh } : null; geom = null; geomArea = '';
     max = !!stored?.max;
@@ -235,7 +257,7 @@ export function createPanelWindow({ panel, game, load = () => null, save = () =>
   // Nach Größenänderung der Ansicht: Startlage neu, eigene Lage proportional aus den Anteilen; stets im sichtbaren Bereich.
   const refit = () => { if (!panel.hidden && key) apply(); };
   win?.addEventListener?.('resize', refit);
-  if (typeof ResizeObserver === 'function') new ResizeObserver(refit).observe(game);
+  if (typeof ResizeObserver === 'function') { const ro = new ResizeObserver(refit); ro.observe(game); const t = doc.querySelector('#buildTray'); if (t) ro.observe(t); }
   return { open, close, toggleMax, refit, state: () => ({ key, max, rel: rel && { ...rel }, custom: !!rel, geom: geom && { ...geom }, shown: key ? shown() : null }) };
 }
 

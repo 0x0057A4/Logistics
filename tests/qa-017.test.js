@@ -137,16 +137,14 @@ test('P4 mehrere Aufträge: dieselbe Bestandslogik, keine doppelte verbindliche 
  const row=lampRow(s);assert.equal(row.reserved+row.free,row.total);
 });
 
-test('P4b Befund-Prüfung: Tabellenzeile zeigt „gedeckt“ bei geteiltem freien Bestand ohne Hinweis in der Zeile',()=>{
+test('P4b QS-017-03 behoben (A10): Tabellenzeile kennzeichnet geteilten freien Bestand („⚠ gedeckt*“ mit Tooltip)',()=>{
  const {sim,s,cmd}=plant();
  const a=lampOrder(s,35),b=lampOrder(s,20);cmd({type:'acceptOrder',id:a.id});cmd({type:'acceptOrder',id:b.id});
  addLamps(sim,42,90);
  const html=ordersTable(s,{});
  const rowOf=id=>html.split(`data-order-row="${id}"`)[1].split('</tr>')[0];
- // Beide Zeilen „gedeckt“, obwohl 35 + 20 > 42. Konkurrenzhinweis steht nur in der Aufklappzeile.
- const both=[a,b].every(o=>/gedeckt/.test(rowOf(o.id)));
- const hint=[a,b].some(o=>/weiteren|Konkurrenz|geteilt|⚠/.test(rowOf(o.id)));
- assert.equal(both&&!hint,true,'Zustand wie in QS-017-03 beschrieben');
+ // 35 + 20 > 42 frei: beide Zeilen rechnerisch gedeckt, aber geteilt – Hinweis direkt in der Zeile (vorher nur aufgeklappt).
+ for(const o of [a,b]){const r=rowOf(o.id);assert.match(r,/⚠ gedeckt\*/,o.id);assert.match(r,/geteilt: derselbe freie Bestand \(42 Stück\) wird von 1 weiteren Auftrag benötigt/,o.id);}
 });
 
 test('P5 Ressourcen aus den tatsächlichen Rezepten, Bedarfsbasis benannt, Zwischenprodukte verrechnet',()=>{
