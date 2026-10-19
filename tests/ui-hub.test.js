@@ -24,7 +24,7 @@ test('Verträge: Startangebot zeigen, annehmen über acceptContract, Ankunftspla
  ui.click('cancelContract',c.id);assert.equal(ui.nodes.get('#confirm').open,true,'Kündigung fragt nach');assert.match(text(ui,'confirmText'),/Vertrag endet/);
  ui.click('confirmCancel');assert.equal(ui.run(`sim.state.contracts.find(x=>x.id==='${c.id}').status`),'active');
  ui.click('cancelContract',c.id);ui.click('confirmOk');assert.equal(ui.run(`sim.state.contracts.find(x=>x.id==='${c.id}').status`),'ended');
- assert.match(body(),/Beendete Verträge · 1/);
+ assert.match(body(),/data-id="ended"[^>]*>Beendet <span class="sv-n">1</);
 });
 
 test('Verträge: fehlender Befehl ({ok:false}) erscheint als verständliche Meldung, Zustand unverändert',async()=>{

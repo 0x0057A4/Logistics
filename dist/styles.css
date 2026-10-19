@@ -858,3 +858,7 @@ body.pw-over-mission .mission{display:none}
 /* Umbenennen: abgelehnter Name bleibt in der Eingabe, Hinweis direkt darunter */
 .site-row.editing{flex-wrap:wrap}
 .rename-hint{flex:1 0 100%;margin:4px 0 0;font-size:13px;color:var(--c-bad-ink);line-height:1.4}
+/* Verträge als Liste (19.10.2026) */
+.ct-table th:nth-child(1),.ct-table td:nth-child(1){width:22%}
+.ct-table th:nth-child(11),.ct-table td:nth-child(11){width:15%}
+.ct-table .ov-detail td{white-space:normal}
