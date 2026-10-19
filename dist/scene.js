@@ -63,7 +63,7 @@ export class Scene {
     });
     on('pointerup',e=>{this.dirty=true;const down=this.pointer;this.pointer=null;if(!down||down.moved)return;const p=this.local(e);if(this.build&&this.view!=='network'){const c=this.cell(p.x,p.y);this.callbacks.onPlace?.(c.x,c.y);return;}for(let i=this.hits.length-1;i>=0;i--){if(this.hits[i].polygons.some(poly=>this.contains(poly,p))){this.selected=this.hits[i].id;this.callbacks.onSelect?.(this.selected);return;}}this.selected=null;this.callbacks.onSelect?.(null);});
     on('pointercancel',()=>{this.pointer=null;}); on('pointerleave',()=>{if(!this.pointer){this.hover=null;this.dirty=true;}});
-    on('wheel',e=>{e.preventDefault();const p=this.local(e),before=this.unproject(p.x,p.y);this.zoom(e.deltaY<0?1:-1);const after=this.project(before.x,before.y);this.pan.x+=p.x-after.x;this.pan.y+=p.y-after.y;},{passive:false});
+    on('wheel',e=>{e.preventDefault();const p=this.local(e),before=this.unproject(p.x,p.y);this.zoom(Math.max(-1,Math.min(1,-e.deltaY*(e.deltaMode===1?33:e.deltaMode===2?400:1)/100))*0.4);const after=this.project(before.x,before.y);this.pan.x+=p.x-after.x;this.pan.y+=p.y-after.y;},{passive:false});
     this.observer=new ResizeObserver(()=>this.resize());this.observer.observe(canvas);this.resize();
     const loop=()=>{if(this.dead)return;if(this.dirty&&!document.hidden){this.dirty=false;this.render();}this.frame=requestAnimationFrame(loop);};this.frame=requestAnimationFrame(loop);
   }

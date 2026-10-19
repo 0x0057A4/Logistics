@@ -5834,7 +5834,7 @@ class Scene {
     });
     on('pointerup',e=>{this.dirty=true;const down=this.pointer;this.pointer=null;if(!down||down.moved)return;const p=this.local(e);if(this.build&&this.view!=='network'){const c=this.cell(p.x,p.y);this.callbacks.onPlace?.(c.x,c.y);return;}for(let i=this.hits.length-1;i>=0;i--){if(this.hits[i].polygons.some(poly=>this.contains(poly,p))){this.selected=this.hits[i].id;this.callbacks.onSelect?.(this.selected);return;}}this.selected=null;this.callbacks.onSelect?.(null);});
     on('pointercancel',()=>{this.pointer=null;}); on('pointerleave',()=>{if(!this.pointer){this.hover=null;this.dirty=true;}});
-    on('wheel',e=>{e.preventDefault();const p=this.local(e),before=this.unproject(p.x,p.y);this.zoom(e.deltaY<0?1:-1);const after=this.project(before.x,before.y);this.pan.x+=p.x-after.x;this.pan.y+=p.y-after.y;},{passive:false});
+    on('wheel',e=>{e.preventDefault();const p=this.local(e),before=this.unproject(p.x,p.y);this.zoom(Math.max(-1,Math.min(1,-e.deltaY*(e.deltaMode===1?33:e.deltaMode===2?400:1)/100))*0.4);const after=this.project(before.x,before.y);this.pan.x+=p.x-after.x;this.pan.y+=p.y-after.y;},{passive:false});
     this.observer=new ResizeObserver(()=>this.resize());this.observer.observe(canvas);this.resize();
     const loop=()=>{if(this.dead)return;if(this.dirty&&!document.hidden){this.dirty=false;this.render();}this.frame=requestAnimationFrame(loop);};this.frame=requestAnimationFrame(loop);
   }
@@ -7557,6 +7557,8 @@ const VEH_LEN = { van: 3.0, truck: 4.2, refrigerated: 4.0 };
 const CAB_HEX = { van: '#5ea7a3', truck: '#ebac53', refrigerated: '#6b9fd6' };
 const BOX_HEX = { van: '#f1f3ec', truck: '#eef0e8', refrigerated: '#d9eef3' };
 
+// Hotfix 0.17.1: Mausrad-Zoom nach Scrollweite statt fester Stufe je Ereignis (eine Rastung ≈ 5 %, Touchpad gleitend).
+const wheelStep = e => { const d = e.deltaY * (e.deltaMode === 1 ? 33 : e.deltaMode === 2 ? 400 : 1); return Math.max(-1, Math.min(1, -d / 100)) * 0.4; };
 class Scene3D {
   constructor(canvas, callbacks = {}) {
     this.canvas = canvas; this.callbacks = callbacks; this.state = null; this.view = 'hall'; this.labelMode = 'all';
@@ -7616,7 +7618,7 @@ class Scene3D {
     on(canvas, 'pointerup', e => { const down = this.pointer; this.pointer = null; if (!down || down.moved) return; this.click(this.local(e)); });
     on(canvas, 'pointercancel', () => { this.pointer = null; });
     on(canvas, 'pointerleave', () => { this.lastLocal = null; if (!this.pointer && this.hover) { this.hover = null; this.dynDirty = true; } });
-    on(canvas, 'wheel', e => { e.preventDefault(); if (this.camMode?.mode === 'tour') this.stopCamera('input'); if (this.camMode?.mode === 'follow') { this.zoom(e.deltaY < 0 ? 1 : -1, true); return; } const p = this.local(e), before = this.groundAt(p.x, p.y), bx = before?.x, bz = before?.z; this.zoom(e.deltaY < 0 ? 1 : -1, true); if (bx != null) { const after = this.groundAt(p.x, p.y); if (after) { this.cam.tx += bx - after.x; this.cam.tz += bz - after.z; this.goal.tx = this.cam.tx; this.goal.tz = this.cam.tz; this.applyCamera(); } } }, { passive: false });
+    on(canvas, 'wheel', e => { e.preventDefault(); if (this.camMode?.mode === 'tour') this.stopCamera('input'); if (this.camMode?.mode === 'follow') { this.zoom(wheelStep(e), true); return; } const p = this.local(e), before = this.groundAt(p.x, p.y), bx = before?.x, bz = before?.z; this.zoom(wheelStep(e), true); if (bx != null) { const after = this.groundAt(p.x, p.y); if (after) { this.cam.tx += bx - after.x; this.cam.tz += bz - after.z; this.goal.tx = this.cam.tx; this.goal.tz = this.cam.tz; this.applyCamera(); } } }, { passive: false });
     on(canvas, 'webglcontextlost', e => { e.preventDefault(); this.lost = true; });
     on(canvas, 'webglcontextrestored', () => { this.lost = false; this.signature = ''; this.sigDirty = true; this.needs = true; });
     on(document, 'visibilitychange', () => { this.needs = true; this.lastFrame = 0; });
