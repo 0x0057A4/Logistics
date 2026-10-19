@@ -59,3 +59,9 @@ Einstellungen → Darstellung → **Grafikqualität**: Automatisch (Standard), N
 | Hoch | 1,5 / 0,75 | 40 | bisherige Darstellung, LOD ab ~95–110 Einheiten |
 
 LOD: entfernte Fahrzeuge nur als Box, Personen ausgeblendet, Pakete halbiert. Automatisch: Start Mittel; p95 der Bildabstände über 10 s; runter bei p95 > 18 ms, hoch erst nach 30 s durchgehend < 13 ms; nach jedem Wechsel neues 10-s-Fenster (kein Flattern). Budget je Stufe: Draw Calls ≤ 150, Dreiecke 60k/120k/250k (Prüfung `node tests/browser/quality.mjs`).
+
+## Erste Nutzermessung Referenzgerät (19.10.2026)
+
+Intel Iris Xe (ANGLE, Direct3D11), Chrome/Edge, `?perf=1`, Grafikqualität Mittel (automatisch), Pixelratio 1,25.
+FPS 70 · Median/p95/p99 14,3 / 14,6 / 14,8 ms · 0,0 % Frames > 16,7 ms · Long Tasks 0 · 5 Draw Calls / 2.098 Dreiecke · Spiel **pausiert**, nahezu leere Szene, Tag.
+Bewertung A01: Grundlast der Darstellung unkritisch; für 0.18 noch nicht aussagekräftig (pausiert, kaum Objekte, keine Nachtaufnahme). Benötigt: laufendes Spiel (4× oder 12×) mit ausgebautem Hub, Tag und Nacht, Ergebnis der 60-s-Messung.
