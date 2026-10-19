@@ -1,5 +1,16 @@
 # Änderungen
 
+## 0.17 – 19.10.2026 · Bedienbarkeit nach Playtest (Entwicklungsfassung)
+
+- Fenster schweben frei: verschieben, an Rändern/Ecken vergrößern, maximieren/wiederherstellen; Größe und Lage je Fensterart als Anteil der Spielfläche gespeichert, skaliert mit der Auflösung (Referenz 1920 × 1080); Standardlage verdeckt keine Kennzahlen.
+- HUD: neue kontraststarke Farbstufen (hell/dunkel, WCAG AA), Grundschrift 15 px, nichts unter 12 px; Warnungen zusätzlich mit Zeichen; Navigation mit Symbol, Kurztext und Tooltip ohne Scrollbalken, seltene Bereiche unter „Mehr“.
+- Lager als Produktzeilen (Gesamt, Reserviert, Frei, Lagerorte, Ressourcen verfügbar/benötigt) mit aufklappbaren Chargen, Suche, Filter, Sortierung; [+] öffnet die Bestellung vorbelegt (Kauf erst nach Bestätigung); Zulauf getrennt.
+- Aufträge als einzeilige Tabelle mit Bestandsbezug („35 benötigt · 42 auf Lager · 22 frei verfügbar · 13 fehlen“), Filter, Fristwarnungen; Tab „Aufträge“ in der unteren Leiste.
+- Anlagen erklären Zweck, Voraussetzungen, Ablauf, Zustand und nächsten Schritt; Beschreibungen im Baumenü; Anlagen und Standorte umbenennbar (Stift, Enter/Escape).
+- Belegungsplan je Mitarbeiter (Schichten über Mitternacht, aktuelle Tätigkeit), Liquidität heute (eingenommen, ausgegeben, Saldo), Board „Offen / In Bearbeitung / Abgeschlossen“ für Kundendienst und Rückläufe.
+- WASD/Pfeile bewegen die Kamera, auch im Baumodus; kein Browser-Kontextmenü im Spielbereich.
+- Assistent unverändert. Unabhängige Prüfung: docs/QS-0.17.md.
+
 ## 0.16 – 18.10.2026 · Betrieb: Wetter, Störungen, Personalrollen, Kundendienst (Entwicklungsfassung)
 
 - Wetter je Standort und Tag (klar, Regen, Nebel, Schnee, Sturm) ab Spieltag 2: längere Fahrten, verspätete Fremd-Lkw (Fristen bleiben).

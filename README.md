@@ -2,7 +2,7 @@
 
 **Projektübergabe:** [Aktueller Kontext und nächster Schritt](docs/FORTSETZUNG.md). [Projektentscheidungen](docs/CHATKONTEXT.md). Integrierte Originalpatches liegen in `docs/archiv/integriert-0.7/`.
 
-Version 0.16 · Entwicklungsfassung · 18. Oktober 2026
+Version 0.17 · Entwicklungsfassung · 19. Oktober 2026
 
 Eigenständige, deutschsprachige Unternehmenssimulation für PC-Browser. Vom leeren Werk über Arbeitsleuchtenfertigung bis zu mehreren Standorten, Sammeltouren und temperaturgeführter Fremdfracht. Alle Unternehmen, Personen und Wirtschaftswerte sind fiktiv.
 
