@@ -178,3 +178,8 @@ Screenshots 1920 × 1080 (Scratchpad dieser Sitzung, nicht im Repo), unter `/tmp
 - Dunkelmodus nur über die Entwicklerprüfung `ui-017-window` (Stichprobe). Eigene Kontrastprüfung nur im hellen Modus.
 - Mehrere Standorte im Personalplan und Board-Filter je Standort; Rücklauf-Board im Browser (nur Node).
 - Leistung der gecachten Bestandsrechnung bei sehr großen Ständen (kein eigener Messlauf).
+
+## Nachtrag A01 (19.10.2026)
+
+- **QS-017-01 behoben:** `rename` für Standorte prüft dieselben Regeln wie `buySite` (2–48 normale Zeichen, eindeutig, auch beim Zurücksetzen auf den Standardnamen). Anlagennamen ohne `<>`/Steuerzeichen. Zusätzlich Lade-Reparatur (`repairSiteNames` in den Schema-1-Auffüllungen) für bereits erzeugte ungültige Stände. Befundtest aktiviert, Reparaturtest in tests/rename-017.test.js.
+- QS-017-02 bis -08: an A10 übergeben (Fix-Runde vor Release).

@@ -40,7 +40,9 @@ export const SCHEMA=1;
 /** Migrationsschritte from→to. Jeder Schritt erhält den Zustand von Schema `from`, ändert ihn an Ort und Stelle und setzt `schema` auf `to`. Welle 1 ergänzt hier {from:1,to:2,...}. */
 export const MIGRATIONS=[];
 /** Auffüllungen innerhalb einer Schemastufe: ältere Stände derselben Stufe erhalten definierte Standardwerte. */
-const FILLS={1(s){for(const key of ['research','rules','transfers','tours','freights','tickets','contracts','yard','lines','linehauls','containers','airShuttles'])if(s[key]===undefined)s[key]=[];if(s.assistant===undefined)s.assistant={sites:{},log:[]};}};
+const FILLS={1(s){for(const key of ['research','rules','transfers','tours','freights','tickets','contracts','yard','lines','linehauls','containers','airShuttles'])if(s[key]===undefined)s[key]=[];if(s.assistant===undefined)s.assistant={sites:{},log:[]};repairSiteNames(s);}};
+/** QS-017-01: Stände aus der 0.17-Entwicklungsfassung mit ungültig umbenannten Standorten wieder ladbar machen (Standardname bzw. Eindeutigkeit). */
+function repairSiteNames(s){if(!Array.isArray(s.sites))return;const seen=new Set(),ok=n=>typeof n==='string'&&n.length>=2&&n.length<=48&&!/[<>\x00-\x1F]/.test(n);for(const x of s.sites){if(!x||typeof x!=='object')continue;let n=x.name;if(!ok(n)||seen.has(n.toLocaleLowerCase('de'))){if(ok(x.defaultName)&&!seen.has(x.defaultName.toLocaleLowerCase('de'))){n=x.defaultName;delete x.defaultName;}else if(typeof n==='string'){const base=(ok(n)?n:(x.defaultName||'Standort')).slice(0,44);let i=2;n=base;while(!ok(n)||seen.has(n.toLocaleLowerCase('de')))n=`${base} ${i++}`;}x.name=n;}if(typeof x.name==='string')seen.add(x.name.toLocaleLowerCase('de'));}}
 /** Bringt einen geparsten Stand auf SCHEMA. Unbekannte oder neuere Stände bleiben unverändert und werden von validateState abgelehnt. */
 export function migrate(state,{steps=MIGRATIONS,target=SCHEMA,fills=FILLS}={}){
  if(!state||typeof state!=='object'||Array.isArray(state)||!Number.isSafeInteger(state.schema)||state.schema>target)return state;
@@ -114,9 +116,14 @@ export class Simulation{
  worldCommand(c){const s=this.state,api=this.api;
  if(c.type==='selectSite'){if(!s.sites.some(a=>a.id===c.id))return {ok:false,message:'Standort fehlt.'};s.selectedSite=c.id;return {ok:true};}
  // 0.17 S2: eigene Anzeigenamen. Gebäude: optionales b.label; Standort: site.name (Startname in site.defaultName). Leer → Standardname.
- if(c.type==='rename'){const name=typeof c.name==='string'?c.name.trim().replace(/\s+/g,' '):null;if(name===null||name.length>40)return {ok:false,message:'Name mit höchstens 40 Zeichen eingeben.'};
+ if(c.type==='rename'){const name=typeof c.name==='string'?c.name.trim().replace(/\s+/g,' '):null;if(name===null||name.length>40||/[<>\x00-\x1F]/.test(name))return {ok:false,message:'Name mit höchstens 40 normalen Zeichen eingeben.'};
   if(c.target==='building'){const b=s.buildings.find(b=>b.id===c.id);if(!b)return {ok:false,message:'Anlage nicht gefunden.'};if(name)b.label=name;else delete b.label;return {ok:true};}
-  if(c.target==='site'){const x=s.sites.find(x=>x.id===c.id);if(!x)return {ok:false,message:'Standort nicht gefunden.'};if(name){x.defaultName??=x.name;x.name=name;}else if(x.defaultName){x.name=x.defaultName;delete x.defaultName;}return {ok:true};}
+  if(c.target==='site'){const x=s.sites.find(x=>x.id===c.id);if(!x)return {ok:false,message:'Standort nicht gefunden.'};
+   // QS-017-01: gleiche Regeln wie buySite/network.validate (2–48 normale Zeichen, eindeutig), sonst wäre der Stand nicht ladbar.
+   if(name&&(name.length<2||name.length>48||/[<>\x00-\x1F]/.test(name)))return {ok:false,message:'Standortname benötigt 2 bis 48 normale Zeichen.'};
+   if(name&&s.sites.some(a=>a!==x&&a.name.toLocaleLowerCase('de')===name.toLocaleLowerCase('de')))return {ok:false,message:'Standortname bereits vergeben.'};
+   if(!name&&x.defaultName&&s.sites.some(a=>a!==x&&a.name.toLocaleLowerCase('de')===x.defaultName.toLocaleLowerCase('de')))return {ok:false,message:'Standardname ist bereits vergeben.'};
+   if(name){x.defaultName??=x.name;x.name=name;}else if(x.defaultName){x.name=x.defaultName;delete x.defaultName;}return {ok:true};}
   return {ok:false,message:'Ziel unbekannt.'};}
  if(c.type==='settings'){if(typeof c.incidents!=='boolean')return {ok:false,message:'Einstellung ungültig.'};s.settings.incidents=c.incidents;return {ok:true};}
  if(!['build','move','demolish'].includes(c.type))return null;

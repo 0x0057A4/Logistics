@@ -232,11 +232,11 @@ test('P10 Anlagen- und Depotnamen bleiben nach Speichern/Laden; leerer Name stel
  cmd({type:'rename',target:'building',id:test1.id,name:'   '});assert.equal(test1.label,undefined);assert.match(displayName(s,test1),/Prüf.* 1/);
 });
 
-test.todo('QS-017-01 Standort umbenennen erzeugt nicht ladbaren Spielstand (1 Zeichen bzw. doppelter Standortname)',()=>{
+test('QS-017-01 behoben: Standort umbenennen lehnt 1 Zeichen bzw. doppelten Namen ab, Stand bleibt ladbar',()=>{
  for(const make of [sim=>sim.command({type:'rename',target:'site',id:'site-1',name:'A'}),
   sim=>{const id=sim.command({type:'buySite',name:'Nordlager'}).id;return sim.command({type:'rename',target:'site',id,name:'depot morgenfeld'});}]){
   const {sim}=setup(3);const r=make(sim);
-  // Entweder der Befehl lehnt ab, oder der Stand bleibt ladbar.
+  assert.equal(r.ok,false);
   if(r.ok)assert.doesNotThrow(()=>Simulation.fromJSON(sim.serialize()));
  }
 });

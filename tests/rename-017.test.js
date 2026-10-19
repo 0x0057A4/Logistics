@@ -17,3 +17,15 @@ test('0.17 S2: Umbenennen von Anlage und Standort, leer setzt zurück, Speichern
   assert.equal(sim.command({type:'rename', target:'building', id:b.id, name:'  '}).ok, true); assert.equal(b.label, undefined);
   assert.equal(sim.command({type:'rename', target:'site', id:site.id, name:''}).ok, true); assert.equal(site.name, orig); assert.equal(site.defaultName, undefined);
 });
+
+test('QS-017-01: Lade-Reparatur für ungültig umbenannte Standorte aus der Entwicklungsfassung', () => {
+  const sim = new Simulation({mode:'sandbox', seed:4}); const s = sim.state;
+  const id = sim.command({type:'buySite', name:'Nordlager'}).id; assert.ok(id);
+  const st = JSON.parse(sim.serialize());
+  st.sites[0].defaultName = st.sites[0].name; st.sites[0].name = 'A';
+  st.sites.find(x => x.id === id).name = st.sites[0].defaultName;
+  const loaded = Simulation.fromJSON(JSON.stringify(st));
+  const names = loaded.state.sites.map(x => x.name.toLocaleLowerCase('de'));
+  assert.equal(new Set(names).size, names.length);
+  assert.ok(loaded.state.sites.every(x => x.name.length >= 2));
+});
