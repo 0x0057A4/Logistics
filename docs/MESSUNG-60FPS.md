@@ -65,3 +65,24 @@ LOD: entfernte Fahrzeuge nur als Box, Personen ausgeblendet, Pakete halbiert. Au
 Intel Iris Xe (ANGLE, Direct3D11), Chrome/Edge, `?perf=1`, Grafikqualität Mittel (automatisch), Pixelratio 1,25.
 FPS 70 · Median/p95/p99 14,3 / 14,6 / 14,8 ms · 0,0 % Frames > 16,7 ms · Long Tasks 0 · 5 Draw Calls / 2.098 Dreiecke · Spiel **pausiert**, nahezu leere Szene, Tag.
 Bewertung A01: Grundlast der Darstellung unkritisch; für 0.18 noch nicht aussagekräftig (pausiert, kaum Objekte, keine Nachtaufnahme). Benötigt: laufendes Spiel (4× oder 12×) mit ausgebautem Hub, Tag und Nacht, Ergebnis der 60-s-Messung.
+
+## Nutzermessung Referenzgerät unter Last (21.10.2026)
+
+Szene: 4 Lkw, 4 Laderampen, 2 Sortiersysteme, 2 Lager, 12×, Ansicht Halle. Edge 152, Iris Xe (ANGLE D3D11). **Fenster 5074 × 1282** (sehr breit, ≈ 6,5 MP, gut 3× so viele Pixel wie 1920 × 1080), devicePixelRatio 1.
+
+| | Tag | Nacht |
+|---|---|---|
+| Ergebnis | 60 FPS stabil | 60 FPS stabil |
+| FPS Ø | 59,4 | 59,9 |
+| Median/p95/p99/max | 16,7 / 17,0 / 17,3 / 99,9 ms | 16,7 / 17,0 / 17,2 / 33,4 ms |
+| > 20 ms | 0,9 % | 0,1 % |
+| Long Tasks | 1 (106 ms) | 0 |
+| Sim je Frame | Ø 0,05 ms, max 3,6 ms | Ø 0,04 ms, max 1,8 ms |
+| Draw Calls / Dreiecke | 14 / 6.602 | 13 / 6.624 |
+| Pixelratio / Stufe | 0,60 / Niedrig (auto) | 1,00 / Niedrig (auto) |
+
+Bewertung A01 für 0.18:
+- Ziel 60 FPS erreicht; Simulation ist kein Engpass.
+- Engpass ist die **Pixelfüllrate** (riesige Fläche): die Automatik senkte am Tag Stufe und Pixelratio. Geometrie (Draw Calls, Dreiecke) hat sehr viel Reserve.
+- Folgerung für den Grafik-Angleich: Detail über Geometrie, Instancing und einfache Materialien/Texturen; teure Vollbild-Effekte (Echtzeit-Schatten in voller Auflösung, Nachbearbeitung, viele dynamische Lichter) vermeiden oder nur ab Stufe Hoch. Bei 1920 × 1080 bleibt etwa dreifache Pixelreserve.
+- Einzelner Ausreißer 99,9 ms am Tag (1 Long Task) – vermutlich Autosave/Speichern; in 0.18 beobachten.
